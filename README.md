@@ -80,7 +80,7 @@ To fully utilize the app's capabilities, you need your own API key from Riot Gam
    Create an account or log in if you already have one.
 
 3. **Request an API Key:**  
-   Navigate to the API key section and follow the instructions to request a new API key.
+   Navigate to the Dashboard section and click on register product. There u can request for personal api key that is free to use for smaller apps.
 
 4. **Enter the API Key in the App:**  
    Open the **Settings Tab** in the app and input your new API key, then click **Save**.
