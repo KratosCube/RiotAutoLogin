@@ -1,6 +1,7 @@
 ﻿using RiotAutoLogin.Models;
 using RiotAutoLogin.Services;
 using RiotAutoLogin.Utilities;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -44,6 +45,7 @@ namespace RiotAutoLogin
         public MainWindow()
         {
             InitializeComponent();
+            DataContext = this;
             LoadAccounts();
             RefreshAccountLists();
             UpdateTotalGameStats();
@@ -54,6 +56,8 @@ namespace RiotAutoLogin
             LoadAccounts();
             RefreshAccountLists();
             UpdateTotalGameStats();
+            Task preloadTask = GameData.PreloadAllDataAsync();
+            await Task.Run(() => MonitorLeagueClientAsync());
 
             // Deferred API key loading and account update.
             await Task.Run(async () =>
@@ -77,14 +81,24 @@ namespace RiotAutoLogin
                     Debug.WriteLine("Error in deferred loading: " + ex.Message);
                 }
             });
+            LoadAutoPickSettings();
+
+            // Start auto-pick monitor if any auto-pick feature is enabled
+            if (_autoPickSettings.AutoPickEnabled || _autoPickSettings.AutoBanEnabled || _autoPickSettings.AutoSpellsEnabled)
+            {
+                StartAutoPickMonitor();
+            }
         }
 
         #region Window Control Event Handlers
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ChangedButton == MouseButton.Left)
-                this.DragMove();
+            if (e.Source == this)
+            {
+                DragMove();
+                e.Handled = true;
+            }
         }
 
         private void btnSelectAvatar_Click(object sender, RoutedEventArgs e)
@@ -649,6 +663,86 @@ namespace RiotAutoLogin
                 btnEUW.IsChecked = false;
         }
 
+        private async void tglAutoAccept_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!LCUService.IsLeagueOpen)
+            {
+                if (LCUService.CheckIfLeagueClientIsOpen())
+                {
+                    LCUService.StartAutoAccept();
+                    tglAutoAccept.Content = "ON";
+                    autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
+                    txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
+                }
+                else
+                {
+                    MessageBox.Show("League Client is not running. Please start League of Legends first.",
+                        "League Client Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    tglAutoAccept.IsChecked = false;
+                }
+            }
+            else
+            {
+                LCUService.StartAutoAccept();
+                tglAutoAccept.Content = "ON";
+                autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
+                txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
+            }
+        }
+
+        private void tglAutoAccept_Unchecked(object sender, RoutedEventArgs e)
+        {
+            LCUService.StopAutoAccept();
+            tglAutoAccept.Content = "OFF";
+            autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
+            txtAutoAcceptStatus.Text = "Auto-accept is inactive";
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            LCUService.StopAutoAccept();
+            StopAutoPickMonitor();
+            base.OnClosed(e);
+        }
+
+        private async Task MonitorLeagueClientAsync()
+        {
+            while (true)
+            {
+                try
+                {
+                    bool isLeagueOpen = LCUService.CheckIfLeagueClientIsOpen();
+
+                    // Update UI based on League client state
+                    await Dispatcher.InvokeAsync(() => {
+                        if (isLeagueOpen)
+                        {
+                            if (tglAutoAccept.IsEnabled == false)
+                            {
+                                tglAutoAccept.IsEnabled = true;
+                                txtAutoAcceptStatus.Text = tglAutoAccept.IsChecked == true
+                                    ? "Auto-accept is active - will accept game matches automatically"
+                                    : "Auto-accept is inactive. Enable to automatically accept game matches.";
+                            }
+                        }
+                        else
+                        {
+                            tglAutoAccept.IsEnabled = false;
+                            tglAutoAccept.IsChecked = false;
+                            autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
+                            txtAutoAcceptStatus.Text = "League Client is not running. Start League of Legends to use auto-accept.";
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("Error monitoring League client: " + ex.Message);
+                }
+
+                await Task.Delay(5000);
+            }
+        }
+
         #endregion
 
         #region (Optional) Helper Methods
@@ -667,5 +761,775 @@ namespace RiotAutoLogin
         }
 
         #endregion
+
+        private AutoPickSettings _autoPickSettings = new AutoPickSettings();
+        public AutoPickSettings AutoPickSettings => _autoPickSettings;
+
+        private BitmapImage _primaryChampionImage;
+        public BitmapImage PrimaryChampionImage
+        {
+            get { return _primaryChampionImage; }
+            set
+            {
+                _primaryChampionImage = value;
+                OnPropertyChanged(nameof(PrimaryChampionImage));
+            }
+        }
+
+        private string _primaryChampionName = "Select Champion";
+        public string PrimaryChampionName
+        {
+            get { return _primaryChampionName; }
+            set
+            {
+                _primaryChampionName = value;
+                OnPropertyChanged(nameof(PrimaryChampionName));
+            }
+        }
+
+        // Add similar properties for SecondaryChampionImage, SecondaryChampionName, 
+        // BanChampionImage, BanChampionName, Spell1Image, Spell1Name, Spell2Image, Spell2Name
+
+        // INotifyPropertyChanged implementation
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged(string name)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+
+        // Event handlers for UI controls
+        private void primaryChampCard_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            SelectChampion(true, "Select Primary Champion", (champion) =>
+            {
+                try
+                {
+                    // Save to settings
+                    _autoPickSettings.PickChampionId = champion.Id;
+                    _autoPickSettings.PickChampionName = champion.Name;
+
+                    // Update UI properties
+                    PrimaryChampionName = champion.Name;
+                    PrimaryChampionImage = champion.Image;
+
+                    // Update the card directly
+                    UpdateChampionCard(primaryChampCard, champion.Name, champion.Image);
+
+                    SaveAutoPickSettings();
+
+                    // Log for debugging
+                    Debug.WriteLine($"Updated primary champion: {champion.Name}");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error setting champion: {ex.Message}");
+                    MessageBox.Show($"Error setting champion: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            });
+        }
+
+        private void secondaryChampCard_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            SelectChampion(true, "Select Secondary Champion", (champion) =>
+            {
+                _autoPickSettings.SecondaryChampionId = champion.Id;
+                _autoPickSettings.SecondaryChampionName = champion.Name;
+                SecondaryChampionName = champion.Name;
+                SecondaryChampionImage = champion.Image;
+                UpdateChampionCard(secondaryChampCard, champion.Name, champion.Image);
+                SaveAutoPickSettings();
+            });
+        }
+        private void UpdateChampionCard(Border card, string championName, BitmapImage championImage)
+        {
+            // Find the Image and TextBlock in the card
+            Image imageControl = null;
+            TextBlock textBlock = null;
+
+            // Check if the card has children
+            if (VisualTreeHelper.GetChildrenCount(card) > 0)
+            {
+                // Get the first child (should be a Grid)
+                var child = VisualTreeHelper.GetChild(card, 0);
+
+                if (child is Grid grid)
+                {
+                    // Now loop through the grid children
+                    foreach (var gridChild in grid.Children)
+                    {
+                        if (gridChild is Image img)
+                            imageControl = img;
+                        else if (gridChild is TextBlock txt)
+                            textBlock = txt;
+                    }
+                }
+            }
+
+            // Update directly
+            if (imageControl != null)
+                imageControl.Source = championImage;
+
+            if (textBlock != null)
+                textBlock.Text = championName;
+        }
+        private void banChampCard_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            SelectChampion(true, "Select Champion to Ban", (champion) =>
+            {
+                _autoPickSettings.BanChampionId = champion.Id;
+                _autoPickSettings.BanChampionName = champion.Name;
+                BanChampionName = champion.Name;
+                BanChampionImage = champion.Image;
+                UpdateChampionCard(banChampCard, champion.Name, champion.Image);
+                SaveAutoPickSettings();
+            });
+        }
+
+        private void spell1Card_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            SelectChampion(false, "Select Summoner Spell 1", (spell) =>
+            {
+                _autoPickSettings.SummonerSpell1Id = spell.Id;
+                _autoPickSettings.SummonerSpell1Name = spell.Name;
+                Spell1Name = spell.Name;
+                Spell1Image = spell.Image;
+                UpdateChampionCard(spell1Card, spell.Name, spell.Image);
+                SaveAutoPickSettings();
+            });
+        }
+
+        private void spell2Card_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            SelectChampion(false, "Select Summoner Spell 2", (spell) =>
+            {
+                _autoPickSettings.SummonerSpell2Id = spell.Id;
+                _autoPickSettings.SummonerSpell2Name = spell.Name;
+                Spell2Name = spell.Name;
+                Spell2Image = spell.Image;
+                UpdateChampionCard(spell2Card, spell.Name, spell.Image);
+                SaveAutoPickSettings();
+            });
+        }
+
+        private void SelectChampion(bool isChampionSelect, string title, Action<dynamic> onSelect)
+        {
+            var window = new ChampionSelectWindow(isChampionSelect, title)
+            {
+                Owner = this
+            };
+
+            if (window.ShowDialog() == true && window.SelectedItem != null)
+            {
+                onSelect(window.SelectedItem);
+            }
+        }
+
+        // Settings handlers
+        private void chkAutoPickEnabled_Checked(object sender, RoutedEventArgs e)
+        {
+            _autoPickSettings.AutoPickEnabled = true;
+            SaveAutoPickSettings();
+
+            // Start the champion select monitor
+            StartAutoPickMonitor();
+        }
+
+        private void chkAutoPickEnabled_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _autoPickSettings.AutoPickEnabled = false;
+            SaveAutoPickSettings();
+
+            // Stop the champion select monitor if other features are also disabled
+            if (!_autoPickSettings.AutoBanEnabled && !_autoPickSettings.AutoSpellsEnabled)
+            {
+                StopAutoPickMonitor();
+            }
+        }
+
+        // Add similar handlers for other checkboxes and settings
+
+        // Delay adjustment handlers
+        private void btnIncreaseHoverDelay_Click(object sender, RoutedEventArgs e)
+        {
+            int delay = int.Parse(txtPickHoverDelay.Text);
+            delay += 100;
+            txtPickHoverDelay.Text = delay.ToString();
+            _autoPickSettings.PickHoverDelayMs = delay;
+            SaveAutoPickSettings();
+        }
+
+        private void btnDecreaseHoverDelay_Click(object sender, RoutedEventArgs e)
+        {
+            int delay = int.Parse(txtPickHoverDelay.Text);
+            delay = Math.Max(0, delay - 100);
+            txtPickHoverDelay.Text = delay.ToString();
+            _autoPickSettings.PickHoverDelayMs = delay;
+            SaveAutoPickSettings();
+        }
+
+        // Add similar handlers for other delay buttons
+
+        // Auto-pick monitoring logic
+        private CancellationTokenSource _autoPickCts;
+
+        private void StartAutoPickMonitor()
+        {
+            if (_autoPickCts != null)
+                return;
+
+            _autoPickCts = new CancellationTokenSource();
+            Task.Run(() => MonitorChampionSelectAsync(_autoPickCts.Token));
+        }
+
+        private void StopAutoPickMonitor()
+        {
+            _autoPickCts?.Cancel();
+            _autoPickCts?.Dispose();
+            _autoPickCts = null;
+        }
+
+        private async Task MonitorChampionSelectAsync(CancellationToken cancellationToken)
+        {
+            bool pickSelectedInCurrentSession = false;
+            bool banSelectedInCurrentSession = false;
+            bool spellsSelectedInCurrentSession = false;
+            string currentChatRoom = "";
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    if (!LCUService.IsLeagueOpen || !LCUService.CheckIfLeagueClientIsOpen())
+                    {
+                        await Task.Delay(2000, cancellationToken);
+                        continue;
+                    }
+
+                    string gamePhase = await LCUService.GetCurrentGamePhaseAsync();
+
+                    if (gamePhase == "ChampSelect")
+                    {
+                        // Handle champion select actions
+                        var result = await HandleChampionSelectAsync(
+                            pickSelectedInCurrentSession,
+                            banSelectedInCurrentSession,
+                            spellsSelectedInCurrentSession,
+                            currentChatRoom);
+
+                        // Update local variables with the returned values
+                        pickSelectedInCurrentSession = result.pickSelected;
+                        banSelectedInCurrentSession = result.banSelected;
+                        spellsSelectedInCurrentSession = result.spellsSelected;
+                        currentChatRoom = result.chatRoom;
+                    }
+                    else
+                    {
+                        // Reset flags when we're not in champion select
+                        pickSelectedInCurrentSession = false;
+                        banSelectedInCurrentSession = false;
+                        spellsSelectedInCurrentSession = false;
+                        currentChatRoom = "";
+
+                        await Task.Delay(2000, cancellationToken);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Cancellation requested
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error in champion select monitor: {ex.Message}");
+                    await Task.Delay(2000, cancellationToken);
+                }
+            }
+        }
+
+        private async Task<(bool pickSelected, bool banSelected, bool spellsSelected, string chatRoom)> HandleChampionSelectAsync(
+    bool pickSelectedInCurrentSession,
+    bool banSelectedInCurrentSession,
+    bool spellsSelectedInCurrentSession,
+    string currentChatRoom)
+        {
+            try
+            {
+                // Get champion select session info
+                string[] champSelectSession = LCUService.ClientRequest("GET", "lol-champ-select/v1/session");
+                if (champSelectSession[0] != "200")
+                    return (pickSelectedInCurrentSession, banSelectedInCurrentSession, spellsSelectedInCurrentSession, currentChatRoom);
+
+                // Check if this is a new champion select session
+                string chatRoomId = "";
+                using (JsonDocument doc = JsonDocument.Parse(champSelectSession[1]))
+                {
+                    if (doc.RootElement.TryGetProperty("chatDetails", out var chatDetails) &&
+                        chatDetails.TryGetProperty("multiUserChatId", out var multiUserChatId))
+                    {
+                        chatRoomId = multiUserChatId.GetString();
+                    }
+                }
+
+                if (currentChatRoom != chatRoomId)
+                {
+                    // Reset flags for new champion select
+                    pickSelectedInCurrentSession = false;
+                    banSelectedInCurrentSession = false;
+                    spellsSelectedInCurrentSession = false;
+                    currentChatRoom = chatRoomId;
+                }
+
+                // Handle summoner spells if enabled and not already selected
+                if (_autoPickSettings.AutoSpellsEnabled && !spellsSelectedInCurrentSession)
+                {
+                    if (_autoPickSettings.SummonerSpell1Id > 0)
+                    {
+                        bool success = LCUService.SelectSummonerSpell(_autoPickSettings.SummonerSpell1Id, 1);
+                        if (success)
+                            Debug.WriteLine("Selected summoner spell 1");
+                    }
+
+                    if (_autoPickSettings.SummonerSpell2Id > 0)
+                    {
+                        bool success = LCUService.SelectSummonerSpell(_autoPickSettings.SummonerSpell2Id, 2);
+                        if (success)
+                            Debug.WriteLine("Selected summoner spell 2");
+                    }
+
+                    spellsSelectedInCurrentSession = true;
+                }
+
+                // Check if it's our turn to pick or ban
+                var (isMyTurn, actId, actionType) = await LCUService.GetChampSelectTurnAsync();
+
+                if (isMyTurn)
+                {
+                    if (actionType == "pick" && _autoPickSettings.AutoPickEnabled && !pickSelectedInCurrentSession)
+                    {
+                        await HandlePickAsync(actId);
+                        pickSelectedInCurrentSession = true;
+                    }
+                    else if (actionType == "ban" && _autoPickSettings.AutoBanEnabled && !banSelectedInCurrentSession)
+                    {
+                        await HandleBanAsync(actId);
+                        banSelectedInCurrentSession = true;
+                    }
+                }
+
+                return (pickSelectedInCurrentSession, banSelectedInCurrentSession, spellsSelectedInCurrentSession, currentChatRoom);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error handling champion select: {ex.Message}");
+                return (pickSelectedInCurrentSession, banSelectedInCurrentSession, spellsSelectedInCurrentSession, currentChatRoom);
+            }
+        }
+
+        private async Task HandlePickAsync(string actId)
+        {
+            try
+            {
+                // Hover champion after delay
+                if (_autoPickSettings.PickHoverDelayMs > 0)
+                    await Task.Delay(_autoPickSettings.PickHoverDelayMs);
+
+                // Try primary champion first
+                if (_autoPickSettings.PickChampionId > 0)
+                {
+                    bool hoverSuccess = LCUService.SelectChampion(_autoPickSettings.PickChampionId, actId);
+
+                    // If hover fails, try secondary champion
+                    if (!hoverSuccess && _autoPickSettings.SecondaryChampionId > 0)
+                    {
+                        hoverSuccess = LCUService.SelectChampion(_autoPickSettings.SecondaryChampionId, actId);
+                        Debug.WriteLine($"Hovering secondary champion: {hoverSuccess}");
+                    }
+
+                    // Lock in champion
+                    if (_autoPickSettings.InstantLock)
+                    {
+                        bool lockSuccess = LCUService.SelectChampion(_autoPickSettings.PickChampionId, actId, true);
+                        Debug.WriteLine($"Locking in champion: {lockSuccess}");
+                    }
+                    else if (_autoPickSettings.PickLockDelayMs > 0)
+                    {
+                        await Task.Delay(_autoPickSettings.PickLockDelayMs);
+                        bool lockSuccess = LCUService.SelectChampion(_autoPickSettings.PickChampionId, actId, true);
+                        Debug.WriteLine($"Locking in champion after delay: {lockSuccess}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error handling pick: {ex.Message}");
+            }
+        }
+
+        private async Task HandleBanAsync(string actId)
+        {
+            try
+            {
+                // Hover ban after delay
+                if (_autoPickSettings.BanHoverDelayMs > 0)
+                    await Task.Delay(_autoPickSettings.BanHoverDelayMs);
+
+                if (_autoPickSettings.BanChampionId > 0)
+                {
+                    bool hoverSuccess = LCUService.SelectChampion(_autoPickSettings.BanChampionId, actId);
+                    Debug.WriteLine($"Hovering ban: {hoverSuccess}");
+
+                    // Lock in ban
+                    if (_autoPickSettings.InstantBan)
+                    {
+                        bool lockSuccess = LCUService.SelectChampion(_autoPickSettings.BanChampionId, actId, true);
+                        Debug.WriteLine($"Locking in ban: {lockSuccess}");
+                    }
+                    else if (_autoPickSettings.BanLockDelayMs > 0)
+                    {
+                        await Task.Delay(_autoPickSettings.BanLockDelayMs);
+                        bool lockSuccess = LCUService.SelectChampion(_autoPickSettings.BanChampionId, actId, true);
+                        Debug.WriteLine($"Locking in ban after delay: {lockSuccess}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error handling ban: {ex.Message}");
+            }
+        }
+
+        // Load and save auto-pick settings
+        private void LoadAutoPickSettings()
+        {
+            try
+            {
+                string filePath = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "RiotClientAutoLogin", "autopick_settings.json");
+
+                if (System.IO.File.Exists(filePath))
+                {
+                    string json = System.IO.File.ReadAllText(filePath);
+                    _autoPickSettings = JsonSerializer.Deserialize<AutoPickSettings>(json) ?? new AutoPickSettings();
+
+                    // Update UI
+                    UpdateAutoPickUI();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error loading auto-pick settings: {ex.Message}");
+            }
+        }
+
+        private void SaveAutoPickSettings()
+        {
+            try
+            {
+                string directory = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "RiotClientAutoLogin");
+
+                if (!System.IO.Directory.Exists(directory))
+                    System.IO.Directory.CreateDirectory(directory);
+
+                string filePath = System.IO.Path.Combine(directory, "autopick_settings.json");
+                string json = JsonSerializer.Serialize(_autoPickSettings, new JsonSerializerOptions { WriteIndented = true });
+                System.IO.File.WriteAllText(filePath, json);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error saving auto-pick settings: {ex.Message}");
+            }
+        }
+        private void UpdateAutoPickUI()
+        {
+            // Update checkboxes
+            chkAutoPickEnabled.IsChecked = _autoPickSettings.AutoPickEnabled;
+            chkAutoBanEnabled.IsChecked = _autoPickSettings.AutoBanEnabled;
+            chkAutoSpellsEnabled.IsChecked = _autoPickSettings.AutoSpellsEnabled;
+            chkInstantLock.IsChecked = _autoPickSettings.InstantLock;
+            chkInstantBan.IsChecked = _autoPickSettings.InstantBan;
+
+            // Update delay inputs
+            txtPickHoverDelay.Text = _autoPickSettings.PickHoverDelayMs.ToString();
+            txtPickLockDelay.Text = _autoPickSettings.PickLockDelayMs.ToString();
+            txtBanHoverDelay.Text = _autoPickSettings.BanHoverDelayMs.ToString();
+            txtBanLockDelay.Text = _autoPickSettings.BanLockDelayMs.ToString();
+
+            // Update champion and spell names/images
+            PrimaryChampionName = string.IsNullOrEmpty(_autoPickSettings.PickChampionName) ?
+                "Select Champion" : _autoPickSettings.PickChampionName;
+
+            SecondaryChampionName = string.IsNullOrEmpty(_autoPickSettings.SecondaryChampionName) ?
+                "Select Champion" : _autoPickSettings.SecondaryChampionName;
+
+            BanChampionName = string.IsNullOrEmpty(_autoPickSettings.BanChampionName) ?
+                "Select Champion" : _autoPickSettings.BanChampionName;
+
+            Spell1Name = string.IsNullOrEmpty(_autoPickSettings.SummonerSpell1Name) ?
+                "Select Spell" : _autoPickSettings.SummonerSpell1Name;
+
+            Spell2Name = string.IsNullOrEmpty(_autoPickSettings.SummonerSpell2Name) ?
+                "Select Spell" : _autoPickSettings.SummonerSpell2Name;
+
+            // Load images if needed
+            LoadChampionAndSpellImages();
+        }
+
+        private async void LoadChampionAndSpellImages()
+        {
+            try
+            {
+                // Load champion images
+                if (!string.IsNullOrEmpty(_autoPickSettings.PickChampionName) && PrimaryChampionImage == null)
+                {
+                    string imageUrl = await DataDragonService.GetChampionImageUrlAsync(_autoPickSettings.PickChampionName);
+                    PrimaryChampionImage = await DataDragonService.DownloadImageAsync(imageUrl);
+                }
+
+                if (!string.IsNullOrEmpty(_autoPickSettings.SecondaryChampionName) && SecondaryChampionImage == null)
+                {
+                    string imageUrl = await DataDragonService.GetChampionImageUrlAsync(_autoPickSettings.SecondaryChampionName);
+                    SecondaryChampionImage = await DataDragonService.DownloadImageAsync(imageUrl);
+                }
+
+                if (!string.IsNullOrEmpty(_autoPickSettings.BanChampionName) && BanChampionImage == null)
+                {
+                    string imageUrl = await DataDragonService.GetChampionImageUrlAsync(_autoPickSettings.BanChampionName);
+                    BanChampionImage = await DataDragonService.DownloadImageAsync(imageUrl);
+                }
+
+                // Load spell images
+                if (!string.IsNullOrEmpty(_autoPickSettings.SummonerSpell1Name) && Spell1Image == null)
+                {
+                    string imageUrl = await DataDragonService.GetSummonerSpellImageUrlAsync(_autoPickSettings.SummonerSpell1Name);
+                    Spell1Image = await DataDragonService.DownloadImageAsync(imageUrl);
+                }
+
+                if (!string.IsNullOrEmpty(_autoPickSettings.SummonerSpell2Name) && Spell2Image == null)
+                {
+                    string imageUrl = await DataDragonService.GetSummonerSpellImageUrlAsync(_autoPickSettings.SummonerSpell2Name);
+                    Spell2Image = await DataDragonService.DownloadImageAsync(imageUrl);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error loading images: {ex.Message}");
+            }
+        }
+
+
+
+
+        private BitmapImage _secondaryChampionImage;
+        public BitmapImage SecondaryChampionImage
+        {
+            get { return _secondaryChampionImage; }
+            set
+            {
+                _secondaryChampionImage = value;
+                OnPropertyChanged(nameof(SecondaryChampionImage));
+            }
+        }
+
+        private string _secondaryChampionName = "Select Champion";
+        public string SecondaryChampionName
+        {
+            get { return _secondaryChampionName; }
+            set
+            {
+                _secondaryChampionName = value;
+                OnPropertyChanged(nameof(SecondaryChampionName));
+            }
+        }
+
+        private BitmapImage _banChampionImage;
+        public BitmapImage BanChampionImage
+        {
+            get { return _banChampionImage; }
+            set
+            {
+                _banChampionImage = value;
+                OnPropertyChanged(nameof(BanChampionImage));
+            }
+        }
+
+        private string _banChampionName = "Select Champion";
+        public string BanChampionName
+        {
+            get { return _banChampionName; }
+            set
+            {
+                _banChampionName = value;
+                OnPropertyChanged(nameof(BanChampionName));
+            }
+        }
+
+        private BitmapImage _spell1Image;
+        public BitmapImage Spell1Image
+        {
+            get { return _spell1Image; }
+            set
+            {
+                _spell1Image = value;
+                OnPropertyChanged(nameof(Spell1Image));
+            }
+        }
+
+        private string _spell1Name = "Select Spell";
+        public string Spell1Name
+        {
+            get { return _spell1Name; }
+            set
+            {
+                _spell1Name = value;
+                OnPropertyChanged(nameof(Spell1Name));
+            }
+        }
+
+        private BitmapImage _spell2Image;
+        public BitmapImage Spell2Image
+        {
+            get { return _spell2Image; }
+            set
+            {
+                _spell2Image = value;
+                OnPropertyChanged(nameof(Spell2Image));
+            }
+        }
+
+        private string _spell2Name = "Select Spell";
+        public string Spell2Name
+        {
+            get { return _spell2Name; }
+            set
+            {
+                _spell2Name = value;
+                OnPropertyChanged(nameof(Spell2Name));
+            }
+        }
+
+        private void btnDecreaseBanHoverDelay_Click(object sender, RoutedEventArgs e)
+        {
+            int delay = int.Parse(txtBanHoverDelay.Text);
+            delay = Math.Max(0, delay - 100);
+            txtBanHoverDelay.Text = delay.ToString();
+            _autoPickSettings.BanHoverDelayMs = delay;
+            SaveAutoPickSettings();
+        }
+
+        private void btnIncreaseBanHoverDelay_Click(object sender, RoutedEventArgs e)
+        {
+            int delay = int.Parse(txtBanHoverDelay.Text);
+            delay += 100;
+            txtBanHoverDelay.Text = delay.ToString();
+            _autoPickSettings.BanHoverDelayMs = delay;
+            SaveAutoPickSettings();
+        }
+
+        private void btnDecreaseBanLockDelay_Click(object sender, RoutedEventArgs e)
+        {
+            int delay = int.Parse(txtBanLockDelay.Text);
+            delay = Math.Max(0, delay - 100);
+            txtBanLockDelay.Text = delay.ToString();
+            _autoPickSettings.BanLockDelayMs = delay;
+            SaveAutoPickSettings();
+        }
+
+        private void btnIncreaseBanLockDelay_Click(object sender, RoutedEventArgs e)
+        {
+            int delay = int.Parse(txtBanLockDelay.Text);
+            delay += 100;
+            txtBanLockDelay.Text = delay.ToString();
+            _autoPickSettings.BanLockDelayMs = delay;
+            SaveAutoPickSettings();
+        }
+
+        private void btnDecreaseLockDelay_Click(object sender, RoutedEventArgs e)
+        {
+            int delay = int.Parse(txtPickLockDelay.Text);
+            delay = Math.Max(0, delay - 100);
+            txtPickLockDelay.Text = delay.ToString();
+            _autoPickSettings.PickLockDelayMs = delay;
+            SaveAutoPickSettings();
+        }
+
+        private void btnIncreaseLockDelay_Click(object sender, RoutedEventArgs e)
+        {
+            int delay = int.Parse(txtPickLockDelay.Text);
+            delay += 100;
+            txtPickLockDelay.Text = delay.ToString();
+            _autoPickSettings.PickLockDelayMs = delay;
+            SaveAutoPickSettings();
+        }
+
+        private void chkAutoBanEnabled_Checked(object sender, RoutedEventArgs e)
+        {
+            _autoPickSettings.AutoBanEnabled = true;
+            SaveAutoPickSettings();
+
+            // Start the champion select monitor
+            StartAutoPickMonitor();
+        }
+
+        private void chkAutoBanEnabled_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _autoPickSettings.AutoBanEnabled = false;
+            SaveAutoPickSettings();
+
+            // Stop the champion select monitor if other features are also disabled
+            if (!_autoPickSettings.AutoPickEnabled && !_autoPickSettings.AutoSpellsEnabled)
+            {
+                StopAutoPickMonitor();
+            }
+        }
+
+        private void chkAutoSpellsEnabled_Checked(object sender, RoutedEventArgs e)
+        {
+            _autoPickSettings.AutoSpellsEnabled = true;
+            SaveAutoPickSettings();
+
+            // Start the champion select monitor
+            StartAutoPickMonitor();
+        }
+
+        private void chkAutoSpellsEnabled_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _autoPickSettings.AutoSpellsEnabled = false;
+            SaveAutoPickSettings();
+
+            // Stop the champion select monitor if other features are also disabled
+            if (!_autoPickSettings.AutoPickEnabled && !_autoPickSettings.AutoBanEnabled)
+            {
+                StopAutoPickMonitor();
+            }
+        }
+
+        private void chkInstantLock_Checked(object sender, RoutedEventArgs e)
+        {
+            _autoPickSettings.InstantLock = true;
+            SaveAutoPickSettings();
+        }
+
+        private void chkInstantLock_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _autoPickSettings.InstantLock = false;
+            SaveAutoPickSettings();
+        }
+
+        private void chkInstantBan_Checked(object sender, RoutedEventArgs e)
+        {
+            _autoPickSettings.InstantBan = true;
+            SaveAutoPickSettings();
+        }
+
+        private void chkInstantBan_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _autoPickSettings.InstantBan = false;
+            SaveAutoPickSettings();
+        }
     }
+
+
 }

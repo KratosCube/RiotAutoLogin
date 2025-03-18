@@ -715,11 +715,15 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
 
+                            <!-- API Key Section -->
                             <TextBlock Grid.Row="0" Text="RIOT API KEY" FontSize="16" FontWeight="SemiBold" 
-                   Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+                  Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
 
                             <Grid Grid.Row="1">
                                 <Grid.ColumnDefinitions>
@@ -727,14 +731,353 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBox x:Name="txtApiKey" Style="{StaticResource ModernTextBox}" 
-                     Grid.Column="0" Margin="0,0,10,0"/>
+                    Grid.Column="0" Margin="0,0,10,0"/>
                                 <Button x:Name="btnSaveApiKey" Content="Save" Style="{StaticResource ModernButton}" 
-                    Grid.Column="1" Click="btnSaveApiKey_Click"/>
+                   Grid.Column="1" Click="btnSaveApiKey_Click"/>
                             </Grid>
 
                             <TextBlock Grid.Row="2" Text="API Key is stored locally and used for retrieving player ranks." 
-                   Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" 
-                   Margin="0,15,0,0" Opacity="0.7"/>
+                  Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" 
+                  Margin="0,15,0,0" Opacity="0.7"/>
+
+                            <!-- Separator -->
+                            <Rectangle Grid.Row="3" Height="1" Fill="#3E3E4A" Margin="0,30,0,30" />
+
+                            <!-- Auto Accept Section -->
+                            <TextBlock Grid.Row="4" Text="AUTO ACCEPT MATCHES" FontSize="16" FontWeight="SemiBold" 
+                  Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+
+                            <Grid Grid.Row="5">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid Grid.Row="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="Automatically accept matches when found" 
+                          Foreground="{StaticResource TextColorBrush}" FontSize="14" 
+                          VerticalAlignment="Center"/>
+
+                                    <ToggleButton x:Name="tglAutoAccept" Grid.Column="1" Content="OFF" 
+                            Width="100" Height="40"
+                            Style="{StaticResource ModernToggleButton}" 
+                            Checked="tglAutoAccept_Checked"
+                            Unchecked="tglAutoAccept_Unchecked"/>
+                                </Grid>
+
+                                <!-- Status Indicator -->
+                                <Border Grid.Row="1" Background="#2A2A36" CornerRadius="8" Padding="15" Margin="0,15,0,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Status Indicator Circle -->
+                                        <Ellipse x:Name="autoAcceptStatusIndicator" Width="12" Height="12" 
+                            Fill="#707070" VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                                        <!-- Status Text -->
+                                        <TextBlock Grid.Column="1" x:Name="txtAutoAcceptStatus" 
+                              Text="Auto-accept is inactive. Enable to automatically accept game matches." 
+                              Foreground="{StaticResource TextColorBrush}" FontSize="14" 
+                              TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+                    <TabItem Header="AUTO-PICK" Style="{StaticResource TabItemStyle}">
+                        <Grid Margin="0,20,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Top Controls -->
+                            <StackPanel Grid.Row="0" Margin="0,0,0,15">
+                                <TextBlock Text="AUTO-PICK SETTINGS" FontSize="16" FontWeight="SemiBold" 
+                      Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" Orientation="Vertical" Margin="0,0,15,0">
+                                        <CheckBox x:Name="chkAutoPickEnabled" Content="Enable Auto-Pick" 
+                             Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,5"
+                             Checked="chkAutoPickEnabled_Checked" Unchecked="chkAutoPickEnabled_Unchecked"/>
+                                        <CheckBox x:Name="chkAutoBanEnabled" Content="Enable Auto-Ban" 
+                             Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,5"
+                             Checked="chkAutoBanEnabled_Checked" Unchecked="chkAutoBanEnabled_Unchecked"/>
+                                        <CheckBox x:Name="chkAutoSpellsEnabled" Content="Enable Auto-Spells" 
+                             Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,5"
+                             Checked="chkAutoSpellsEnabled_Checked" Unchecked="chkAutoSpellsEnabled_Unchecked"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1" Orientation="Vertical">
+                                        <CheckBox x:Name="chkInstantLock" Content="Instant Lock-in (Pick)" 
+                             Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,5"
+                             IsEnabled="{Binding ElementName=chkAutoPickEnabled, Path=IsChecked}"
+                             Checked="chkInstantLock_Checked" Unchecked="chkInstantLock_Unchecked"/>
+                                        <CheckBox x:Name="chkInstantBan" Content="Instant Lock-in (Ban)" 
+                             Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,5"
+                             IsEnabled="{Binding ElementName=chkAutoBanEnabled, Path=IsChecked}"
+                             Checked="chkInstantBan_Checked" Unchecked="chkInstantBan_Unchecked"/>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Main Content - Selection Tabs -->
+                            <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
+                                <TabItem Header="Pick Champions" Style="{StaticResource TabItemStyle}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Champion Selection -->
+                                        <Grid Grid.Row="0" Margin="0,0,0,15">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <!-- Primary Champion -->
+                                            <TextBlock Grid.Column="0" Grid.Row="0" Text="PRIMARY CHAMPION" 
+                                  Foreground="{StaticResource TextColorBrush}" FontSize="14" 
+                                  Margin="0,0,10,5"/>
+                                            <Border Grid.Column="0" Grid.Row="1" Style="{StaticResource AccountCard}" 
+                                Height="180" Width="180" HorizontalAlignment="Left"
+                                x:Name="primaryChampCard" MouseDown="primaryChampCard_MouseDown">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    <Image Grid.Row="0" Source="{Binding PrimaryChampionImage}"
+                                       Width="120" Height="120" Stretch="UniformToFill" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                                    <TextBlock Grid.Row="1" Text="{Binding PrimaryChampionName}" 
+                                           FontSize="16" FontWeight="Bold" TextAlignment="Center"
+                                           HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Secondary Champion -->
+                                            <TextBlock Grid.Column="1" Grid.Row="0" Text="SECONDARY CHAMPION" 
+                                  Foreground="{StaticResource TextColorBrush}" FontSize="14" 
+                                  Margin="10,0,0,5"/>
+                                            <Border Grid.Column="1" Grid.Row="1" Style="{StaticResource AccountCard}" 
+                                Height="180" Width="180" HorizontalAlignment="Left" Margin="10,0,0,0"
+                                x:Name="secondaryChampCard" MouseDown="secondaryChampCard_MouseDown">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    <Image Grid.Row="0" Source="{Binding SecondaryChampionImage}"
+                                       Width="120" Height="120" Stretch="UniformToFill" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                                    <TextBlock Grid.Row="1" Text="{Binding SecondaryChampionName}" 
+                                           FontSize="16" FontWeight="Bold" TextAlignment="Center"
+                                           HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
+                                                </Grid>
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Delay Settings -->
+                                        <StackPanel Grid.Row="1">
+                                            <TextBlock Text="PICK TIMING SETTINGS" FontSize="16" FontWeight="SemiBold"
+                                  Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+
+                                            <Grid Margin="0,0,0,10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Champion Hover Delay (ms):" 
+                                      Foreground="{StaticResource TextColorBrush}" VerticalAlignment="Center"/>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                    <Button x:Name="btnDecreaseHoverDelay" Content="-" Width="40" Height="40"
+                                        Style="{StaticResource SecondaryButton}" Click="btnDecreaseHoverDelay_Click"/>
+                                                    <TextBox x:Name="txtPickHoverDelay" Width="80" Margin="10,0" TextAlignment="Center"
+                                         Style="{StaticResource ModernTextBox}" Text="0"/>
+                                                    <Button x:Name="btnIncreaseHoverDelay" Content="+" Width="40" Height="40"
+                                        Style="{StaticResource SecondaryButton}" Click="btnIncreaseHoverDelay_Click"/>
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Champion Lock-in Delay (ms):" 
+                                      Foreground="{StaticResource TextColorBrush}" VerticalAlignment="Center"/>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                    <Button x:Name="btnDecreaseLockDelay" Content="-" Width="40" Height="40"
+                                        Style="{StaticResource SecondaryButton}" Click="btnDecreaseLockDelay_Click"/>
+                                                    <TextBox x:Name="txtPickLockDelay" Width="80" Margin="10,0" TextAlignment="Center"
+                                         Style="{StaticResource ModernTextBox}" Text="1000"/>
+                                                    <Button x:Name="btnIncreaseLockDelay" Content="+" Width="40" Height="40"
+                                        Style="{StaticResource SecondaryButton}" Click="btnIncreaseLockDelay_Click"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Grid>
+                                </TabItem>
+
+                                <TabItem Header="Ban Champion" Style="{StaticResource TabItemStyle}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Ban Champion Selection -->
+                                        <StackPanel Grid.Row="0" Margin="0,0,0,15">
+                                            <TextBlock Text="CHAMPION TO BAN" Foreground="{StaticResource TextColorBrush}" 
+                                  FontSize="14" Margin="0,0,0,5"/>
+                                            <Border Style="{StaticResource AccountCard}" Height="180" Width="180" 
+                                HorizontalAlignment="Left" x:Name="banChampCard" 
+                                MouseDown="banChampCard_MouseDown">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    <Image Grid.Row="0" Source="{Binding BanChampionImage}"
+                                       Width="120" Height="120" Stretch="UniformToFill" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                                    <TextBlock Grid.Row="1" Text="{Binding BanChampionName}" 
+                                           FontSize="16" FontWeight="Bold" TextAlignment="Center"
+                                           HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
+                                                </Grid>
+                                            </Border>
+                                        </StackPanel>
+
+                                        <!-- Ban Delay Settings -->
+                                        <StackPanel Grid.Row="1">
+                                            <TextBlock Text="BAN TIMING SETTINGS" FontSize="16" FontWeight="SemiBold"
+                                  Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+
+                                            <Grid Margin="0,0,0,10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Ban Hover Delay (ms):" 
+                                      Foreground="{StaticResource TextColorBrush}" VerticalAlignment="Center"/>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                    <Button x:Name="btnDecreaseBanHoverDelay" Content="-" Width="40" Height="40"
+                                        Style="{StaticResource SecondaryButton}" Click="btnDecreaseBanHoverDelay_Click"/>
+                                                    <TextBox x:Name="txtBanHoverDelay" Width="80" Margin="10,0" TextAlignment="Center"
+                                         Style="{StaticResource ModernTextBox}" Text="0"/>
+                                                    <Button x:Name="btnIncreaseBanHoverDelay" Content="+" Width="40" Height="40"
+                                        Style="{StaticResource SecondaryButton}" Click="btnIncreaseBanHoverDelay_Click"/>
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Ban Lock-in Delay (ms):" 
+                                      Foreground="{StaticResource TextColorBrush}" VerticalAlignment="Center"/>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                    <Button x:Name="btnDecreaseBanLockDelay" Content="-" Width="40" Height="40"
+                                        Style="{StaticResource SecondaryButton}" Click="btnDecreaseBanLockDelay_Click"/>
+                                                    <TextBox x:Name="txtBanLockDelay" Width="80" Margin="10,0" TextAlignment="Center"
+                                         Style="{StaticResource ModernTextBox}" Text="1000"/>
+                                                    <Button x:Name="btnIncreaseBanLockDelay" Content="+" Width="40" Height="40"
+                                        Style="{StaticResource SecondaryButton}" Click="btnIncreaseBanLockDelay_Click"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Grid>
+                                </TabItem>
+
+                                <TabItem Header="Summoner Spells" Style="{StaticResource TabItemStyle}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Spell Selection -->
+                                        <Grid Grid.Row="0" Margin="0,0,0,15">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <!-- Spell 1 -->
+                                            <TextBlock Grid.Column="0" Grid.Row="0" Text="SPELL 1" 
+                                  Foreground="{StaticResource TextColorBrush}" FontSize="14" 
+                                  Margin="0,0,10,5"/>
+                                            <Border Grid.Column="0" Grid.Row="1" Style="{StaticResource AccountCard}" 
+                                Height="180" Width="180" HorizontalAlignment="Left"
+                                x:Name="spell1Card" MouseDown="spell1Card_MouseDown">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    <Image Grid.Row="0" Source="{Binding Spell1Image}"
+                                       Width="120" Height="120" Stretch="UniformToFill" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                                    <TextBlock Grid.Row="1" Text="{Binding Spell1Name}" 
+                                           FontSize="16" FontWeight="Bold" TextAlignment="Center"
+                                           HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Spell 2 -->
+                                            <TextBlock Grid.Column="1" Grid.Row="0" Text="SPELL 2" 
+                                  Foreground="{StaticResource TextColorBrush}" FontSize="14" 
+                                  Margin="10,0,0,5"/>
+                                            <Border Grid.Column="1" Grid.Row="1" Style="{StaticResource AccountCard}" 
+                                Height="180" Width="180" HorizontalAlignment="Left" Margin="10,0,0,0"
+                                x:Name="spell2Card" MouseDown="spell2Card_MouseDown">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    <Image Grid.Row="0" Source="{Binding Spell2Image}"
+                                       Width="120" Height="120" Stretch="UniformToFill" 
+                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                                    <TextBlock Grid.Row="1" Text="{Binding Spell2Name}" 
+                                           FontSize="16" FontWeight="Bold" TextAlignment="Center"
+                                           HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
+                                                </Grid>
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Description -->
+                                        <TextBlock Grid.Row="1" Text="Summoner spells will automatically be selected when entering champion select." 
+                              Foreground="{StaticResource TextColorBrush}" TextWrapping="Wrap"/>
+                                    </Grid>
+                                </TabItem>
+                            </TabControl>
                         </Grid>
                     </TabItem>
                 </TabControl>
