@@ -1,113 +1,185 @@
-# Riot Auto Login App
+# 🎮 RiotAutoLogin v1.1.0
 
-## Overview
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/KratosCube/RiotAutoLogin/releases)
+[![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)](https://dotnet.microsoft.com/)
+[![Windows](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Riot Auto Login App** is a user-friendly application designed to automate the login process for the Riot Client while securely managing multiple Riot accounts. It integrates with the Riot API to fetch and display player stats and rank information. The application features a modern, minimalist user interface with dedicated tabs for login, account management, and settings.
+A modern, feature-rich application for automating Riot Client logins with secure multi-account management, live stats integration, and automatic updates.
 
-## Key Features
+## ✨ Key Features
 
-- **Automated Login:**  
-  Launch and automatically log in to the Riot Client with a double-click on an account card.
-  
-- **Multi-Account Management:**  
-  Easily add, update, or delete multiple Riot accounts. Manage all your login credentials in one place.
-  
-- **Riot API Integration:**  
-  Retrieve live rank and stats data directly from the Riot API to keep your account information up to date.
-  
-- **Security & Privacy:**  
-  User credentials are secured using the Windows Data Protection API (DPAPI) with added entropy, ensuring your sensitive information is safely encrypted and stored locally.
-  
-- **Self-contained Deployment:**  
-  The app is published as a self-contained executable with all required dependencies, ensuring easy distribution without needing to install the .NET runtime separately.
+### 🚀 **Auto-Login System**
+- **Quick Login Popup:** Lightning-fast account switching with ESC to close
+- **Optimized Performance:** Login times reduced to ~2.5 seconds
+- **Smart UI Detection:** Reliable credential filling using UI automation
 
-## Installation
+### 📱 **Enhanced User Interface**
+- **Modern Dark Theme:** Sleek, eye-friendly design
+- **System Tray Integration:** Minimize to tray with custom icon
+- **Responsive Design:** Dynamic scaling for different screen sizes
+- **Smooth Animations:** Polished hover effects and transitions
+
+### 🔄 **Auto-Update System** *(New in v1.1.0)*
+- **GitHub Integration:** Automatic update detection from releases
+- **One-Click Updates:** Download and install with progress tracking
+- **Version Management:** Smart version comparison and notifications
+- **Background Checking:** Configurable update intervals
+
+### ⚡ **Global Hotkeys** *(New in v1.1.0)*
+- **Quick Access:** Customizable keyboard shortcuts
+- **System-Wide:** Works even when app is minimized
+- **Easy Configuration:** Set your preferred hotkey combinations
+
+### 🔐 **Advanced Security**
+- **DPAPI Encryption:** Windows Data Protection API with entropy
+- **Local Storage:** All data stays on your machine
+- **Secure Memory:** Protected credential handling
+
+### 🎯 **Champion Select Automation** 
+- **Auto-Pick:** Automatically select your preferred champions
+- **Auto-Ban:** Ban unwanted champions instantly
+- **Summoner Spells:** Auto-select your spell combinations
+- **Queue Integration:** Smart detection of champion select phase
+
+### 📊 **Live Stats Integration**
+- **Real-time Rank Data:** Fetch current rank and LP from Riot API
+- **Multiple Regions:** Support for all Riot regions
+- **Account Verification:** Validate account details automatically
+- **Stats Display:** Beautiful rank cards with current season data
+
+## 🚀 Installation
+
+### Option 1: Download Release (Recommended)
+1. Go to [Releases](https://github.com/KratosCube/RiotAutoLogin/releases)
+2. Download `RiotAutoLogin-v1.1.0-win-x86.exe` (requires .NET 8.0)
+3. Run the executable - no installation needed!
+
+### Option 2: Standalone Version
+1. Download `RiotAutoLogin-v1.1.0-win-x86.zip`
+2. Extract and run - includes all dependencies
 
 ### Requirements
+- **OS:** Windows 10/11
+- **.NET:** 8.0 Runtime (auto-installed with standalone version)
+- **RAM:** 100MB minimum
+- **Storage:** 50MB available space
 
-- **Operating System:** Windows  
-- **Dependencies:** No additional installations are needed when using the self-contained publish version.
+## 📋 How to Use
 
-### How to Get Started
+### 🔑 **Quick Login**
+1. **Add Accounts:** Go to "Manage Accounts" tab
+2. **Fill Details:** Enter username, password, and optional game details
+3. **Quick Access:** Double-click any account card for instant login
+4. **Popup Mode:** Use quick login popup for fastest switching
 
-1. **Download the App:**  
-   Obtain the self-contained executable from the releases section.
-   
-2. **Run the Application:**  
-   Simply double-click the executable to launch the app.
+### ⚙️ **Configuration**
 
-## How to Use the App
+#### 🔥 **Riot API Setup** (Optional but Recommended)
+1. Visit [Riot Developer Portal](https://developer.riotgames.com/)
+2. Register for a Personal API Key (free)
+3. Enter API key in Settings → API Configuration
+4. Enjoy live stats and rank display!
 
-### 1. Login Tab
+#### ⌨️ **Hotkey Setup**
+1. Go to Settings → Hotkeys
+2. Set your preferred key combinations
+3. Enable global hotkeys for system-wide access
 
-- **Purpose:** Quickly log in to your Riot Client.  
-- **Instructions:**  
-  - Browse your list of accounts.
-  - Double-click on the desired account card to launch the Riot Client and automatically fill in your credentials.
-  
-- **Screenshot:**  
-  ![Login Tab](images/login_tab.png)
+#### 🎮 **Auto-Pick Configuration**
+1. Open Settings → Auto-Pick
+2. Select primary/secondary champions
+3. Choose ban champion and summoner spells
+4. Enable desired automation features
 
-### 2. Manage Accounts Tab
+### 🎯 **Champion Select Features**
+- **Auto-Pick:** Automatically locks your selected champion
+- **Auto-Ban:** Bans your specified champion during ban phase
+- **Spell Selection:** Auto-selects your preferred summoner spells
+- **Backup Picks:** Falls back to secondary champion if primary unavailable
 
-- **Purpose:** Add, update, or remove Riot accounts.  
-- **Instructions:**  
-  - Enter account details such as Account Login, Game Name, Tagline, and Password.
-  - Optionally, select an avatar for the account.
-  - Click **Add**, **Update**, or **Delete** to manage your account list.
-  
-- **Screenshot:**  
-  ![Manage Accounts Tab](images/manage_accounts.png)
+## 🔧 Advanced Features
 
-### 3. Settings Tab
+### 🔄 **Auto-Update System**
+- **Automatic Checking:** Checks for updates every 24 hours
+- **Manual Check:** Click "Check for Updates" in settings
+- **Secure Downloads:** Verified downloads from GitHub releases
+- **Smart Installation:** Self-replacing executable with restart
 
-- **Purpose:** Configure your Riot API key to enable API integration.  
-- **Instructions:**  
-  - Enter your Riot API key in the provided text box.
-  - Click **Save** to store the API key securely.
-  
-- **Screenshot:**  
-  ![Settings Tab](images/settings_tab.png)
+### 📱 **System Tray**
+- **Minimize to Tray:** Keep app running in background
+- **Quick Access:** Right-click for context menu
+- **Custom Icon:** Beautiful tray icon integration
 
-## Requesting Your Riot API Key
+### ⚡ **Performance Optimizations**
+- **Fast Startup:** Optimized initialization
+- **Memory Efficient:** Minimal resource usage
+- **Smart Caching:** Cached champion and spell data
+- **Background Operations:** Non-blocking UI operations
 
-To fully utilize the app's capabilities, you need your own API key from Riot Games. Follow these steps:
+## 🛠️ Troubleshooting
 
-1. **Visit the Riot Developer Portal:**  
-   Go to [Riot Developer Portal](https://developer.riotgames.com/).
+### Common Issues
 
-2. **Sign Up or Log In:**  
-   Create an account or log in if you already have one.
+**Login Not Working:**
+- Ensure Riot Client is installed and up-to-date
+- Check Windows UI Automation is enabled
+- Try running as administrator
 
-3. **Request an API Key:**  
-   Navigate to the Dashboard section and click on register product. There u can request for personal api key that is free to use for smaller apps.
+**API Key Issues:**
+- Verify API key is valid and active
+- Check internet connection
+- Ensure correct region selection
 
-4. **Enter the API Key in the App:**  
-   Open the **Settings Tab** in the app and input your new API key, then click **Save**.
+**Update Problems:**
+- Check internet connectivity
+- Disable antivirus temporarily
+- Run as administrator for updates
 
-## Security & Privacy
+**Hotkeys Not Working:**
+- Check for conflicting applications
+- Try different key combinations
+- Restart application after hotkey changes
 
-- **Encryption:**  
-  Passwords and sensitive data are encrypted using the Windows Data Protection API (DPAPI) with additional entropy. This ensures that your credentials are stored securely on your local machine.
+## 🤝 Contributing
 
-- **Self-contained Packaging:**  
-  The application is packaged with all necessary dependencies (including the .NET runtime). While this results in a larger file size, it guarantees that the app will run on any compatible Windows machine without additional installations.
+We welcome contributions! Here's how you can help:
 
-- **Privacy:**  
-  Your API key and account credentials are stored only on your local device and are not transmitted to any external servers.
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to the branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
 
-## Troubleshooting
+### Development Setup
+```bash
+git clone https://github.com/KratosCube/RiotAutoLogin.git
+cd RiotAutoLogin
+dotnet build
+```
 
-- **Login Issues:**  
-  Make sure that the Riot Client is installed on your system and that its installation path is correct if you encounter issues during login.
+## 📜 License
 
-- **API Key Errors:**  
-  Ensure that your API key is valid and active. Visit the Riot Developer Portal for any updates regarding your key.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Contributing
+## 🙏 Acknowledgments
 
-Contributions are welcome! If you would like to contribute to the project, please fork the repository and submit a pull request. For major changes, please open an issue first to discuss what you would like to change.
+- **Riot Games** for the League of Legends API
+- **FlaUI** for UI automation capabilities
+- **Community contributors** for feedback and suggestions
 
-## License
+## 📞 Support
 
-This project is licensed under the [MIT License](LICENSE).
+- **Issues:** [GitHub Issues](https://github.com/KratosCube/RiotAutoLogin/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/KratosCube/RiotAutoLogin/discussions)
+- **Updates:** Watch this repository for latest releases
+
+---
+
+<div align="center">
+
+**⭐ If you find this project helpful, please give it a star! ⭐**
+
+[Download Latest Release](https://github.com/KratosCube/RiotAutoLogin/releases) • [Report Bug](https://github.com/KratosCube/RiotAutoLogin/issues) • [Request Feature](https://github.com/KratosCube/RiotAutoLogin/issues)
+
+</div>
