@@ -12,7 +12,7 @@ namespace RiotAutoLogin.Services
 
     public static class LeagueClientAutomationService
     {
-        private static CancellationTokenSource _autoAcceptCts;
+        private static CancellationTokenSource? _autoAcceptCts;
 
         public static void StartAutoAccept()
         {

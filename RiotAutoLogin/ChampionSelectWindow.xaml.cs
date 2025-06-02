@@ -1,5 +1,4 @@
-﻿using RiotAutoLogin.Services;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -12,38 +11,25 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using RiotAutoLogin.Models;
+using RiotAutoLogin.Services;
+using RiotAutoLogin.Utilities;
 
 namespace RiotAutoLogin
 {
     public partial class ChampionSelectWindow : Window, INotifyPropertyChanged
     {
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        private string _windowTitle;
-        public string WindowTitle
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged(string propertyName)
         {
-            get { return _windowTitle; }
-            set
-            {
-                _windowTitle = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(WindowTitle)));
-            }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+
+        private readonly bool _isChampionSelect;
+        public dynamic? SelectedItem { get; private set; }
 
         private List<dynamic> _allItems = new List<dynamic>();
         private List<dynamic> _filteredItems = new List<dynamic>();
-        private dynamic _selectedItem;
-        public dynamic SelectedItem
-        {
-            get { return _selectedItem; }
-            set
-            {
-                _selectedItem = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectedItem)));
-            }
-        }
-
-        private bool _isChampionSelect;
         private bool _showAvailableOnly = true;
 
         public ChampionSelectWindow(bool isChampionSelect, string title)
@@ -52,7 +38,7 @@ namespace RiotAutoLogin
             DataContext = this;
 
             _isChampionSelect = isChampionSelect;
-            WindowTitle = title;
+            Title = title;
 
             Loaded += ChampionSelectWindow_Loaded;
         }

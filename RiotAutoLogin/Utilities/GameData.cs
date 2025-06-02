@@ -1,11 +1,15 @@
 ﻿// Add this new file: GameData.cs
-using RiotAutoLogin.Services;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
+using RiotAutoLogin.Models;
+using RiotAutoLogin.Services;
 
-namespace RiotAutoLogin
+namespace RiotAutoLogin.Utilities
 {
     public static class GameData
     {

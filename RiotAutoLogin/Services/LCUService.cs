@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Management;
@@ -9,16 +10,25 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using RiotAutoLogin.Models;
 
 namespace RiotAutoLogin.Services
 {
     public static class LCUService
     {
-        private static string[] _leagueAuth;
+        private static string[] _leagueAuth = Array.Empty<string>();
         private static int _lcuPid = 0;
         private static bool _isLeagueOpen = false;
-        private static CancellationTokenSource _autoAcceptCts;
+        private static CancellationTokenSource? _autoAcceptCts;
         private static bool _isAutoAcceptActive = false;
+        private static string _lockfilePath = string.Empty;
+        private static string _port = string.Empty;
+        private static string _password = string.Empty;
+        private static readonly HttpClientHandler Handler = new HttpClientHandler()
+        {
+            ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+        };
+        private static readonly HttpClient Client = new HttpClient(Handler);
 
         public static bool IsLeagueOpen => _isLeagueOpen;
         public static bool IsAutoAcceptActive => _isAutoAcceptActive;
@@ -50,7 +60,7 @@ namespace RiotAutoLogin.Services
         {
             try
             {
-                Process client = Process.GetProcessesByName("LeagueClientUx").FirstOrDefault();
+                var client = Process.GetProcessesByName("LeagueClientUx").FirstOrDefault();
                 if (client != null)
                 {
                     _leagueAuth = GetLeagueAuth(client);
@@ -59,7 +69,7 @@ namespace RiotAutoLogin.Services
                     if (_lcuPid != client.Id)
                     {
                         _lcuPid = client.Id;
-                        Debug.WriteLine("League Client found. Process ID: " + _lcuPid);
+                        Debug.WriteLine($"League Client found. Process ID: {_lcuPid}");
                     }
 
                     return true;
@@ -72,7 +82,7 @@ namespace RiotAutoLogin.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("Error checking for League Client: " + ex.Message);
+                Debug.WriteLine($"Error checking for League Client: {ex.Message}");
                 _isLeagueOpen = false;
                 return false;
             }
@@ -93,42 +103,25 @@ namespace RiotAutoLogin.Services
                         continue;
                     }
 
-                    string[] gameSession = ClientRequest("GET", "lol-gameflow/v1/session");
-
-                    if (gameSession[0] == "200")
+                    var gameSession = ClientRequest("GET", "lol-gameflow/v1/session");
+                    if (gameSession[0] == "200" && TryGetPhase(gameSession[1], out var phase))
                     {
-                        string phase = gameSession[1].Split("phase").Last().Split('"')[2];
-
-                        switch (phase)
+                        if (phase == "ReadyCheck")
                         {
-                            case "ReadyCheck":
-                                // Auto-accept match
-                                string[] acceptResult = ClientRequest("POST", "lol-matchmaking/v1/ready-check/accept");
-                                if (acceptResult[0].StartsWith("2"))
-                                {
-                                    Debug.WriteLine("Match accepted successfully!");
+                            var acceptResult = ClientRequest("POST", "lol-matchmaking/v1/ready-check/accept");
+                            Debug.WriteLine(acceptResult[0].StartsWith("2") ? 
+                                "Match accepted successfully!" : 
+                                $"Failed to accept match. Status: {acceptResult[0]}");
                                 }
-                                else
-                                {
-                                    Debug.WriteLine($"Failed to accept match. Status: {acceptResult[0]}");
-                                }
-                                break;
 
-                            case "Lobby":
-                            case "Matchmaking":
-                            case "ChampSelect":
-                            case "InProgress":
-                            case "WaitingForStats":
-                            case "PreEndOfGame":
-                            case "EndOfGame":
-                                // No need to do anything during these phases
-                                await Task.Delay(2000, cancellationToken);
-                                break;
-
-                            default:
-                                await Task.Delay(1000, cancellationToken);
-                                break;
-                        }
+                        var delay = phase switch
+                        {
+                            "Lobby" or "Matchmaking" or "ChampSelect" or "InProgress" or 
+                            "WaitingForStats" or "PreEndOfGame" or "EndOfGame" => 2000,
+                            _ => 1000
+                        };
+                        
+                        await Task.Delay(delay, cancellationToken);
                     }
                     else
                     {
@@ -153,32 +146,22 @@ namespace RiotAutoLogin.Services
         // Get authentication details from the League Client process
         private static string[] GetLeagueAuth(Process client)
         {
-            string query = $"SELECT CommandLine FROM Win32_Process WHERE ProcessId = {client.Id}";
-            string commandLine = string.Empty;
+            const string query = "SELECT CommandLine FROM Win32_Process WHERE ProcessId = ";
+            using var searcher = new ManagementObjectSearcher(query + client.Id);
+            using var results = searcher.Get();
+            
+            var commandLine = results.Cast<ManagementObject>()
+                .FirstOrDefault()?["CommandLine"]?.ToString() ?? string.Empty;
 
-            using (var searcher = new ManagementObjectSearcher(query))
-            using (var results = searcher.Get())
-            {
-                foreach (var result in results)
-                {
-                    commandLine = result["CommandLine"]?.ToString();
-                    break;
-                }
-            }
+            var port = Regex.Match(commandLine, @"--app-port=""?(\d+)""?").Groups[1].Value;
+            var authToken = Regex.Match(commandLine, @"--remoting-auth-token=([a-zA-Z0-9_-]+)").Groups[1].Value;
+            var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"riot:{authToken}"));
 
-            // Parse the port and auth token
-            string port = Regex.Match(commandLine, @"--app-port=""?(\d+)""?").Groups[1].Value;
-            string authToken = Regex.Match(commandLine, @"--remoting-auth-token=([a-zA-Z0-9_-]+)").Groups[1].Value;
-
-            // Compute the encoded key
-            string auth = "riot:" + authToken;
-            string authBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(auth));
-
-            return new string[] { authBase64, port };
+            return new[] { auth, port };
         }
 
         // Make a request to the League Client API
-        public static string[] ClientRequest(string method, string url, string body = null)
+        public static string[] ClientRequest(string method, string url, string? body = null)
         {
             // Ignore invalid https
             var handler = new HttpClientHandler()
@@ -188,14 +171,12 @@ namespace RiotAutoLogin.Services
 
             try
             {
-                using (HttpClient client = new HttpClient(handler))
-                {
-                    // Set URL
-                    client.BaseAddress = new Uri("https://127.0.0.1:" + _leagueAuth[1] + "/");
+                using var client = new HttpClient(handler);
+                client.BaseAddress = new Uri($"https://127.0.0.1:{_leagueAuth[1]}/");
                     client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", _leagueAuth[0]);
 
                     // Set headers
-                    HttpRequestMessage request = new HttpRequestMessage(new HttpMethod(method), url);
+                using var request = new HttpRequestMessage(new HttpMethod(method), url);
 
                     // Send POST data when doing a post request
                     if (!string.IsNullOrEmpty(body))
@@ -204,7 +185,7 @@ namespace RiotAutoLogin.Services
                     }
 
                     // Get the response
-                    HttpResponseMessage response = client.SendAsync(request).Result;
+                using var response = client.SendAsync(request).Result;
 
                     // If the response is null (League client closed?)
                     if (response == null)
@@ -224,7 +205,6 @@ namespace RiotAutoLogin.Services
 
                     // Return content
                     return new string[] { statusString, responseFromServer };
-                }
             }
             catch (Exception ex)
             {
@@ -244,70 +224,53 @@ namespace RiotAutoLogin.Services
                     return new List<ChampionModel>();
                 }
 
-                string currentSummonerId = await GetCurrentSummonerIdAsync();
+                var currentSummonerId = await GetCurrentSummonerIdAsync();
                 if (string.IsNullOrEmpty(currentSummonerId))
                 {
                     Debug.WriteLine("Could not get summoner ID, returning empty champion list");
                     return new List<ChampionModel>();
                 }
 
-                string[] ownedChamps = ClientRequest("GET", $"lol-champions/v1/inventories/{currentSummonerId}/champions-minimal");
-                if (ownedChamps[0] != "200")
+                var ownedChampionsResult = ClientRequest("GET", $"lol-champions/v1/owned-champions-minimal");
+                if (ownedChampionsResult[0] != "200")
                 {
-                    Debug.WriteLine($"Failed to get champions, status: {ownedChamps[0]}");
+                    Debug.WriteLine($"Failed to get owned champions: {ownedChampionsResult[0]}");
                     return new List<ChampionModel>();
                 }
 
-                List<ChampionModel> champions = new List<ChampionModel>();
-
-                // Parse JSON response to extract champion data
-                using (JsonDocument doc = JsonDocument.Parse(ownedChamps[1]))
-                {
+                var champions = new List<ChampionModel>();
+                using var doc = JsonDocument.Parse(ownedChampionsResult[1]);
+                
                     foreach (var element in doc.RootElement.EnumerateArray())
                     {
-                        try
+                    if (element.TryGetProperty("id", out var idProp) &&
+                        element.TryGetProperty("name", out var nameProp) &&
+                        element.TryGetProperty("ownership", out var ownershipProp))
+                    {
+                        var ownership = ownershipProp.GetProperty("owned").GetBoolean();
+                        var name = nameProp.GetString();
+                        
+                        if (!string.IsNullOrEmpty(name))
                         {
-                            string name = element.GetProperty("name").GetString();
-                            int id = element.GetProperty("id").GetInt32();
-                            bool owned = element.GetProperty("owned").GetBoolean();
-                            bool freeToPlay = false;
-                            bool freeToPlayForNewPlayers = false;
-
-                            if (element.TryGetProperty("freeToPlay", out var freeToPlayProp))
-                                freeToPlay = freeToPlayProp.GetBoolean();
-
-                            if (element.TryGetProperty("freeToPlayForNewPlayers", out var freeToPlayForNewPlayersProp))
-                                freeToPlayForNewPlayers = freeToPlayForNewPlayersProp.GetBoolean();
-
-                            // Skip the "None" champion
-                            if (name == "None")
-                                continue;
-
-                            // Fix Nunu & Willump to just "Nunu" to be consistent
-                            if (name == "Nunu & Willump")
-                                name = "Nunu";
-
-                            bool isAvailable = owned || freeToPlay || freeToPlayForNewPlayers;
-
                             champions.Add(new ChampionModel
                             {
+                                Id = idProp.GetInt32(),
                                 Name = name,
-                                Id = id,
-                                IsAvailable = isAvailable
+                                IsAvailable = ownership
                             });
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"Error parsing champion: {ex.Message}");
                         }
                     }
                 }
 
+                // Add "None" option
+                champions.Insert(0, new ChampionModel { Name = "None", Id = -1, IsAvailable = true });
+                
+                Debug.WriteLine($"Loaded {champions.Count} champions from LCU");
                 return champions.OrderBy(c => c.Name).ToList();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error fetching champions: {ex.Message}");
+                Debug.WriteLine($"Error getting champions from LCU: {ex.Message}");
                 return new List<ChampionModel>();
             }
         }
@@ -318,130 +281,78 @@ namespace RiotAutoLogin.Services
             {
                 if (!CheckIfLeagueClientIsOpen())
                 {
-                    Debug.WriteLine("League client not open, using fallback spells");
+                    Debug.WriteLine("League client not open, using hardcoded spells");
                     return GetHardcodedSpells();
                 }
 
-                string[] spellsJson = ClientRequest("GET", "lol-game-data/assets/v1/summoner-spells.json");
-                Debug.WriteLine($"Summoner spell request result: {spellsJson[0]}");
-
-                if (spellsJson[0] != "200")
+                var result = ClientRequest("GET", "lol-game-data/assets/v1/summoner-spells.json");
+                if (result[0] != "200")
                 {
-                    Debug.WriteLine($"Failed to get summoner spells from LCU, status: {spellsJson[0]}");
+                    Debug.WriteLine($"Failed to get spells from LCU: {result[0]}");
                     return GetHardcodedSpells();
                 }
 
-                // Log the response to diagnose issues
-                Debug.WriteLine($"Response length: {spellsJson[1]?.Length ?? 0}");
-
-                List<SummonerSpellModel> spells = new List<SummonerSpellModel>();
-
-                // Parse JSON response to extract spell data
-                try
-                {
-                    using (JsonDocument doc = JsonDocument.Parse(spellsJson[1]))
-                    {
+                var spells = new List<SummonerSpellModel>();
+                using var doc = JsonDocument.Parse(result[1]);
+                
                         foreach (var element in doc.RootElement.EnumerateArray())
                         {
-                            try
+                    if (element.TryGetProperty("id", out var idProp) &&
+                        element.TryGetProperty("name", out var nameProp))
+                    {
+                        var name = nameProp.GetString();
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            spells.Add(new SummonerSpellModel
                             {
-                                string name = element.GetProperty("name").GetString();
-                                int id = element.GetProperty("id").GetInt32();
-                                string description = "";
-
-                                if (element.TryGetProperty("description", out var descProp))
-                                    description = descProp.GetString();
-
-                                spells.Add(new SummonerSpellModel
-                                {
-                                    Name = name,
-                                    Id = id,
-                                    Description = description
-                                });
-
-                                Debug.WriteLine($"Added spell from LCU: {name} (ID: {id})");
-                            }
-                            catch (Exception ex)
-                            {
-                                Debug.WriteLine($"Error parsing individual spell: {ex.Message}");
-                            }
+                                Id = idProp.GetInt32(),
+                                Name = name,
+                                Description = element.TryGetProperty("description", out var desc) ? 
+                                    desc.GetString() ?? string.Empty : string.Empty
+                            });
                         }
                     }
                 }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Error parsing spells JSON: {ex.Message}");
-                    return GetHardcodedSpells();
-                }
 
-                if (spells.Count == 0)
-                {
-                    Debug.WriteLine("No spells parsed from LCU, using fallback");
-                    return GetHardcodedSpells();
-                }
-
-                return spells.OrderBy(s => s.Name).ToList();
+                Debug.WriteLine($"Loaded {spells.Count} spells from LCU");
+                return spells;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error fetching summoner spells: {ex.Message}");
+                Debug.WriteLine($"Error getting spells from LCU: {ex.Message}");
                 return GetHardcodedSpells();
             }
         }
-        private static List<SummonerSpellModel> GetHardcodedSpells()
-        {
-            var spells = new List<SummonerSpellModel>
+        private static List<SummonerSpellModel> GetHardcodedSpells() => new()
     {
-        new SummonerSpellModel { Name = "Flash", Id = 4, Description = "Teleports your champion a short distance." },
-        new SummonerSpellModel { Name = "Ignite", Id = 14, Description = "Ignites target enemy champion, dealing true damage." },
-        new SummonerSpellModel { Name = "Heal", Id = 7, Description = "Restores health to your champion and an ally." },
-        new SummonerSpellModel { Name = "Teleport", Id = 12, Description = "Teleports to target allied structure or minion." },
-        new SummonerSpellModel { Name = "Exhaust", Id = 3, Description = "Slows an enemy champion and reduces their damage." },
-        new SummonerSpellModel { Name = "Barrier", Id = 21, Description = "Shields your champion from damage." },
-        new SummonerSpellModel { Name = "Cleanse", Id = 1, Description = "Removes all disables and summoner spell debuffs." },
-        new SummonerSpellModel { Name = "Smite", Id = 11, Description = "Deals true damage to target monster or minion." },
-        new SummonerSpellModel { Name = "Ghost", Id = 6, Description = "Your champion can move through units and gains increased Movement Speed." },
-        new SummonerSpellModel { Name = "Clarity", Id = 13, Description = "Restores mana to you and nearby allies." }
-    };
-
-            Debug.WriteLine($"Using {spells.Count} hardcoded spells");
-            return spells;
-        }
-        private static async Task<string> GetCurrentSummonerIdAsync()
+            new() { Name = "Flash", Id = 4, Description = "Teleports your champion a short distance." },
+            new() { Name = "Ignite", Id = 14, Description = "Ignites target enemy champion, dealing true damage." },
+            new() { Name = "Heal", Id = 7, Description = "Restores health to your champion and an ally." },
+            new() { Name = "Teleport", Id = 12, Description = "Teleports to target allied structure or minion." },
+            new() { Name = "Exhaust", Id = 3, Description = "Slows an enemy champion and reduces their damage." },
+            new() { Name = "Barrier", Id = 21, Description = "Shields your champion from damage." },
+            new() { Name = "Cleanse", Id = 1, Description = "Removes all disables and summoner spell debuffs." },
+            new() { Name = "Smite", Id = 11, Description = "Deals true damage to target monster or minion." }
+        };
+        private static async Task<string?> GetCurrentSummonerIdAsync()
         {
             try
             {
-                string[] currentSummoner = ClientRequest("GET", "lol-summoner/v1/current-summoner");
-                if (currentSummoner[0] == "200")
+                var result = ClientRequest("GET", "lol-summoner/v1/current-summoner");
+                if (result[0] == "200")
                 {
                     // Log the full response to diagnose
-                    Debug.WriteLine("Full summoner JSON: " + currentSummoner[1]);
+                    Debug.WriteLine("Full summoner JSON: " + result[1]);
 
-                    using (JsonDocument doc = JsonDocument.Parse(currentSummoner[1]))
-                    {
-                        var summonerIdProperty = doc.RootElement.GetProperty("summonerId");
-
-                        // Check the value kind and handle accordingly
-                        if (summonerIdProperty.ValueKind == JsonValueKind.Number)
-                        {
-                            return summonerIdProperty.GetInt64().ToString();
-                        }
-                        else if (summonerIdProperty.ValueKind == JsonValueKind.String)
-                        {
-                            return summonerIdProperty.GetString();
-                        }
-                        else
-                        {
-                            Debug.WriteLine($"Unexpected summonerId type: {summonerIdProperty.ValueKind}");
-                            return string.Empty;
-                        }
-                    }
+                    using var doc = JsonDocument.Parse(result[1]);
+                    if (doc.RootElement.TryGetProperty("summonerId", out var idProp))
+                        return idProp.GetString();
                 }
                 return string.Empty;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error getting summoner ID: {ex.Message}");
+                Debug.WriteLine($"Error getting current summoner ID: {ex.Message}");
                 return string.Empty;
             }
         }
@@ -451,9 +362,9 @@ namespace RiotAutoLogin.Services
         {
             try
             {
-                string body = complete ? $"{{\"championId\":{championId},\"completed\":true}}" : $"{{\"championId\":{championId}}}";
-                string[] response = ClientRequest("PATCH", $"lol-champ-select/v1/session/actions/{actId}", body);
-                return response[0] == "204";
+                var body = JsonSerializer.Serialize(new { championId, completed = complete });
+                var result = ClientRequest("PATCH", $"lol-champ-select/v1/session/actions/{actId}", body);
+                return result[0].StartsWith("2");
             }
             catch (Exception ex)
             {
@@ -466,9 +377,10 @@ namespace RiotAutoLogin.Services
         {
             try
             {
-                string body = $"{{\"spell{slot}Id\":{spellId}}}";
-                string[] response = ClientRequest("PATCH", "lol-champ-select/v1/session/my-selection", body);
-                return response[0] == "204";
+                var spellSlot = slot == 1 ? "spell1Id" : "spell2Id";
+                var body = JsonSerializer.Serialize(new Dictionary<string, int> { [spellSlot] = spellId });
+                var result = ClientRequest("PATCH", "lol-champ-select/v1/session/my-selection", body);
+                return result[0].StartsWith("2");
             }
             catch (Exception ex)
             {
@@ -482,21 +394,13 @@ namespace RiotAutoLogin.Services
         {
             try
             {
-                string[] gameSession = ClientRequest("GET", "lol-gameflow/v1/session");
-                if (gameSession[0] == "200")
-                {
-                    using (JsonDocument doc = JsonDocument.Parse(gameSession[1]))
-                    {
-                        if (doc.RootElement.TryGetProperty("phase", out var phaseProp))
-                            return phaseProp.GetString();
-                    }
-                }
-                return string.Empty;
+                var result = ClientRequest("GET", "lol-gameflow/v1/session");
+                return result[0] == "200" && TryGetPhase(result[1], out var phase) ? phase : "None";
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error getting game phase: {ex.Message}");
-                return string.Empty;
+                return "None";
             }
         }
 
@@ -505,56 +409,68 @@ namespace RiotAutoLogin.Services
         {
             try
             {
-                string[] champSelectSession = ClientRequest("GET", "lol-champ-select/v1/session");
-                if (champSelectSession[0] != "200")
-                    return (false, "", "");
+                var result = ClientRequest("GET", "lol-champ-select/v1/session");
+                if (result[0] != "200") return (false, string.Empty, string.Empty);
 
-                using (JsonDocument doc = JsonDocument.Parse(champSelectSession[1]))
+                using var doc = JsonDocument.Parse(result[1]);
+                var currentSummonerId = await GetCurrentSummonerIdAsync();
+                
+                if (doc.RootElement.TryGetProperty("actions", out var actionsArray))
                 {
-                    // Get local player's cell ID
-                    int localPlayerCellId = doc.RootElement.GetProperty("localPlayerCellId").GetInt32();
-
-                    // Get actions array
-                    var actionsArray = doc.RootElement.GetProperty("actions");
-
-                    // Iterate through action groups
                     foreach (var actionGroup in actionsArray.EnumerateArray())
                     {
                         foreach (var action in actionGroup.EnumerateArray())
                         {
-                            int actorCellId = action.GetProperty("actorCellId").GetInt32();
-                            bool isInProgress = action.GetProperty("isInProgress").GetBoolean();
-                            bool completed = action.GetProperty("completed").GetBoolean();
-                            string actionType = action.GetProperty("type").GetString();
-
-                            // Handle ID which could be either a string or a number
-                            string actId;
-                            var idProp = action.GetProperty("id");
-                            if (idProp.ValueKind == JsonValueKind.Number)
+                            if (action.TryGetProperty("actorCellId", out var actorProp) &&
+                                action.TryGetProperty("id", out var idProp) &&
+                                action.TryGetProperty("type", out var typeProp) &&
+                                action.TryGetProperty("isInProgress", out var inProgressProp) &&
+                                inProgressProp.GetBoolean())
                             {
-                                actId = idProp.GetInt64().ToString();
-                            }
-                            else
+                                // Check if this is our action
+                                var actorCellId = actorProp.GetInt32();
+                                if (IsOurCellId(doc.RootElement, actorCellId))
                             {
-                                actId = idProp.GetString();
-                            }
-
-                            // Check if this action is for the local player and is in progress
-                            if (actorCellId == localPlayerCellId && isInProgress && !completed)
-                            {
-                                return (true, actId, actionType);
+                                    return (true, idProp.GetString(), typeProp.GetString());
+                                }
                             }
                         }
                     }
                 }
 
-                return (false, "", "");
+                return (false, string.Empty, string.Empty);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error checking champion select turn: {ex.Message}");
-                return (false, "", "");
+                return (false, string.Empty, string.Empty);
             }
+        }
+
+        private static bool TryGetPhase(string json, out string phase)
+        {
+            phase = string.Empty;
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("phase", out var phaseProp))
+                {
+                    phase = phaseProp.GetString();
+                    return true;
+                }
+            }
+            catch
+            {
+                // Ignore parsing errors
+            }
+            return false;
+        }
+
+        private static bool IsOurCellId(JsonElement sessionElement, int cellId)
+        {
+            if (sessionElement.TryGetProperty("localPlayerCellId", out var localCellProp))
+                return localCellProp.GetInt32() == cellId;
+            return false;
         }
     }
 }

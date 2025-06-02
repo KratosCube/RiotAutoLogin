@@ -16,4 +16,13 @@ namespace RiotAutoLogin.Models
         public int Losses { get; set; }
         public string AvatarPath { get; set; } = string.Empty;
     }
+
+    public class RankData
+    {
+        public string Tier { get; set; } = string.Empty;
+        public string Rank { get; set; } = string.Empty;
+        public int LeaguePoints { get; set; }
+        public int Wins { get; set; }
+        public int Losses { get; set; }
+    }
 }

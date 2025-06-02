@@ -345,7 +345,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
                         <Border Name="Border" BorderThickness="0" Margin="2,0,2,0"
-                    CornerRadius="10,10,0,0" Padding="15,10">
+                            CornerRadius="10,10,0,0" Padding="15,5">
                             <ContentPresenter x:Name="ContentSite" ContentSource="Header"
                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
@@ -509,13 +509,22 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Style="{StaticResource AccountCard}"
-            Width="190" Height="240"
-            RenderTransformOrigin="0.5,0.5"
-            MouseDown="AccountCard_MouseDown"
-            Tag="{Binding}"
-            ToolTip="{Binding Region, StringFormat='Server: {0}'}"
-            x:Name="loginCard">
+                                            <Border Background="{StaticResource CardBackgroundBrush}"
+                                                    CornerRadius="10"
+                                                    Width="190" Height="240"
+                                                    Margin="4" 
+                                                    Padding="12"
+                                                    BorderThickness="1"
+                                                    BorderBrush="#3E3E4A"
+                                                    RenderTransformOrigin="0.5,0.5"
+                                                    MouseDown="LoginCard_MouseDown"
+                                                    Tag="{Binding}"
+                                                    ToolTip="{Binding Region, StringFormat='Server: {0}'}"
+                                                    x:Name="loginCard"
+                                                    VerticalAlignment="Top">
+                                                <Border.Effect>
+                                                    <DropShadowEffect ShadowDepth="2" BlurRadius="5" Opacity="0.2"/>
+                                                </Border.Effect>
                                                 <Border.RenderTransform>
                                                     <ScaleTransform ScaleX="1" ScaleY="1"/>
                                                 </Border.RenderTransform>
@@ -711,86 +720,151 @@
                     </TabItem>
                     <!-- Add to your TabControl -->
                     <TabItem Header="SETTINGS" Style="{StaticResource TabItemStyle}">
-                        <Grid Margin="0,20,0,0">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
+                        
+                        <Border Background="{StaticResource CardBackgroundBrush}" Padding="20">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Style="{StaticResource DarkScrollViewerStyle}">
+                                <StackPanel>
 
-                            <!-- API Key Section -->
-                            <TextBlock Grid.Row="0" Text="RIOT API KEY" FontSize="16" FontWeight="SemiBold" 
-                  Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+                                    <!-- API Key Section -->
+                                    <TextBlock Text="RIOT API KEY" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+                                    <Border Background="{StaticResource SecondaryBackgroundBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,20">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="txtApiKey" Style="{StaticResource ModernTextBox}" Grid.Column="0" Margin="0,0,10,0" VerticalContentAlignment="Center"/>
+                                                <Button x:Name="btnSaveApiKey" Content="Save" Style="{StaticResource ModernButton}" Grid.Column="1" Click="btnSaveApiKey_Click" Padding="10,5" MinHeight="30" FontSize="14"/>
+                                            </Grid>
+                                            <TextBlock Text="API Key is stored locally and used for retrieving player ranks." Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" Margin="0,10,0,0" Opacity="0.7"/>
+                                        </StackPanel>
+                                    </Border>
 
-                            <Grid Grid.Row="1">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="txtApiKey" Style="{StaticResource ModernTextBox}" 
-                    Grid.Column="0" Margin="0,0,10,0"/>
-                                <Button x:Name="btnSaveApiKey" Content="Save" Style="{StaticResource ModernButton}" 
-                   Grid.Column="1" Click="btnSaveApiKey_Click"/>
-                            </Grid>
+                                    <!-- Separator -->
+                                    <Rectangle Height="1" Fill="#3E3E4A" Margin="0,10,0,30" />
 
-                            <TextBlock Grid.Row="2" Text="API Key is stored locally and used for retrieving player ranks." 
-                  Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" 
-                  Margin="0,15,0,0" Opacity="0.7"/>
+                                    <!-- Run on Startup Section -->
+                                    <TextBlock Text="APPLICATION STARTUP" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+                                    <Border Background="{StaticResource SecondaryBackgroundBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,20">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Run application when Windows starts" Foreground="{StaticResource TextColorBrush}" FontSize="14" VerticalAlignment="Center"/>
+                                                <ToggleButton x:Name="tglRunOnStartup" Grid.Column="1" Content="OFF" Width="100" Height="40" Style="{StaticResource ModernToggleButton}" Checked="tglRunOnStartup_Checked" Unchecked="tglRunOnStartup_Unchecked"/>
+                                            </Grid>
+                                            <TextBlock Text="If enabled, the application will start minimized to the system tray when you log into Windows." Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" Margin="0,10,0,0" Opacity="0.7"/>
+                                        </StackPanel>
+                                    </Border>
 
-                            <!-- Separator -->
-                            <Rectangle Grid.Row="3" Height="1" Fill="#3E3E4A" Margin="0,30,0,30" />
+                                    <!-- Separator -->
+                                    <Rectangle Height="1" Fill="#3E3E4A" Margin="0,10,0,30" />
 
-                            <!-- Auto Accept Section -->
-                            <TextBlock Grid.Row="4" Text="AUTO ACCEPT MATCHES" FontSize="16" FontWeight="SemiBold" 
-                  Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+                                    <!-- Auto Accept Section -->
+                                    <TextBlock Text="AUTO ACCEPT MATCHES" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+                                    <Border Background="{StaticResource SecondaryBackgroundBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,20">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Automatically accept matches when found" Foreground="{StaticResource TextColorBrush}" FontSize="14" VerticalAlignment="Center"/>
+                                                <ToggleButton x:Name="tglAutoAccept" Grid.Column="1" Content="OFF" Width="100" Height="40" Style="{StaticResource ModernToggleButton}" Checked="tglAutoAccept_Checked" Unchecked="tglAutoAccept_Unchecked"/>
+                                            </Grid>
+                                            <!-- Status Indicator -->
+                                            <Border Background="#2A2A36" CornerRadius="8" Padding="15" Margin="0,15,0,0">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Ellipse x:Name="autoAcceptStatusIndicator" Width="12" Height="12" Fill="#707070" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                                    <TextBlock Grid.Column="1" x:Name="txtAutoAcceptStatus" Text="Auto-accept is inactive. Enable to automatically accept game matches." Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
 
-                            <Grid Grid.Row="5">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
+                                    <!-- Separator -->
+                                    <Rectangle Height="1" Fill="#3E3E4A" Margin="0,10,0,30" />
+                                    
+                                    <!-- Quick Login Hotkey Section -->
+                                    <TextBlock Text="QUICK LOGIN HOTKEY" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+                                    <Border Background="{StaticResource SecondaryBackgroundBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,20">
+                                        <StackPanel>
+                                            <TextBlock Text="Set the key for the Ctrl + Alt + [Key] shortcut to open the quick login window." Foreground="{StaticResource TextColorBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/> <!-- "Ctrl + Alt + " Text -->
+                                                    <ColumnDefinition Width="*" MinWidth="60"/> <!-- Key TextBox -->
+                                                    <ColumnDefinition Width="Auto"/> <!-- Save Button -->
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="Ctrl + Alt + " VerticalAlignment="Center" Foreground="{StaticResource TextColorBrush}" Margin="0,0,5,0" Grid.Column="0"/>
+                                                <TextBox x:Name="txtHotkeyKey" Width="60" Style="{StaticResource ModernTextBox}" VerticalAlignment="Center" Grid.Column="1" MaxLength="1" CharacterCasing="Upper" Text="L" PreviewTextInput="txtHotkeyKey_PreviewTextInput" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                                                <Button x:Name="btnSaveHotkey" Content="Save Hotkey" Style="{StaticResource ModernButton}" Click="btnSaveHotkey_Click" Margin="15,0,0,0" Grid.Column="2" HorizontalAlignment="Left" Padding="10,5" MinHeight="30" FontSize="14"/>                                                
+                                            </Grid>
+                                            <TextBlock x:Name="lblCurrentHotkey" Text="Current Hotkey: Ctrl + Alt + L" Foreground="{StaticResource TextColorBrush}" Margin="0,10,0,0" FontStyle="Italic" Opacity="0.8"/>
+                                        </StackPanel>
+                                    </Border>
 
-                                <Grid Grid.Row="0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                                    <!-- Separator -->
+                                    <Rectangle Height="1" Fill="#3E3E4A" Margin="0,10,0,30" />
+                                    
+                                    <!-- Auto Pick/Ban Settings -->
+                                    <TextBlock Text="AUTO PICK/BAN SETTINGS" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+                                    <Border Background="{StaticResource SecondaryBackgroundBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,20">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Automatically pick champions when found" Foreground="{StaticResource TextColorBrush}" FontSize="14" VerticalAlignment="Center"/>
+                                                <ToggleButton x:Name="tglAutoPickEnabled" Grid.Column="1" Content="OFF" Width="100" Height="40" Style="{StaticResource ModernToggleButton}" Checked="chkAutoPickEnabled_Checked" Unchecked="chkAutoPickEnabled_Unchecked"/>
+                                            </Grid>
+                                            <!-- Status Indicator -->
+                                            <Border Background="#2A2A36" CornerRadius="8" Padding="15" Margin="0,15,0,0">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Ellipse x:Name="autoPickStatusIndicator" Width="12" Height="12" Fill="#707070" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                                    <TextBlock Grid.Column="1" x:Name="txtAutoPickStatus" Text="Auto-pick is inactive. Enable to automatically pick champions." Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
 
-                                    <TextBlock Grid.Column="0" Text="Automatically accept matches when found" 
-                          Foreground="{StaticResource TextColorBrush}" FontSize="14" 
-                          VerticalAlignment="Center"/>
+                                    <!-- Separator -->
+                                    <Rectangle Height="1" Fill="#3E3E4A" Margin="0,10,0,30" />
+                                    
+                                    <!-- App Updates Section -->
+                                    <TextBlock Text="APP UPDATES" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+                                    <Border Background="{StaticResource SecondaryBackgroundBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,20">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="Check for application updates" Foreground="{StaticResource TextColorBrush}" FontSize="14" VerticalAlignment="Center"/>
+                                                    <TextBlock x:Name="txtCurrentVersion" Text="Current version: v1.0.0" Foreground="{StaticResource TextColorBrush}" FontSize="12" Opacity="0.7" Margin="0,5,0,0"/>
+                                                </StackPanel>
+                                                <Button x:Name="btnCheckUpdates" Content="Check for Updates" Style="{StaticResource ModernButton}" Grid.Column="1" Click="btnCheckUpdates_Click" Padding="15,8" MinHeight="40" FontSize="14"/>
+                                            </Grid>
+                                            <TextBlock Text="Automatically checks for updates when the application starts. Click the button above to manually check for updates." Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" Margin="0,10,0,0" Opacity="0.7"/>
+                                        </StackPanel>
+                                    </Border>
 
-                                    <ToggleButton x:Name="tglAutoAccept" Grid.Column="1" Content="OFF" 
-                            Width="100" Height="40"
-                            Style="{StaticResource ModernToggleButton}" 
-                            Checked="tglAutoAccept_Checked"
-                            Unchecked="tglAutoAccept_Unchecked"/>
-                                </Grid>
-
-                                <!-- Status Indicator -->
-                                <Border Grid.Row="1" Background="#2A2A36" CornerRadius="8" Padding="15" Margin="0,15,0,0">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <!-- Status Indicator Circle -->
-                                        <Ellipse x:Name="autoAcceptStatusIndicator" Width="12" Height="12" 
-                            Fill="#707070" VerticalAlignment="Center" Margin="0,0,10,0"/>
-
-                                        <!-- Status Text -->
-                                        <TextBlock Grid.Column="1" x:Name="txtAutoAcceptStatus" 
-                              Text="Auto-accept is inactive. Enable to automatically accept game matches." 
-                              Foreground="{StaticResource TextColorBrush}" FontSize="14" 
-                              TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                    </Grid>
-                                </Border>
-                            </Grid>
-                        </Grid>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
                     </TabItem>
                     <TabItem Header="AUTO-PICK" Style="{StaticResource TabItemStyle}">
                         <Grid Margin="0,20,0,0">

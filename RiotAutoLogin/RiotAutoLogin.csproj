@@ -4,18 +4,36 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <ApplicationIcon>logoAcc (1).ico</ApplicationIcon>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <TrimMode>partial</TrimMode>
+    <DebugType>embedded</DebugType>
+    
+    <!-- Version Information -->
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    
+    <!-- Application Information -->
+    <AssemblyTitle>Riot Auto Login</AssemblyTitle>
+    <AssemblyDescription>Automated login tool for Riot Client</AssemblyDescription>
+    <AssemblyCompany>RiotAutoLogin</AssemblyCompany>
+    <AssemblyProduct>Riot Auto Login</AssemblyProduct>
+    <Copyright>Copyright © 2024</Copyright>
+
+    <!-- Application Icon -->
+    <ApplicationIcon>resources\logoAcc.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="logoAcc (1).ico" />
+    <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.2" />
+    <Resource Include="resources\logoAcc.ico" />
   </ItemGroup>
 
 </Project>
