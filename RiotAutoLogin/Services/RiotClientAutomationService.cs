@@ -1,33 +1,29 @@
-﻿using FlaUI.Core.AutomationElements;
-using FlaUI.Core.Definitions;
+﻿using FlaUI.Core.Definitions;
 using FlaUI.UIA3;
 using RiotAutoLogin.Models;
-using RiotAutoLogin.Services;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 
 namespace RiotAutoLogin.Services
 {
     using Application = FlaUI.Core.Application;
+
     public static class RiotClientAutomationService
     {
         private static readonly HttpClient _httpClient = new();
-        private static readonly string _apiKeyPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "RiotClientAutoLogin", "apikey.txt");
 
         static RiotClientAutomationService()
         {
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", 
+            _httpClient.DefaultRequestHeaders.Add(
+                "User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
         }
@@ -35,7 +31,7 @@ namespace RiotAutoLogin.Services
         public static async Task LaunchAndLoginAsync(string username, string password)
         {
             Debug.WriteLine("Starting Riot Client process...");
-            Process riotClientProcess = null;
+            Process? riotClientProcess = null;
 
             Process[] processes = Process.GetProcessesByName("Riot Client");
             if (processes.Length > 0)
@@ -51,48 +47,56 @@ namespace RiotAutoLogin.Services
                     string riotClientPath = FindRiotClientPath();
                     if (string.IsNullOrEmpty(riotClientPath))
                     {
-                        System.Windows.MessageBox.Show(
+                        MessageBox.Show(
                             "Riot Client not found in common installation locations:\n" +
                             "• C:\\Riot Games\\Riot Client\\RiotClientServices.exe\n" +
                             "• C:\\Program Files\\Riot Games\\Riot Client\\RiotClientServices.exe\n" +
                             "• C:\\Program Files (x86)\\Riot Games\\Riot Client\\RiotClientServices.exe\n\n" +
                             "Please make sure Riot Client is installed or manually start it before using auto-login.",
-                            "Client Not Found", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                            "Client Not Found",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Error);
                         return;
                     }
-                    ProcessStartInfo startInfo = new ProcessStartInfo
+
+                    ProcessStartInfo startInfo = new()
                     {
                         FileName = riotClientPath,
                         Arguments = "--launch-product=league_of_legends --launch-patchline=live"
                     };
+
                     riotClientProcess = Process.Start(startInfo);
                     Debug.WriteLine($"Riot Client launched from: {riotClientPath}");
                 }
                 catch (Exception ex)
                 {
-                    System.Windows.MessageBox.Show($"Error launching Riot Client: {ex.Message}", "Launch Error",
-                        System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                    MessageBox.Show(
+                        $"Error launching Riot Client: {ex.Message}",
+                        "Launch Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
                     return;
                 }
             }
 
             Debug.WriteLine("Waiting for login form...");
-            await Task.Delay(800); // Reduced from 1500ms to 800ms
+            await Task.Delay(800);
 
-            using (var automation = new UIA3Automation())
+            using var automation = new UIA3Automation();
+
+            if (riotClientProcess != null && !riotClientProcess.HasExited)
             {
-                if (riotClientProcess != null && !riotClientProcess.HasExited)
-                {
-                    // Minimal wait for window interaction
-                    await Task.Delay(200); // Reduced from 500ms to 200ms
-                    await AutomateLoginAsync(riotClientProcess, automation, username, password);
-                }
-                else
-                {
-                    Debug.WriteLine("Riot Client process is not available or already exited.");
-                    System.Windows.MessageBox.Show("Riot Client process is not available. Please try again.", 
-                        "Login Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
-                }
+                await Task.Delay(200);
+                await AutomateLoginAsync(riotClientProcess, automation, username, password);
+            }
+            else
+            {
+                Debug.WriteLine("Riot Client process is not available or already exited.");
+                MessageBox.Show(
+                    "Riot Client process is not available. Please try again.",
+                    "Login Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
         }
 
@@ -100,117 +104,133 @@ namespace RiotAutoLogin.Services
         {
             var app = Application.Attach(process);
             var mainWindow = app.GetMainWindow(automation);
+
             if (mainWindow == null)
             {
                 Debug.WriteLine("Could not find main window.");
-                System.Windows.MessageBox.Show("Could not find Riot Client main window.", "Login Error", 
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                MessageBox.Show(
+                    "Could not find Riot Client main window.",
+                    "Login Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
                 return;
             }
 
             var riotClientPane = mainWindow.FindFirstDescendant(
-                cf => cf.ByName("Riot Client").And(cf.ByControlType(ControlType.Pane))
-            );
+                cf => cf.ByName("Riot Client").And(cf.ByControlType(ControlType.Pane)));
+
             var parentElement = riotClientPane ?? mainWindow;
 
-            // Find username field
             var usernameEdit = parentElement.FindFirstDescendant(
-                cf => cf.ByAutomationId("username").And(cf.ByControlType(ControlType.Edit))
-            );
+                cf => cf.ByAutomationId("username").And(cf.ByControlType(ControlType.Edit)));
+
             if (usernameEdit == null)
             {
                 Debug.WriteLine("Username field not found.");
-                System.Windows.MessageBox.Show("Could not find username field. Make sure Riot Client login screen is visible.", 
-                    "Login Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                MessageBox.Show(
+                    "Could not find username field. Make sure Riot Client login screen is visible.",
+                    "Login Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
                 return;
             }
 
-            // Fill username with minimal timing
             try
             {
-            usernameEdit.Focus();
-            usernameEdit.Patterns.Value.Pattern.SetValue(string.Empty);
-                usernameEdit.Patterns.Value.Pattern.SetValue(username); // No delay needed
+                usernameEdit.Focus();
+                usernameEdit.Patterns.Value.Pattern.SetValue(string.Empty);
+                usernameEdit.Patterns.Value.Pattern.SetValue(username);
                 Debug.WriteLine("Username filled successfully.");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error filling username: {ex.Message}");
-                System.Windows.MessageBox.Show($"Error filling username: {ex.Message}", "Login Error", 
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                MessageBox.Show(
+                    $"Error filling username: {ex.Message}",
+                    "Login Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
                 return;
             }
 
-            // Find password field
             var passwordEdit = parentElement.FindFirstDescendant(
-                cf => cf.ByAutomationId("password").And(cf.ByControlType(ControlType.Edit))
-            );
+                cf => cf.ByAutomationId("password").And(cf.ByControlType(ControlType.Edit)));
+
             if (passwordEdit == null)
             {
                 Debug.WriteLine("Password field not found.");
-                System.Windows.MessageBox.Show("Could not find password field. Make sure Riot Client login screen is visible.", 
-                    "Login Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                MessageBox.Show(
+                    "Could not find password field. Make sure Riot Client login screen is visible.",
+                    "Login Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
                 return;
             }
 
-            // Fill password with minimal timing
             try
             {
-            passwordEdit.Focus();
-            passwordEdit.Patterns.Value.Pattern.SetValue(string.Empty);
-                passwordEdit.Patterns.Value.Pattern.SetValue(password); // No delay needed
+                passwordEdit.Focus();
+                passwordEdit.Patterns.Value.Pattern.SetValue(string.Empty);
+                passwordEdit.Patterns.Value.Pattern.SetValue(password);
                 Debug.WriteLine("Password filled successfully.");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error filling password: {ex.Message}");
-                System.Windows.MessageBox.Show($"Error filling password: {ex.Message}", "Login Error", 
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                MessageBox.Show(
+                    $"Error filling password: {ex.Message}",
+                    "Login Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
                 return;
             }
 
-            // Submit login form with Enter key - much more reliable than button clicking
             try
             {
                 Debug.WriteLine("Pressing Enter to submit login form...");
-                
-                // Small delay to ensure password field is fully filled
+
                 await Task.Delay(100);
-                
-                // Make sure password field has focus and press Enter
                 passwordEdit.Focus();
                 await Task.Delay(50);
-                
-                // Send Enter key to submit the form
+
                 FlaUI.Core.Input.Keyboard.Press(FlaUI.Core.WindowsAPI.VirtualKeyShort.ENTER);
-                
+
                 Debug.WriteLine("Enter key pressed successfully. Waiting for response...");
-                await Task.Delay(500); // Wait for login response
-                
+                await Task.Delay(500);
+
                 Console.WriteLine("✅ Login attempt completed. Check Riot Client for any authentication prompts.");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error pressing Enter key: {ex.Message}");
-                System.Windows.MessageBox.Show($"Error submitting login form: {ex.Message}", "Login Error", 
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                MessageBox.Show(
+                    $"Error submitting login form: {ex.Message}",
+                    "Login Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
         }
 
         public static async Task<string> GetRankAsync(string gameName, string tagLine, string region)
         {
-            if (string.IsNullOrEmpty(gameName) || string.IsNullOrEmpty(tagLine))
+            if (string.IsNullOrWhiteSpace(gameName) || string.IsNullOrWhiteSpace(tagLine))
             {
                 Debug.WriteLine("Invalid game name or tag line provided");
                 return "Error: Invalid game name or tag line";
             }
 
+            if (string.IsNullOrWhiteSpace(region))
+            {
+                Debug.WriteLine("Invalid region provided");
+                return "Error: Invalid region";
+            }
+
             try
             {
                 Debug.WriteLine($"Starting rank lookup for {gameName}#{tagLine} in region {region}");
-                
-                var apiKey = await GetApiKeyAsync();
-                if (string.IsNullOrEmpty(apiKey))
+
+                string apiKey = await GetApiKeyAsync();
+                if (string.IsNullOrWhiteSpace(apiKey))
                 {
                     Debug.WriteLine("No API key available");
                     return "Error: No API key available. Please set your Riot API key in Settings.";
@@ -218,9 +238,8 @@ namespace RiotAutoLogin.Services
 
                 Debug.WriteLine("API key found, proceeding with account lookup");
 
-                // Get account info by Riot ID
-                var accountInfo = await GetAccountByRiotIdAsync(gameName, tagLine, apiKey);
-                if (accountInfo == null)
+                string? puuid = await GetAccountPuuidByRiotIdAsync(gameName, tagLine, apiKey);
+                if (string.IsNullOrWhiteSpace(puuid))
                 {
                     Debug.WriteLine($"Account not found for {gameName}#{tagLine}");
                     return $"Error: Account '{gameName}#{tagLine}' not found. Please check spelling and ensure the account exists.";
@@ -228,10 +247,15 @@ namespace RiotAutoLogin.Services
 
                 Debug.WriteLine($"Account found, getting rank info for region {region}");
 
-                // Get rank info
-                var rankInfo = await GetRankInfoAsync(accountInfo.Value.puuid, region, apiKey);
+                RankData? rankInfo = await GetRankInfoAsync(puuid, region, apiKey);
+
+                if (rankInfo == null)
+                {
+                    Debug.WriteLine($"Rank lookup completed for {gameName}#{tagLine}: Unranked");
+                    return "Unranked";
+                }
+
                 string result = FormatRankInfo(rankInfo);
-                
                 Debug.WriteLine($"Rank lookup completed for {gameName}#{tagLine}: {result}");
                 return result;
             }
@@ -242,55 +266,80 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        private static async Task<string> GetApiKeyAsync()
+        private static Task<string> GetApiKeyAsync()
         {
-            return await Task.FromResult(RiotAutoLogin.Services.ApiKeyManager.GetApiKey());
+            string apiKey = ApiKeyManager.GetApiKey()?.Trim() ?? string.Empty;
+            return Task.FromResult(apiKey);
         }
 
-        private static async Task<(string puuid, string summonerId)?> GetAccountByRiotIdAsync(
-            string gameName, string tagLine, string apiKey)
+        private static async Task<string> SendRiotGetAsync(string url, string apiKey)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.TryAddWithoutValidation("X-Riot-Token", apiKey);
+
+            using var response = await _httpClient.SendAsync(request);
+            string content = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw CreateRiotApiException(response.StatusCode, content);
+            }
+
+            return content;
+        }
+
+        private static Exception CreateRiotApiException(HttpStatusCode statusCode, string responseBody)
+        {
+            int code = (int)statusCode;
+
+            return code switch
+            {
+                400 => new InvalidOperationException("Bad Riot API request."),
+                401 => new InvalidOperationException("Unauthorized Riot API request."),
+                403 => new InvalidOperationException("Invalid or expired Riot API key."),
+                404 => new InvalidOperationException("Riot account or summoner was not found."),
+                429 => new InvalidOperationException("Riot API rate limit exceeded. Try again in a moment."),
+                500 => new InvalidOperationException("Riot API internal server error."),
+                503 => new InvalidOperationException("Riot API is temporarily unavailable."),
+                _ => new InvalidOperationException($"Riot API error {code}: {responseBody}")
+            };
+        }
+
+        private static async Task<string?> GetAccountPuuidByRiotIdAsync(string gameName, string tagLine, string apiKey)
         {
             try
             {
-                // Use the regional endpoint for account API (always europe for account lookups)
-                var url = $"https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{Uri.EscapeDataString(gameName)}/{Uri.EscapeDataString(tagLine)}?api_key={apiKey}";
-                
-                Debug.WriteLine($"Making account API request: {url.Replace(apiKey, "***")}");
-                var response = await _httpClient.GetStringAsync(url);
-                
+                string url =
+                    $"https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/" +
+                    $"{Uri.EscapeDataString(gameName)}/{Uri.EscapeDataString(tagLine)}";
+
+                Debug.WriteLine($"Making account API request: {url}");
+
+                string response = await SendRiotGetAsync(url, apiKey);
+
                 using var doc = JsonDocument.Parse(response);
-                var root = doc.RootElement;
-                
-                if (root.TryGetProperty("puuid", out var puuidProp))
+                JsonElement root = doc.RootElement;
+
+                if (!root.TryGetProperty("puuid", out JsonElement puuidProp))
                 {
-                    string puuid = puuidProp.GetString();
-                    Debug.WriteLine($"Successfully got PUUID for {gameName}#{tagLine}");
-                    return (puuid, string.Empty);
+                    Debug.WriteLine($"No PUUID found in response for {gameName}#{tagLine}");
+                    return null;
                 }
-                
-                Debug.WriteLine($"No PUUID found in response for {gameName}#{tagLine}");
-                return null;
+
+                string? puuid = puuidProp.GetString();
+                if (string.IsNullOrWhiteSpace(puuid))
+                {
+                    Debug.WriteLine($"Empty PUUID in response for {gameName}#{tagLine}");
+                    return null;
+                }
+
+                Debug.WriteLine($"Successfully got PUUID for {gameName}#{tagLine}");
+                return puuid;
             }
-            catch (HttpRequestException httpEx)
+            catch (InvalidOperationException ex) when (
+                ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
             {
-                Debug.WriteLine($"HTTP error getting account by Riot ID ({gameName}#{tagLine}): {httpEx.Message}");
-                if (httpEx.Message.Contains("404"))
-                {
-                    Debug.WriteLine($"Account {gameName}#{tagLine} not found (404). Please check the spelling and region.");
-                }
-                else if (httpEx.Message.Contains("403"))
-                {
-                    Debug.WriteLine($"API key invalid or expired (403). Please check your API key.");
-                }
-                else if (httpEx.Message.Contains("429"))
-                {
-                    Debug.WriteLine($"Rate limit exceeded (429). Please wait before making more requests.");
-                }
-                return null;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error getting account by Riot ID: {ex.Message}");
+                Debug.WriteLine($"Account not found for Riot ID {gameName}#{tagLine}");
                 return null;
             }
         }
@@ -300,87 +349,99 @@ namespace RiotAutoLogin.Services
             try
             {
                 Debug.WriteLine($"Getting rank info for PUUID in region: {region}");
-                
-                // First get summoner by PUUID - use platform-specific endpoint
-                var summonerUrl = $"https://{region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}?api_key={apiKey}";
-                Debug.WriteLine($"Making summoner API request: {summonerUrl.Replace(apiKey, "***")}");
-                
-                var summonerResponse = await _httpClient.GetStringAsync(summonerUrl);
-                
-                using var summonerDoc = JsonDocument.Parse(summonerResponse);
-                if (!summonerDoc.RootElement.TryGetProperty("id", out var summonerIdProp))
-                {
-                    Debug.WriteLine("No summoner ID found in summoner response");
-                    return null;
-                }
 
-                var summonerId = summonerIdProp.GetString();
-                Debug.WriteLine($"Got summoner ID: {summonerId}");
+                // Use ranked entries directly by PUUID instead of resolving summonerId first
+                string leagueUrl =
+                    $"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{Uri.EscapeDataString(puuid)}";
 
-                // Then get league entries - use platform-specific endpoint
-                var leagueUrl = $"https://{region}.api.riotgames.com/lol/league/v4/entries/by-summoner/{summonerId}?api_key={apiKey}";
-                Debug.WriteLine($"Making league API request: {leagueUrl.Replace(apiKey, "***")}");
-                
-                var leagueResponse = await _httpClient.GetStringAsync(leagueUrl);
-        
+                Debug.WriteLine($"Making league API request by PUUID: {leagueUrl}");
+
+                string leagueResponse = await SendRiotGetAsync(leagueUrl, apiKey);
+
                 using var leagueDoc = JsonDocument.Parse(leagueResponse);
-                
-                // Find Solo/Duo queue entry and extract data immediately
-                foreach (var entry in leagueDoc.RootElement.EnumerateArray())
+
+                foreach (JsonElement entry in leagueDoc.RootElement.EnumerateArray())
                 {
-                    if (entry.TryGetProperty("queueType", out var queueType) && 
-                        queueType.GetString() == "RANKED_SOLO_5x5")
+                    if (!entry.TryGetProperty("queueType", out JsonElement queueTypeProp))
+                        continue;
+
+                    if (queueTypeProp.GetString() != "RANKED_SOLO_5x5")
+                        continue;
+
+                    RankData rankData = new()
                     {
-                        Debug.WriteLine("Found RANKED_SOLO_5x5 entry");
-                        
-                        // Extract all needed data while JsonDocument is still available
-                        var rankData = new RankData();
-                        
-                        if (entry.TryGetProperty("tier", out var tierProp))
-                            rankData.Tier = tierProp.GetString();
-                        
-                        if (entry.TryGetProperty("rank", out var rankProp))
-                            rankData.Rank = rankProp.GetString();
-                        
-                        if (entry.TryGetProperty("leaguePoints", out var lpProp))
-                            rankData.LeaguePoints = lpProp.GetInt32();
-                        
-                        if (entry.TryGetProperty("wins", out var winsProp))
-                            rankData.Wins = winsProp.GetInt32();
-                        
-                        if (entry.TryGetProperty("losses", out var lossesProp))
-                            rankData.Losses = lossesProp.GetInt32();
-                        
-                        Debug.WriteLine($"Extracted rank data: {rankData.Tier} {rankData.Rank} {rankData.LeaguePoints} LP");
-                        return rankData;
-                    }
+                        Tier = entry.TryGetProperty("tier", out JsonElement tierProp)
+                            ? tierProp.GetString() ?? string.Empty
+                            : string.Empty,
+
+                        Rank = entry.TryGetProperty("rank", out JsonElement rankProp)
+                            ? rankProp.GetString() ?? string.Empty
+                            : string.Empty,
+
+                        LeaguePoints = entry.TryGetProperty("leaguePoints", out JsonElement lpProp)
+                            ? lpProp.GetInt32()
+                            : 0,
+
+                        Wins = entry.TryGetProperty("wins", out JsonElement winsProp)
+                            ? winsProp.GetInt32()
+                            : 0,
+
+                        Losses = entry.TryGetProperty("losses", out JsonElement lossesProp)
+                            ? lossesProp.GetInt32()
+                            : 0
+                    };
+
+                    Debug.WriteLine($"Extracted rank data: {rankData.Tier} {rankData.Rank} {rankData.LeaguePoints} LP");
+                    return rankData;
                 }
-                
+
                 Debug.WriteLine("No RANKED_SOLO_5x5 entry found - player is unranked");
-                return null;
-            }
-            catch (HttpRequestException httpEx)
-            {
-                Debug.WriteLine($"HTTP error getting rank info: {httpEx.Message}");
-                if (httpEx.Message.Contains("404"))
-                {
-                    Debug.WriteLine($"Summoner not found in region {region} (404). The account may not have played ranked games.");
-                }
-                else if (httpEx.Message.Contains("403"))
-                {
-                    Debug.WriteLine($"API key invalid or expired (403). Please check your API key.");
-                }
-                else if (httpEx.Message.Contains("429"))
-                {
-                    Debug.WriteLine($"Rate limit exceeded (429). Please wait before making more requests.");
-                }
                 return null;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error getting rank info: {ex.Message}");
-                return null;
+                throw;
             }
+        }
+
+        private static string? TryResolveSummonerId(JsonElement root)
+        {
+            string[] candidateNames =
+            {
+                "id",
+                "summonerId",
+                "summoner_id",
+                "encryptedSummonerId"
+            };
+
+            foreach (string candidate in candidateNames)
+            {
+                if (root.TryGetProperty(candidate, out JsonElement value) &&
+                    value.ValueKind == JsonValueKind.String)
+                {
+                    string? parsed = value.GetString();
+                    if (!string.IsNullOrWhiteSpace(parsed))
+                        return parsed;
+                }
+            }
+
+            if (root.TryGetProperty("data", out JsonElement data) &&
+                data.ValueKind == JsonValueKind.Object)
+            {
+                foreach (string candidate in candidateNames)
+                {
+                    if (data.TryGetProperty(candidate, out JsonElement value) &&
+                        value.ValueKind == JsonValueKind.String)
+                    {
+                        string? parsed = value.GetString();
+                        if (!string.IsNullOrWhiteSpace(parsed))
+                            return parsed;
+                    }
+                }
+            }
+
+            return null;
         }
 
         private static string FormatRankInfo(RankData? rankInfo)
@@ -390,14 +451,16 @@ namespace RiotAutoLogin.Services
 
             try
             {
-                var tier = rankInfo.Tier ?? "Unknown";
-                var rank = rankInfo.Rank ?? "";
-                var lp = rankInfo.LeaguePoints;
-                var wins = rankInfo.Wins;
-                var losses = rankInfo.Losses;
+                string tier = rankInfo.Tier ?? "Unknown";
+                string rank = rankInfo.Rank ?? string.Empty;
+                int lp = rankInfo.LeaguePoints;
+                int wins = rankInfo.Wins;
+                int losses = rankInfo.Losses;
 
-                // Handle special tiers that don't have ranks
-                if (string.IsNullOrEmpty(rank) || tier.ToUpper() == "MASTER" || tier.ToUpper() == "GRANDMASTER" || tier.ToUpper() == "CHALLENGER")
+                if (string.IsNullOrWhiteSpace(rank) ||
+                    tier.Equals("MASTER", StringComparison.OrdinalIgnoreCase) ||
+                    tier.Equals("GRANDMASTER", StringComparison.OrdinalIgnoreCase) ||
+                    tier.Equals("CHALLENGER", StringComparison.OrdinalIgnoreCase))
                 {
                     return $"{tier} ({lp} LP, {wins}W/{losses}L)";
                 }
@@ -415,14 +478,14 @@ namespace RiotAutoLogin.Services
         {
             try
             {
-                var riotClientPath = FindRiotClientPath();
+                string riotClientPath = FindRiotClientPath();
                 if (string.IsNullOrEmpty(riotClientPath))
                 {
                     Debug.WriteLine("Riot Client not found");
                     return false;
                 }
 
-                var startInfo = new ProcessStartInfo
+                ProcessStartInfo startInfo = new()
                 {
                     FileName = riotClientPath,
                     Arguments = BuildLaunchArguments(username, password, region, rememberMe),
@@ -443,16 +506,19 @@ namespace RiotAutoLogin.Services
 
         private static string FindRiotClientPath()
         {
-            // Common installation paths for Riot Client
-            string[] possiblePaths = {
+            string[] possiblePaths =
+            {
                 @"C:\Riot Games\Riot Client\RiotClientServices.exe",
-                @"C:\Program Files\Riot Games\Riot Client\RiotClientServices.exe", 
+                @"C:\Program Files\Riot Games\Riot Client\RiotClientServices.exe",
                 @"C:\Program Files (x86)\Riot Games\Riot Client\RiotClientServices.exe",
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), 
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     @"Riot Games\Riot Client\RiotClientServices.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), 
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                     @"Riot Games\Riot Client\RiotClientServices.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), 
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
                     @"Riot Games\Riot Client\RiotClientServices.exe")
             };
 
@@ -471,19 +537,19 @@ namespace RiotAutoLogin.Services
 
         private static string BuildLaunchArguments(string username, string password, string region, bool rememberMe)
         {
-            var args = new StringBuilder();
+            StringBuilder args = new();
             args.Append("--launch-product=league_of_legends");
-            args.Append($" --launch-patchline=live");
-            
+            args.Append(" --launch-patchline=live");
+
             if (!string.IsNullOrEmpty(username))
                 args.Append($" --username=\"{username}\"");
-            
+
             if (!string.IsNullOrEmpty(password))
                 args.Append($" --password=\"{password}\"");
-            
+
             if (!string.IsNullOrEmpty(region))
                 args.Append($" --region=\"{region}\"");
-            
+
             if (rememberMe)
                 args.Append(" --remember-me");
 
@@ -498,7 +564,7 @@ namespace RiotAutoLogin.Services
                     .Concat(Process.GetProcessesByName("LeagueClient"))
                     .Concat(Process.GetProcessesByName("LeagueClientUx"));
 
-                foreach (var process in processes)
+                foreach (Process process in processes)
                 {
                     try
                     {
@@ -535,10 +601,10 @@ namespace RiotAutoLogin.Services
 
                 if (process != null)
                 {
-                    var hWnd = process.MainWindowHandle;
+                    IntPtr hWnd = process.MainWindowHandle;
                     if (hWnd != IntPtr.Zero)
                     {
-                        ShowWindow(hWnd, 9); // SW_RESTORE
+                        ShowWindow(hWnd, 9);
                         SetForegroundWindow(hWnd);
                     }
                 }

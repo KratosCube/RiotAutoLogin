@@ -223,12 +223,27 @@ namespace RiotAutoLogin.Services
         public static void UpdateTotalGameStats(Window window, System.Collections.Generic.List<Models.Account> accounts)
         {
             var (totalGames, totalWins, totalLosses, winRate) = AccountService.CalculateStats(accounts);
-            
+
+            var txtStatsGamesValue = window.FindName("txtStatsGamesValue") as TextBlock;
+            var txtStatsWinsValue = window.FindName("txtStatsWinsValue") as TextBlock;
+            var txtStatsLossesValue = window.FindName("txtStatsLossesValue") as TextBlock;
+            var txtStatsWinRateValue = window.FindName("txtStatsWinRateValue") as TextBlock;
             var txtTotalGames = window.FindName("txtTotalGames") as TextBlock;
+
+            if (txtStatsGamesValue != null)
+                txtStatsGamesValue.Text = totalGames.ToString();
+
+            if (txtStatsWinsValue != null)
+                txtStatsWinsValue.Text = totalWins.ToString();
+
+            if (txtStatsLossesValue != null)
+                txtStatsLossesValue.Text = totalLosses.ToString();
+
+            if (txtStatsWinRateValue != null)
+                txtStatsWinRateValue.Text = $"{winRate:F1}%";
+
             if (txtTotalGames != null)
-            {
                 txtTotalGames.Text = $"Total Games: {totalGames} | Wins: {totalWins} | Losses: {totalLosses} | Win Rate: {winRate:F1}%";
-            }
         }
     }
 } 

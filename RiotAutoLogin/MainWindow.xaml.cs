@@ -105,6 +105,7 @@ namespace RiotAutoLogin
         private UpdateService? _updateService;
 
         private bool _isDarkMode = true;
+        private bool _suppressAutoAcceptEvents = false;
         private string _selectedAvatarPath = string.Empty;
         private string _selectedRegion = "eun1";
         private Border? _lastSelectedCard;
@@ -137,9 +138,11 @@ namespace RiotAutoLogin
         private void RefreshUI()
         {
             RefreshAccountLists();
+            UpdateQuickLoginViewport();
             UpdateTotalGameStats();
             UpdateHotkeyDisplay();
             UpdateRunOnStartupToggleUI();
+            UpdateAutoAcceptToggleUI();
         }
 
         private void InitializeNotifyIcon()
@@ -724,6 +727,7 @@ namespace RiotAutoLogin
             
             LoadAccounts();
             RefreshAccountLists();
+            UpdateQuickLoginViewport();
             UpdateTotalGameStats();
             Task preloadTask = GameData.PreloadAllDataAsync();
             await Task.Run(() => MonitorLeagueClientAsync());
@@ -763,6 +767,7 @@ namespace RiotAutoLogin
                         await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                         {
                             RefreshAccountLists();
+                            UpdateQuickLoginViewport();
                             UpdateTotalGameStats();
                             SaveAccounts();
                         });
@@ -781,13 +786,14 @@ namespace RiotAutoLogin
                     await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                     {
                         RefreshAccountLists();
+                        UpdateQuickLoginViewport();
                         UpdateTotalGameStats();
                     });
                 }
             });
             
             LoadAutoPickSettings();
-
+            UpdateAutoAcceptToggleUI();
             // Update current version display
             try
             {
@@ -834,14 +840,6 @@ namespace RiotAutoLogin
 
         #region Window Control Event Handlers
 
-        private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            if (e.Source == this)
-            {
-                DragMove();
-                e.Handled = true;
-            }
-        }
 
         private void btnSelectAvatar_Click(object sender, RoutedEventArgs e)
         {
@@ -902,6 +900,7 @@ namespace RiotAutoLogin
             _accounts.Add(newAccount);
             SaveAccounts();
             RefreshAccountLists();
+            UpdateQuickLoginViewport();
             UpdateTotalGameStats();
 
             System.Windows.MessageBox.Show("Account added successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -926,6 +925,7 @@ namespace RiotAutoLogin
                 }
                 SaveAccounts();
                 RefreshAccountLists();
+                UpdateQuickLoginViewport();
                 UpdateTotalGameStats();
             }
             else
@@ -941,6 +941,7 @@ namespace RiotAutoLogin
                 _accounts.Remove(selected);
                 SaveAccounts();
                 RefreshAccountLists();
+                UpdateQuickLoginViewport();
                 UpdateTotalGameStats();
             }
             else
@@ -957,8 +958,19 @@ namespace RiotAutoLogin
                 txtGameName.Text = selected.GameName;
                 txtTagLine.Text = selected.TagLine;
                 txtAccountPassword.Password = string.Empty;
+
                 _selectedAvatarPath = selected.AvatarPath;
                 UpdateAvatarPreview(selected.AvatarPath);
+
+                // Sync region back to form + internal state
+                string region = (selected.Region ?? string.Empty).Trim().ToLowerInvariant();
+                _selectedRegion = region == "euw1" ? "euw1" : "eun1";
+
+                if (btnEUW != null && btnEUNE != null)
+                {
+                    btnEUW.IsChecked = _selectedRegion == "euw1";
+                    btnEUNE.IsChecked = _selectedRegion == "eun1";
+                }
 
                 if (_accountCardMap.TryGetValue(selected, out Border selectedBorder))
                 {
@@ -968,6 +980,7 @@ namespace RiotAutoLogin
                         _lastSelectedCard.BorderThickness = new Thickness(1);
                         _lastSelectedCard.Background = (SolidColorBrush)Resources["CardBackgroundBrush"];
                     }
+
                     selectedBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 82, 82));
                     selectedBorder.Background = new SolidColorBrush(Color.FromRgb(42, 42, 54));
                     selectedBorder.BorderThickness = new Thickness(2);
@@ -1087,10 +1100,6 @@ namespace RiotAutoLogin
             }
         }
 
-        private async void lbLoginAccounts_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            // This method is intentionally empty - login is handled by LoginCard_MouseDown
-        }
 
         private void lbLoginAccounts_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
@@ -1105,6 +1114,7 @@ namespace RiotAutoLogin
         {
             await UpdateAllAccountsAsync();
             RefreshAccountLists();
+            UpdateQuickLoginViewport();
             UpdateTotalGameStats();
             SaveAccounts();
         }
@@ -1112,7 +1122,46 @@ namespace RiotAutoLogin
         #endregion
 
         #region Update All Accounts
+        private async void btnRefreshQuickStats_Click(object sender, RoutedEventArgs e)
+        {
+            btnRefreshQuickStats.IsEnabled = false;
 
+            try
+            {
+                await UpdateAllAccountsAsync();
+                RefreshAccountLists();
+                UpdateQuickLoginViewport();
+                UpdateTotalGameStats();
+                SaveAccounts();
+            }
+            finally
+            {
+                btnRefreshQuickStats.IsEnabled = true;
+            }
+        }
+        private void UpdateQuickLoginViewport()
+        {
+            if (svQuickLogin == null)
+                return;
+
+            int accountCount = _accounts?.Count ?? 0;
+
+            // Adjust these if you change the card template later
+            const int columns = 4;
+            const double cardHeight = 220;   // must match card Height in XAML
+            const double rowGap = 12;        // must match bottom margin between rows
+            const double safetyBottom = 16;  // prevents clipping at the bottom
+
+            int rows = Math.Min(2, Math.Max(1, (int)Math.Ceiling(accountCount / (double)columns)));
+
+            double visibleHeight = (rows * cardHeight)
+                                 + ((rows - 1) * rowGap)
+                                 + safetyBottom;
+
+            svQuickLogin.Height = visibleHeight;
+            svQuickLogin.VerticalScrollBarVisibility =
+                accountCount > 8 ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
+        }
         private async Task UpdateAllAccountsAsync()
         {
             await AccountService.UpdateAllAccountsAsync(_accounts);
@@ -1205,39 +1254,49 @@ namespace RiotAutoLogin
                 btnEUW.IsChecked = false;
         }
 
-        private async void tglAutoAccept_Checked(object sender, RoutedEventArgs e)
+        private void tglAutoAccept_Checked(object sender, RoutedEventArgs e)
         {
-            if (!LCUService.IsLeagueOpen)
+            if (_suppressAutoAcceptEvents)
+                return;
+
+            _hotkeySettings.AutoAcceptEnabled = true;
+            SaveHotkeySettings();
+
+            tglAutoAccept.Content = "ON";
+
+            if (LCUService.CheckIfLeagueClientIsOpen())
             {
-                if (LCUService.CheckIfLeagueClientIsOpen())
-                {
-                    LCUService.StartAutoAccept();
-                    tglAutoAccept.Content = "ON";
-                    autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
-                    txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
-                }
-                else
-                {
-                    System.Windows.MessageBox.Show("League Client is not running. Please start League of Legends first.",
-                        "League Client Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    tglAutoAccept.IsChecked = false;
-                }
+                LCUService.StartAutoAccept();
+                autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
+                txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
             }
             else
             {
-                LCUService.StartAutoAccept();
-                tglAutoAccept.Content = "ON";
-                autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
-                txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
+                autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
+                txtAutoAcceptStatus.Text = "Auto-accept is enabled and will activate when League Client starts.";
             }
         }
 
         private void tglAutoAccept_Unchecked(object sender, RoutedEventArgs e)
         {
+            if (_suppressAutoAcceptEvents)
+                return;
+
+            _hotkeySettings.AutoAcceptEnabled = false;
+            SaveHotkeySettings();
+
             LCUService.StopAutoAccept();
             tglAutoAccept.Content = "OFF";
             autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
-            txtAutoAcceptStatus.Text = "Auto-accept is inactive";
+
+            if (LCUService.CheckIfLeagueClientIsOpen())
+            {
+                txtAutoAcceptStatus.Text = "Auto-accept is inactive. Enable to automatically accept game matches.";
+            }
+            else
+            {
+                txtAutoAcceptStatus.Text = "League Client is not running. Start League of Legends to use auto-accept.";
+            }
         }
 
         protected override void OnClosed(EventArgs e)
@@ -1268,23 +1327,42 @@ namespace RiotAutoLogin
                     bool isLeagueOpen = LCUService.CheckIfLeagueClientIsOpen();
 
                     // Update UI based on League client state
-                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() => {
-                        if (isLeagueOpen)
+                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        _suppressAutoAcceptEvents = true;
+                        try
                         {
-                            if (tglAutoAccept.IsEnabled == false)
+                            tglAutoAccept.IsEnabled = isLeagueOpen;
+                            tglAutoAccept.IsChecked = _hotkeySettings.AutoAcceptEnabled;
+                            tglAutoAccept.Content = _hotkeySettings.AutoAcceptEnabled ? "ON" : "OFF";
+
+                            if (isLeagueOpen)
                             {
-                                tglAutoAccept.IsEnabled = true;
-                                txtAutoAcceptStatus.Text = tglAutoAccept.IsChecked == true
-                                    ? "Auto-accept is active - will accept game matches automatically"
-                                    : "Auto-accept is inactive. Enable to automatically accept game matches.";
+                                if (_hotkeySettings.AutoAcceptEnabled)
+                                {
+                                    LCUService.StartAutoAccept();
+                                    autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
+                                    txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
+                                }
+                                else
+                                {
+                                    LCUService.StopAutoAccept();
+                                    autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
+                                    txtAutoAcceptStatus.Text = "Auto-accept is inactive. Enable to automatically accept game matches.";
+                                }
+                            }
+                            else
+                            {
+                                LCUService.StopAutoAccept();
+                                autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
+                                txtAutoAcceptStatus.Text = _hotkeySettings.AutoAcceptEnabled
+                                    ? "Auto-accept is enabled and will activate when League Client starts."
+                                    : "League Client is not running. Start League of Legends to use auto-accept.";
                             }
                         }
-                        else
+                        finally
                         {
-                            tglAutoAccept.IsEnabled = false;
-                            tglAutoAccept.IsChecked = false;
-                            autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
-                            txtAutoAcceptStatus.Text = "League Client is not running. Start League of Legends to use auto-accept.";
+                            _suppressAutoAcceptEvents = false;
                         }
                     });
                 }
@@ -1302,17 +1380,7 @@ namespace RiotAutoLogin
         #region (Optional) Helper Methods
 
         // Example: Cache account card borders for quick access (if your XAML uses an ItemsControl named icAccounts).
-        private void CacheAccountCards()
-        {
-            _accountCardMap.Clear();
-            foreach (var border in VisualTreeHelperExtensions.FindVisualChildren<Border>(icAccounts))
-            {
-                if (border.Tag is Account account)
-                {
-                    _accountCardMap[account] = border;
-                }
-            }
-        }
+
 
         #endregion
 
@@ -2317,11 +2385,6 @@ namespace RiotAutoLogin
             UpdateRunOnStartupToggleUI(); // Reflect current state
         }
 
-        private string BuildHotkeyDisplayName(uint modifiers, string key)
-        {
-            // This method is now simpler as modifiers are fixed.
-            return $"Ctrl + Alt + {key.ToUpper()}";
-        }
 
         private void txtHotkeyKey_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
@@ -2340,14 +2403,76 @@ namespace RiotAutoLogin
                 e.Handled = true; // Disallow input
             }
         }
+        private void DragHeader_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            try
+            {
+                if (e.ButtonState == MouseButtonState.Pressed)
+                {
+                    DragMove();
+                }
+            }
+            catch
+            {
+                // ignore drag exceptions
+            }
+        }
 
         private void ApplyTheme()
         {
             UIService.ApplyTheme(this, _isDarkMode);
             RefreshAccountLists();
+            UpdateQuickLoginViewport();
             UpdateLayout();
         }
+        private void UpdateAutoAcceptToggleUI()
+        {
+            if (tglAutoAccept == null || autoAcceptStatusIndicator == null || txtAutoAcceptStatus == null)
+            {
+                Console.WriteLine("UpdateAutoAcceptToggleUI: controls not ready yet.");
+                return;
+            }
 
+            bool isLeagueOpen = LCUService.CheckIfLeagueClientIsOpen();
+
+            _suppressAutoAcceptEvents = true;
+            try
+            {
+                tglAutoAccept.IsChecked = _hotkeySettings.AutoAcceptEnabled;
+                tglAutoAccept.Content = _hotkeySettings.AutoAcceptEnabled ? "ON" : "OFF";
+                tglAutoAccept.IsEnabled = isLeagueOpen;
+
+                if (!isLeagueOpen)
+                {
+                    autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
+
+                    txtAutoAcceptStatus.Text = _hotkeySettings.AutoAcceptEnabled
+                        ? "Auto-accept is enabled and will activate when League Client starts."
+                        : "League Client is not running. Start League of Legends to use auto-accept.";
+
+                    LCUService.StopAutoAccept();
+                }
+                else
+                {
+                    if (_hotkeySettings.AutoAcceptEnabled)
+                    {
+                        LCUService.StartAutoAccept();
+                        autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
+                        txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
+                    }
+                    else
+                    {
+                        LCUService.StopAutoAccept();
+                        autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
+                        txtAutoAcceptStatus.Text = "Auto-accept is inactive. Enable to automatically accept game matches.";
+                    }
+                }
+            }
+            finally
+            {
+                _suppressAutoAcceptEvents = false;
+            }
+        }
         private void MainWindow_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             // Handle Escape key to close quick login popup
@@ -2536,35 +2661,6 @@ namespace RiotAutoLogin
             catch (Exception ex)
             {
                 Console.WriteLine($"Error focusing Riot Client window: {ex.Message}");
-            }
-        }
-
-        private async void PerformAccountLogin(Account account)
-        {
-            if (_isLoginInProgress)
-            {
-                Console.WriteLine("Login already in progress, skipping...");
-                return;
-            }
-
-            _isLoginInProgress = true;
-            try
-            {
-                Console.WriteLine($"Starting login for: {account.GameName}");
-                
-                // Focus the Riot Client window using the robust method
-                FocusRiotClientWindow();
-                
-                // Small delay to ensure window is ready for automation
-                await Task.Delay(300);
-                
-                await RiotClientAutomationService.LaunchAndLoginAsync(
-                    account.AccountName,
-                    EncryptionService.DecryptString(account.EncryptedPassword));
-            }
-            finally
-            {
-                _isLoginInProgress = false;
             }
         }
 

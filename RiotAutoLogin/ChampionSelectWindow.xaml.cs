@@ -127,45 +127,7 @@ namespace RiotAutoLogin
                 this.Close();
             }
         }
-        private string NormalizeChampionNameForDataDragon(string championName)
-        {
-            if (string.IsNullOrEmpty(championName))
-                return string.Empty;
-
-            // Special cases
-            switch (championName)
-            {
-                case "Nunu & Willump":
-                case "Nunu":
-                    return "Nunu";
-                case "Wukong":
-                    return "MonkeyKing";
-                case "Renata Glasc":
-                    return "Renata";
-                case "None":
-                    return "None";
-                    // Add more special cases as needed
-            }
-
-            // Remove spaces, apostrophes, dots and other special characters
-            string normalized = championName
-                .Replace(" ", "")
-                .Replace("'", "")
-                .Replace(".", "")
-                .Replace(":", "");
-
-            // Handle other special transformations
-            if (normalized.Contains("Vel"))
-                normalized = "Velkoz";
-            if (normalized.Contains("Cho"))
-                normalized = "Chogath";
-            if (normalized.Contains("Kai"))
-                normalized = "Kaisa";
-            if (normalized.Contains("Kha"))
-                normalized = "Khazix";
-
-            return normalized;
-        }
+        
         private async Task LoadSummonerSpellsAsync()
         {
             try

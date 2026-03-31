@@ -3,389 +3,262 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:RiotAutoLogin"
         xmlns:conv="clr-namespace:RiotAutoLogin.Converters"
         mc:Ignorable="d"
-        Title="Riot Login Manager" 
-        Height="750" 
-        Width="900"
+        Title="Riot Auto Login"
+        Height="750"
+        Width="980"
+        MinWidth="920"
+        MinHeight="700"
         WindowStartupLocation="CenterScreen"
         Background="Transparent"
         AllowsTransparency="True"
         WindowStyle="None"
         ResizeMode="CanResize"
-        MouseLeftButtonDown="Window_MouseLeftButtonDown"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         Loaded="Window_Loaded">
-    <Window.Resources>
-        <!-- Theme colors (can be changed via code) -->
-        <SolidColorBrush x:Key="MainBackgroundBrush" Color="#121218"/>
-        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1A24"/>
-        <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="#2E2E3A"/>
-        <SolidColorBrush x:Key="TextColorBrush" Color="White"/>
 
-        <!-- Instance of the RankInfoConverter -->
+    <Window.Resources>
+        <!-- Theme colors -->
+        <SolidColorBrush x:Key="MainBackgroundBrush" Color="#0D1117"/>
+        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#151B23"/>
+        <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="#1E2632"/>
+        <SolidColorBrush x:Key="TextColorBrush" Color="#F3F6FB"/>
+
         <conv:RankInfoConverter x:Key="RankInfoConverter"/>
-        <!-- Instance of the StringToImageSourceConverter -->
         <conv:StringToImageSourceConverter x:Key="StringToImageSourceConverter"/>
-        <!-- Animation Resources -->
-        <Storyboard x:Key="FadeIn">
-            <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                       From="0" To="1" Duration="0:0:0.3"/>
-        </Storyboard>
-        <!-- Modern Button Style -->
-        <Style x:Key="ModernButton" TargetType="Button">
-            <Setter Property="MinHeight" Value="40"/>
-            <Setter Property="Background" Value="#FF5252"/>
-            <Setter Property="Foreground" Value="{StaticResource TextColorBrush}"/>
-            <Setter Property="Padding" Value="15,10"/>
+        <Style x:Key="GhostIconButton" TargetType="Button">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Background" Value="#1A2230"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="16"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Opacity" Value="0.8"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}"
-                CornerRadius="8"
-                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border.Effect>
-                                <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.2"/>
-                            </Border.Effect>
+                        CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#FF3030"/>
-                                <Setter Property="RenderTransform">
-                                    <Setter.Value>
-                                        <ScaleTransform ScaleX="1.02" ScaleY="1.02"/>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter Property="Opacity" Value="1"/>
+                                <Setter Property="Background" Value="#263143"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#E04545"/>
-                                <Setter Property="RenderTransform">
-                                    <Setter.Value>
-                                        <ScaleTransform ScaleX="0.98" ScaleY="0.98"/>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter Property="Background" Value="#1D2635"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+        <Style x:Key="InteractiveCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="#273142"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="16"/>
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="RenderTransform">
                 <Setter.Value>
                     <ScaleTransform ScaleX="1" ScaleY="1"/>
                 </Setter.Value>
             </Setter>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect ShadowDepth="2" BlurRadius="6" Opacity="0.18"/>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#182131"/>
+                    <Setter Property="BorderBrush" Value="#41536F"/>
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <DropShadowEffect ShadowDepth="4" BlurRadius="14" Opacity="0.26"/>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter Property="RenderTransform">
+                        <Setter.Value>
+                            <ScaleTransform ScaleX="1.02" ScaleY="1.02"/>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
         </Style>
-        <Style x:Key="LightModeButton" TargetType="Button">
-            <Setter Property="MinHeight" Value="40"/>
+        <!-- Buttons -->
+        <Style x:Key="ModernButton" TargetType="Button">
+            <Setter Property="MinHeight" Value="42"/>
+            <Setter Property="Padding" Value="16,10"/>
             <Setter Property="Background" Value="#FF5252"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Padding" Value="15,10"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="16"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="14"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}"
-                CornerRadius="8"
-                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border.Effect>
-                                <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.2"/>
-                            </Border.Effect>
+                                CornerRadius="10"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#FF7070"/>
-                                <Setter Property="RenderTransform">
-                                    <Setter.Value>
-                                        <ScaleTransform ScaleX="1.02" ScaleY="1.02"/>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter Property="Background" Value="#FF4040"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#FF5050"/>
-                                <Setter Property="RenderTransform">
-                                    <Setter.Value>
-                                        <ScaleTransform ScaleX="0.98" ScaleY="0.98"/>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter Property="Background" Value="#E64949"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
-            <Setter Property="RenderTransform">
-                <Setter.Value>
-                    <ScaleTransform ScaleX="1" ScaleY="1"/>
-                </Setter.Value>
-            </Setter>
         </Style>
-        <Style x:Key="LightModeSecondaryButton" TargetType="Button">
-            <Setter Property="MinHeight" Value="40"/>
-            <Setter Property="Background" Value="#D0D0E0"/>
-            <!-- Light gray background -->
-            <Setter Property="Foreground" Value="Black"/>
-            <Setter Property="Padding" Value="15,10"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="16"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                CornerRadius="8"
-                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border.Effect>
-                                <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.2"/>
-                            </Border.Effect>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#C0C0D0"/>
-                                <Setter Property="RenderTransform">
-                                    <Setter.Value>
-                                        <ScaleTransform ScaleX="1.02" ScaleY="1.02"/>
-                                    </Setter.Value>
-                                </Setter>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#B0B0C0"/>
-                                <Setter Property="RenderTransform">
-                                    <Setter.Value>
-                                        <ScaleTransform ScaleX="0.98" ScaleY="0.98"/>
-                                    </Setter.Value>
-                                </Setter>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
-            <Setter Property="RenderTransform">
-                <Setter.Value>
-                    <ScaleTransform ScaleX="1" ScaleY="1"/>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <!-- Modern ToggleButton Style -->
-        <Style x:Key="ModernToggleButton" TargetType="ToggleButton">
-            <Setter Property="MinHeight" Value="40"/>
+
+        <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
             <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource TextColorBrush}"/>
-            <Setter Property="Padding" Value="15,10"/>
+        </Style>
+
+        <Style x:Key="ModernToggleButton" TargetType="ToggleButton">
+            <Setter Property="MinHeight" Value="42"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextColorBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="16"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="14"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
                         <Border Background="{TemplateBinding Background}"
-                    CornerRadius="8"
-                    Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border.Effect>
-                                <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.2"/>
-                            </Border.Effect>
+                                CornerRadius="10"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#FF3030"/>
-                                <Setter Property="RenderTransform">
-                                    <Setter.Value>
-                                        <ScaleTransform ScaleX="1.02" ScaleY="1.02"/>
-                                    </Setter.Value>
-                                </Setter>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#E04545"/>
-                                <Setter Property="RenderTransform">
-                                    <Setter.Value>
-                                        <ScaleTransform ScaleX="0.98" ScaleY="0.98"/>
-                                    </Setter.Value>
-                                </Setter>
-                            </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter Property="Background" Value="#FF5252"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="0.92"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
-            <Setter Property="RenderTransform">
-                <Setter.Value>
-                    <ScaleTransform ScaleX="1" ScaleY="1"/>
-                </Setter.Value>
-            </Setter>
         </Style>
-        <!-- Theme Toggle Button Style -->
-        <Style x:Key="ThemeToggleButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
-            <Setter Property="Width" Value="40"/>
-            <Setter Property="Height" Value="40"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}"/>
-            <Setter Property="FontSize" Value="18"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#3E3E4A"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-        <!-- Secondary Button Style -->
-        <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
-            <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#3E3E4A"/>
-                </Trigger>
-                <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#1E1E2A"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-        <!-- Modern TextBox Style -->
+
+        <!-- Inputs -->
         <Style x:Key="ModernTextBox" TargetType="TextBox">
-            <Setter Property="MinHeight" Value="40"/>
+            <Setter Property="MinHeight" Value="42"/>
+            <Setter Property="Padding" Value="14,10"/>
             <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource TextColorBrush}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="15,12"/>
-            <Setter Property="FontSize" Value="16"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="BorderBrush" Value="#263042"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
                         <Border Background="{TemplateBinding Background}"
-                    CornerRadius="8"
-                    BorderThickness="{TemplateBinding BorderThickness}"
-                    BorderBrush="{TemplateBinding BorderBrush}">
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
                             <ScrollViewer x:Name="PART_ContentHost"
-                            Padding="{TemplateBinding Padding}"
-                            Focusable="False"/>
+                                          Margin="{TemplateBinding Padding}"
+                                          Focusable="False"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsFocused" Value="True">
-                                <Setter Property="BorderThickness" Value="1"/>
                                 <Setter Property="BorderBrush" Value="#FF5252"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsFocused" Value="True">
-                    <Setter Property="BorderThickness" Value="1"/>
-                    <Setter Property="BorderBrush" Value="#FF5252"/>
-                </Trigger>
-            </Style.Triggers>
         </Style>
-        <!-- Modern PasswordBox Template (styled similarly to ModernTextBox) -->
+
         <ControlTemplate x:Key="ModernPasswordBox" TargetType="PasswordBox">
             <Border Background="{StaticResource CardBackgroundBrush}"
-              CornerRadius="8"
-              BorderThickness="{TemplateBinding BorderThickness}"
-              BorderBrush="{TemplateBinding BorderBrush}"
-              MinHeight="40"
-              Padding="15,12">
+                    BorderBrush="#263042"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="14,10"
+                    MinHeight="42">
                 <ScrollViewer x:Name="PART_ContentHost" Focusable="False"/>
             </Border>
             <ControlTemplate.Triggers>
                 <Trigger Property="IsFocused" Value="True">
-                    <Setter Property="BorderThickness" Value="1"/>
                     <Setter Property="BorderBrush" Value="#FF5252"/>
                 </Trigger>
             </ControlTemplate.Triggers>
         </ControlTemplate>
-        <!-- Account Card Style (with bigger avatar) -->
-        <Style x:Key="AccountCard" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}"/>
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Margin" Value="5"/>
-            <Setter Property="Padding" Value="15"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#3E3E4A"/>
-            <Setter Property="VerticalAlignment" Value="Top"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
-            <!-- Subtle border color that works with dark theme -->
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect ShadowDepth="2" BlurRadius="5" Opacity="0.2"/>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#2A2A36"/>
-                    <Setter Property="BorderBrush" Value="#FF5252"/>
-                    <!-- Highlight border on hover -->
-                    <!-- Keep the same border thickness to avoid size changes -->
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-        <!-- TabItem Style -->
+
+        <!-- Tabs -->
         <Style x:Key="TabItemStyle" TargetType="TabItem">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Border Name="Border" BorderThickness="0" Margin="2,0,2,0"
-                            CornerRadius="10,10,0,0" Padding="15,5">
-                            <ContentPresenter x:Name="ContentSite" ContentSource="Header"
-                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Border x:Name="Border"
+                                Margin="0,0,10,0"
+                                Padding="16,10"
+                                CornerRadius="12"
+                                Background="Transparent">
+                            <ContentPresenter ContentSource="Header"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="#2A2A36"/>
-                                <Setter Property="Foreground" Value="#FF5252"/>
+                                <Setter TargetName="Border" Property="Background" Value="#1F2633"/>
+                                <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="False">
-                                <Setter TargetName="Border" Property="Background" Value="{StaticResource CardBackgroundBrush}"/>
-                                <Setter Property="Foreground" Value="#AAAAAA"/>
+                                <Setter TargetName="Border" Property="Background" Value="Transparent"/>
+                                <Setter Property="Foreground" Value="#9AA6B2"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="#2A2A36"/>
+                                <Setter TargetName="Border" Property="Background" Value="#161D27"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-        <!-- Stats Panel Style -->
+
+        <!-- Stats -->
         <Style x:Key="StatsPanel" TargetType="Border">
-            <Setter Property="Background" Value="#222222"/>
-            <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="Padding" Value="10"/>
-            <Setter Property="Margin" Value="0,15,0,0"/>
+            <Setter Property="Background" Value="#141B24"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Padding" Value="14"/>
+            <Setter Property="Margin" Value="0,16,0,0"/>
         </Style>
+
+        <!-- Scrollbars -->
         <Style x:Key="DarkScrollBarStyle" TargetType="{x:Type ScrollBar}">
-            <Setter Property="Background" Value="#121218"/>
-            <Setter Property="BorderBrush" Value="#2E2E3A"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="#11151B"/>
             <Setter Property="Width" Value="6"/>
-            <!-- Reduced from 8 to 6 -->
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type ScrollBar}">
-                        <Grid>
-                            <Border Background="{TemplateBinding Background}" 
-                            BorderBrush="{TemplateBinding BorderBrush}" 
-                            BorderThickness="{TemplateBinding BorderThickness}"/>
+                        <Grid Background="{TemplateBinding Background}">
                             <Track x:Name="PART_Track" IsDirectionReversed="True">
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0"/>
@@ -398,7 +271,6 @@
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="{x:Type Thumb}">
                                                 <Border Background="#FF5252" CornerRadius="3"/>
-                                                <!-- Reduced from 4 to 3 -->
                                             </ControlTemplate>
                                         </Thumb.Template>
                                     </Thumb>
@@ -410,7 +282,6 @@
             </Setter>
         </Style>
 
-        <!-- ScrollViewer Style that uses the custom ScrollBar -->
         <Style x:Key="DarkScrollViewerStyle" TargetType="{x:Type ScrollViewer}">
             <Setter Property="Template">
                 <Setter.Value>
@@ -425,24 +296,26 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <ScrollContentPresenter Grid.Column="0" Grid.Row="0"/>
+                            <ScrollContentPresenter Grid.Row="0" Grid.Column="0"/>
 
-                            <ScrollBar x:Name="PART_VerticalScrollBar" 
-                               Grid.Column="1" Grid.Row="0"
-                               Style="{StaticResource DarkScrollBarStyle}"
-                               Value="{TemplateBinding VerticalOffset}"
-                               Maximum="{TemplateBinding ScrollableHeight}"
-                               ViewportSize="{TemplateBinding ViewportHeight}"
-                               Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
+                            <ScrollBar x:Name="PART_VerticalScrollBar"
+                                       Grid.Row="0"
+                                       Grid.Column="1"
+                                       Style="{StaticResource DarkScrollBarStyle}"
+                                       Value="{TemplateBinding VerticalOffset}"
+                                       Maximum="{TemplateBinding ScrollableHeight}"
+                                       ViewportSize="{TemplateBinding ViewportHeight}"
+                                       Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
 
-                            <ScrollBar x:Name="PART_HorizontalScrollBar" 
-                               Grid.Column="0" Grid.Row="1"
-                               Style="{StaticResource DarkScrollBarStyle}"
-                               Orientation="Horizontal"
-                               Value="{TemplateBinding HorizontalOffset}"
-                               Maximum="{TemplateBinding ScrollableWidth}"
-                               ViewportSize="{TemplateBinding ViewportWidth}"
-                               Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"/>
+                            <ScrollBar x:Name="PART_HorizontalScrollBar"
+                                       Grid.Row="1"
+                                       Grid.Column="0"
+                                       Style="{StaticResource DarkScrollBarStyle}"
+                                       Orientation="Horizontal"
+                                       Value="{TemplateBinding HorizontalOffset}"
+                                       Maximum="{TemplateBinding ScrollableWidth}"
+                                       ViewportSize="{TemplateBinding ViewportWidth}"
+                                       Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"/>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -450,711 +323,923 @@
         </Style>
     </Window.Resources>
 
-    <!-- Main Layout without Viewbox for natural resizing -->
-    <Grid Width="900" Height="750" UseLayoutRounding="True" SnapsToDevicePixels="True">
-        <Grid.RowDefinitions>
-            <!-- Main Content Panel -->
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <!-- Main Bordered Content -->
-        <Border Grid.Row="0" Background="{StaticResource MainBackgroundBrush}" CornerRadius="20" Margin="10">
+    <Grid Margin="8">
+        <Border Background="{StaticResource MainBackgroundBrush}"
+                CornerRadius="24">
             <Border.Effect>
-                <DropShadowEffect ShadowDepth="0" BlurRadius="15" Opacity="0.2"/>
+                <DropShadowEffect ShadowDepth="0" BlurRadius="18" Opacity="0.22"/>
             </Border.Effect>
-            <!-- Inner Grid to hold UI and ResizeGrip -->
+
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <!-- Window Controls -->
-                <Grid Grid.Row="0" Height="50">
-                    <TextBlock Text="Riot Login Manager" FontWeight="Bold" FontSize="20" 
-                     Foreground="{StaticResource TextColorBrush}" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="20,0,0,0"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,20,0">
-                        <Button x:Name="btnMinimize" Click="btnMinimize_Click" Width="36" Height="36" Margin="5,0" 
-            Style="{StaticResource SecondaryButton}">
-                            <Path Data="M0,0 L10,0" Stroke="{StaticResource TextColorBrush}" StrokeThickness="1.5" 
-              VerticalAlignment="Center" HorizontalAlignment="Center" Stretch="Uniform" Width="12"/>
-                        </Button>
-                        <Button x:Name="btnClose" Click="btnClose_Click" Width="36" Height="36" Margin="5,0" 
-            Style="{StaticResource ModernButton}">
-                            <Path Data="M0,0 L10,10 M0,10 L10,0" Stroke="{StaticResource TextColorBrush}" StrokeThickness="1.5" 
-              VerticalAlignment="Center" HorizontalAlignment="Center" Stretch="Uniform" Width="12"/>
-                        </Button>
-                    </StackPanel>
-                </Grid>
-                <!-- Main Content Tabs -->
-                <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0" Margin="20">
-                    <TabControl.Resources>
-                        <Style TargetType="TabPanel">
-                            <Setter Property="Background" Value="Transparent"/>
-                        </Style>
-                    </TabControl.Resources>
-                    <!-- LOGIN Tab -->
-                    <TabItem Header="LOGIN" Style="{StaticResource TabItemStyle}">
-                        <Grid Margin="0,20,0,0">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="*"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" VerticalAlignment="Top" Style="{StaticResource DarkScrollViewerStyle}">
-                                <ItemsControl x:Name="icLoginAccounts" ItemsSource="{Binding ElementName=lbLoginAccounts, Path=ItemsSource}" 
-                                              VerticalAlignment="Top">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <UniformGrid Columns="4" VerticalAlignment="Top" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Background="{StaticResource CardBackgroundBrush}"
-                                                    CornerRadius="10"
-                                                    Width="190" Height="240"
-                                                    Margin="4" 
-                                                    Padding="12"
-                                                    BorderThickness="1"
-                                                    BorderBrush="#3E3E4A"
-                                                    RenderTransformOrigin="0.5,0.5"
-                                                    MouseDown="LoginCard_MouseDown"
-                                                    Tag="{Binding}"
-                                                    ToolTip="{Binding Region, StringFormat='Server: {0}'}"
-                                                    x:Name="loginCard"
-                                                    VerticalAlignment="Top">
-                                                <Border.Effect>
-                                                    <DropShadowEffect ShadowDepth="2" BlurRadius="5" Opacity="0.2"/>
-                                                </Border.Effect>
-                                                <Border.RenderTransform>
-                                                    <ScaleTransform ScaleX="1" ScaleY="1"/>
-                                                </Border.RenderTransform>
-                                                <Grid Margin="0,0,0,5">
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="*"/>
-                                                        <RowDefinition Height="Auto"/>
-                                                    </Grid.RowDefinitions>
-                                                    <!-- Bigger Avatar -->
-                                                    <Image Grid.Row="0" Source="{Binding AvatarPath, Converter={StaticResource StringToImageSourceConverter}}"
-                   Width="120" Height="120" Stretch="UniformToFill" HorizontalAlignment="Center" Margin="0,0,0,5"/>
-                                                    <TextBlock Grid.Row="1" Text="{Binding GameName}" FontSize="16" FontWeight="Bold" 
-                       TextAlignment="Center" HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"
-                       TextWrapping="Wrap" Margin="0,0,0,2"/>
-                                                    <TextBlock Grid.Row="2" Text="{Binding RankInfo, Converter={StaticResource RankInfoConverter}}" 
-                       FontSize="14" FontWeight="SemiBold" TextAlignment="Center" HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"
-                       TextWrapping="Wrap" Margin="0,2,0,2" VerticalAlignment="Center"/>
-                                                    <TextBlock Grid.Row="3" FontSize="14" TextAlignment="Center" HorizontalAlignment="Center"
-                       TextWrapping="Wrap" Margin="0,2,0,0">
-                <Run Text="{Binding LeaguePoints}" Foreground="{StaticResource TextColorBrush}"/>
-                <Run Text=" LP, " Foreground="{StaticResource TextColorBrush}"/>
-                <Run Text="{Binding Wins}" Foreground="#22BABB"/>
-                <Run Text="W/" Foreground="{StaticResource TextColorBrush}"/>
-                <Run Text="{Binding Losses}" Foreground="#F24405"/>
-                <Run Text="L" Foreground="{StaticResource TextColorBrush}"/>
-                                                    </TextBlock>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                            <ListBox x:Name="lbLoginAccounts" Visibility="Collapsed" MouseDoubleClick="lbLoginAccounts_MouseDoubleClick"/>
 
-                            <!-- Stats Panel at the bottom -->
-                            <Border x:Name="statsPanel" Grid.Row="1" Style="{StaticResource StatsPanel}">
-                                <TextBlock x:Name="txtTotalGames" Text="Total Games: 0 | Wins: 0 | Losses: 0 | Win Rate: 0%" 
-                                           Foreground="{StaticResource TextColorBrush}" FontSize="16"/>
-                            </Border>
-                            <!-- Status label (hidden but kept for code-behind references) -->
-                            <TextBlock x:Name="lblStatus" Visibility="Collapsed"/>
-                        </Grid>
-                    </TabItem>
-                    <!-- MANAGE ACCOUNTS Tab -->
-                    <TabItem Header="MANAGE ACCOUNTS" Style="{StaticResource TabItemStyle}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
+                <!-- Draggable Header -->
+                <Border Grid.Row="0"
+                        Margin="16,16,16,0"
+                        Padding="18,14"
+                        CornerRadius="14"
+                        Background="#141923"
+                        MouseLeftButtonDown="DragHeader_MouseLeftButtonDown">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                            <!-- Left side - Account list -->
-                            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,20,10,0" VerticalAlignment="Top" Style="{StaticResource DarkScrollViewerStyle}">
-                                <ItemsControl x:Name="icAccounts" ItemsSource="{Binding ElementName=lbAccounts, Path=ItemsSource}"
-                  VerticalAlignment="Top">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <UniformGrid Columns="2" VerticalAlignment="Top" HorizontalAlignment="Stretch" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Background="{StaticResource CardBackgroundBrush}"
-                        CornerRadius="10"
-                        Width="180" Height="240"
-                        Margin="4" 
-                        Padding="12"
-                        BorderThickness="1"
-                        BorderBrush="#3E3E4A"
-                        RenderTransformOrigin="0.5,0.5"
-                        MouseDown="AccountCard_MouseDown"
-                        Tag="{Binding}"
-                        ToolTip="{Binding Region, StringFormat='Server: {0}'}"
-                        VerticalAlignment="Top">
-                                                <Border.Effect>
-                                                    <DropShadowEffect ShadowDepth="2" BlurRadius="5" Opacity="0.2"/>
-                                                </Border.Effect>
-                                                <Grid Margin="0,0,0,5">
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="*"/>
-                                                        <RowDefinition Height="Auto"/>
-                                                    </Grid.RowDefinitions>
-                                                    <!-- Bigger Avatar -->
-                                                    <Image Grid.Row="0" Source="{Binding AvatarPath, Converter={StaticResource StringToImageSourceConverter}}"
-                   Width="120" Height="120" Stretch="UniformToFill" HorizontalAlignment="Center" Margin="0,0,0,5"/>
-                                                    <TextBlock Grid.Row="1" Text="{Binding GameName}" FontSize="16" FontWeight="Bold" 
-                       TextAlignment="Center" HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"
-                       TextWrapping="Wrap" Margin="0,0,0,2"/>
-                                                    <TextBlock Grid.Row="2" Text="{Binding RankInfo, Converter={StaticResource RankInfoConverter}}" 
-                       FontSize="14" FontWeight="SemiBold" TextAlignment="Center" HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"
-                       TextWrapping="Wrap" Margin="0,2,0,2" VerticalAlignment="Center"/>
-                                                    <TextBlock Grid.Row="3" FontSize="14" TextAlignment="Center" HorizontalAlignment="Center"
-                      TextWrapping="Wrap" Margin="0,2,0,0">
-                <Run Text="{Binding LeaguePoints}" Foreground="{StaticResource TextColorBrush}"/>
-                <Run Text=" LP, " Foreground="{StaticResource TextColorBrush}"/>
-                <Run Text="{Binding Wins}" Foreground="#22BABB"/>
-                <Run Text="W/" Foreground="{StaticResource TextColorBrush}"/>
-                <Run Text="{Binding Losses}" Foreground="#F24405"/>
-                <Run Text="L" Foreground="{StaticResource TextColorBrush}"/>
-                                                    </TextBlock>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                            <ListBox x:Name="lbAccounts" Visibility="Collapsed" SelectionChanged="lbAccounts_SelectionChanged"/>
+                        <StackPanel Orientation="Vertical"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="Riot Auto Login"
+                                       FontSize="22"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextColorBrush}"/>
+                            <TextBlock Text="Fast account switching and account management"
+                                       Margin="0,4,0,0"
+                                       FontSize="12"
+                                       Foreground="{StaticResource TextColorBrush}"
+                                       Opacity="0.68"/>
+                        </StackPanel>
 
-                            <!-- Right Panel for Account Details -->
-                            <Grid Grid.Column="1" Margin="10,20,0,0">
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <Button x:Name="btnMinimize"
+                                    Click="btnMinimize_Click"
+                                    Width="38"
+                                    Height="38"
+                                    Margin="0,0,8,0"
+                                    Style="{StaticResource SecondaryButton}">
+                                <Path Data="M0,0 L10,0"
+                                      Stroke="{StaticResource TextColorBrush}"
+                                      StrokeThickness="1.5"
+                                      VerticalAlignment="Center"
+                                      HorizontalAlignment="Center"
+                                      Stretch="Uniform"
+                                      Width="12"/>
+                            </Button>
+
+                            <Button x:Name="btnClose"
+                                    Click="btnClose_Click"
+                                    Width="38"
+                                    Height="38"
+                                    Style="{StaticResource ModernButton}">
+                                <Path Data="M0,0 L10,10 M0,10 L10,0"
+                                      Stroke="{StaticResource TextColorBrush}"
+                                      StrokeThickness="1.5"
+                                      VerticalAlignment="Center"
+                                      HorizontalAlignment="Center"
+                                      Stretch="Uniform"
+                                      Width="12"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Main Content -->
+                <Grid Grid.Row="1">
+                    <TabControl Grid.Row="1"
+                                Margin="16,14,16,16"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                SelectionChanged="TabControl_SelectionChanged">
+                        <TabControl.Resources>
+                            <Style TargetType="TabPanel">
+                                <Setter Property="Background" Value="Transparent"/>
+                            </Style>
+                        </TabControl.Resources>
+
+                        <!-- QUICK LOGIN -->
+                        <TabItem Header="Quick Login" Style="{StaticResource TabItemStyle}">
+                            <Grid Margin="0,16,0,0">
                                 <Grid.RowDefinitions>
-                                    <!-- Region Section -->
-                                    <RowDefinition Height="Auto"/>
-                                    <!-- Account Login Input -->
-                                    <RowDefinition Height="Auto"/>
-                                    <!-- Game Name Input -->
-                                    <RowDefinition Height="Auto"/>
-                                    <!-- Tagline Input -->
-                                    <RowDefinition Height="Auto"/>
-                                    <!-- AVATAR Title -->
-                                    <RowDefinition Height="Auto"/>
-                                    <!-- Avatar Selection Controls -->
-                                    <RowDefinition Height="Auto"/>
-                                    <!-- Password Input -->
-                                    <RowDefinition Height="Auto"/>
-                                    <!-- Buttons Row -->
+                                    <RowDefinition Height="*"/>
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
-                                <!-- Region Section -->
-                                <StackPanel Grid.Row="0" Margin="0,0,0,15">
-                                    <TextBlock Text="REGION" FontSize="14" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,5"/>
-                                    <StackPanel Orientation="Horizontal">
-                                        <ToggleButton x:Name="btnEUNE" Content="EUNE" Style="{StaticResource ModernToggleButton}" 
-                                                      MinWidth="120" IsChecked="True" Checked="btnEUNE_Checked"/>
-                                        <ToggleButton x:Name="btnEUW" Content="EUW" Style="{StaticResource ModernToggleButton}" 
-                                                      MinWidth="120" Margin="10,0,0,0" Checked="btnEUW_Checked"/>
-                                    </StackPanel>
-                                </StackPanel>
-                                <!-- Account Login Input -->
-                                <StackPanel Grid.Row="1" Margin="0,0,0,15">
-                                    <TextBlock Text="ACCOUNT LOGIN" Foreground="{StaticResource TextColorBrush}" FontSize="14" Margin="0,0,0,5"/>
-                                    <TextBox x:Name="txtAccountLogin" Style="{StaticResource ModernTextBox}"/>
-                                </StackPanel>
-                                <!-- Game Name Input -->
-                                <StackPanel Grid.Row="2" Margin="0,0,0,15">
-                                    <TextBlock Text="GAME NAME" Foreground="{StaticResource TextColorBrush}" FontSize="14" Margin="0,0,0,5"/>
-                                    <TextBox x:Name="txtGameName" Style="{StaticResource ModernTextBox}"/>
-                                </StackPanel>
-                                <!-- Tagline Input -->
-                                <StackPanel Grid.Row="3" Margin="0,0,0,15">
-                                    <TextBlock Text="TAGLINE" Foreground="{StaticResource TextColorBrush}" FontSize="14" Margin="0,0,0,5"/>
-                                    <TextBox x:Name="txtTagLine" Style="{StaticResource ModernTextBox}"/>
-                                </StackPanel>
-                                <!-- AVATAR Title -->
-                                <StackPanel Grid.Row="4" Margin="0,0,0,5">
-                                    <TextBlock Text="AVATAR" Foreground="{StaticResource TextColorBrush}" FontSize="14"/>
-                                </StackPanel>
-                                <!-- Avatar Selection Controls: Button on left, image on right -->
-                                <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,0,0,15" VerticalAlignment="Center">
-                                    <Button x:Name="btnSelectAvatar" Content="Select Avatar" Style="{StaticResource ModernButton}"
-                                            Height="40" Click="btnSelectAvatar_Click" Margin="0,0,10,0"/>
-                                    <Image x:Name="imgAvatarPreview" Width="60" Height="60" Stretch="UniformToFill"/>
-                                </StackPanel>
-                                <!-- Password Input -->
-                                <StackPanel Grid.Row="6" Margin="0,0,0,15">
-                                    <TextBlock Text="PASSWORD" Foreground="{StaticResource TextColorBrush}" FontSize="14" Margin="0,0,0,5"/>
-                                    <PasswordBox x:Name="txtAccountPassword" Template="{StaticResource ModernPasswordBox}" 
-                                                 Foreground="{StaticResource TextColorBrush}" BorderThickness="0" FontSize="14"/>
-                                </StackPanel>
-                                <!-- Buttons Row: ADD, UPDATE, DELETE on left; CHECK RANK on right -->
-                                <Grid Grid.Row="7">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Left">
-                                        <Button x:Name="btnAddAccount" Content="ADD" Style="{StaticResource ModernButton}" 
-                                                Click="btnAddAccount_Click" Margin="0,0,10,0"/>
-                                        <Button x:Name="btnUpdateAccount" Content="UPDATE" Style="{StaticResource SecondaryButton}" 
-                                                Click="btnUpdateAccount_Click" Margin="0,0,10,0"/>
-                                        <Button x:Name="btnDeleteAccount" Content="DELETE" Style="{StaticResource SecondaryButton}" 
-                                                Click="btnDeleteAccount_Click"/>
-                                    </StackPanel>
-                                    <Button Grid.Column="1" x:Name="btnCheckRank" Content="Check Rank" 
-                                            Style="{StaticResource ModernButton}" Click="btnCheckRank_Click"/>
-                                </Grid>
+
+                                <ScrollViewer x:Name="svQuickLogin"
+              Grid.Row="0"
+              VerticalScrollBarVisibility="Disabled"
+              HorizontalScrollBarVisibility="Disabled"
+              Style="{StaticResource DarkScrollViewerStyle}"
+              ClipToBounds="True"
+              CanContentScroll="False"
+              Padding="0,0,8,8">
+                                    <ItemsControl x:Name="icLoginAccounts"
+                          ItemsSource="{Binding ElementName=lbLoginAccounts, Path=ItemsSource}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Columns="4"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Style="{StaticResource InteractiveCardStyle}"
+            Width="208"
+            Height="220"
+            Margin="0,0,12,12"
+            Padding="10"
+            MouseDown="LoginCard_MouseDown"
+            Tag="{Binding}"
+            ToolTip="{Binding Region, StringFormat='Server: {0}'}">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="72"/>
+                                                            <RowDefinition Height="34"/>
+                                                            <RowDefinition Height="36"/>
+                                                            <RowDefinition Height="58"/>
+                                                        </Grid.RowDefinitions>
+
+                                                        <!-- Avatar -->
+                                                        <Border Grid.Row="0"
+                    Width="68"
+                    Height="68"
+                    CornerRadius="10"
+                    Background="#0F1621"
+                    BorderBrush="#263447"
+                    BorderThickness="1"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                                                            <Image Source="{Binding AvatarPath, Converter={StaticResource StringToImageSourceConverter}}"
+                       Stretch="UniformToFill"/>
+                                                        </Border>
+
+                                                        <!-- Name -->
+                                                        <TextBlock Grid.Row="1"
+                       Text="{Binding GameName}"
+                       FontSize="15"
+                       FontWeight="SemiBold"
+                       TextAlignment="Center"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Foreground="{StaticResource TextColorBrush}"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis"
+                       MaxWidth="170"/>
+
+                                                        <!-- Rank badge -->
+                                                        <Border Grid.Row="2"
+                    Background="#162132"
+                    BorderBrush="#32455E"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="10,4"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding RankInfo, Converter={StaticResource RankInfoConverter}}"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource TextColorBrush}"
+                           TextAlignment="Center"/>
+                                                        </Border>
+
+                                                        <!-- Footer stats -->
+                                                        <Border Grid.Row="3"
+                    Background="#111A27"
+                    BorderBrush="#243246"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="8,6"
+                    Margin="0,6,0,0">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <StackPanel Grid.Column="0"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center">
+                                                                    <TextBlock Text="LP"
+                                   FontSize="10"
+                                   Opacity="0.7"
+                                   Foreground="{StaticResource TextColorBrush}"
+                                   HorizontalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding LeaguePoints}"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource TextColorBrush}"
+                                   HorizontalAlignment="Center"/>
+                                                                </StackPanel>
+
+                                                                <StackPanel Grid.Column="1"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center">
+                                                                    <TextBlock Text="W"
+                                   FontSize="10"
+                                   Opacity="0.7"
+                                   Foreground="{StaticResource TextColorBrush}"
+                                   HorizontalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding Wins}"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   Foreground="#22BABB"
+                                   HorizontalAlignment="Center"/>
+                                                                </StackPanel>
+
+                                                                <StackPanel Grid.Column="2"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center">
+                                                                    <TextBlock Text="L"
+                                   FontSize="10"
+                                   Opacity="0.7"
+                                   Foreground="{StaticResource TextColorBrush}"
+                                   HorizontalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding Losses}"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   Foreground="#F24405"
+                                   HorizontalAlignment="Center"/>
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Border>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+
+                                <ListBox x:Name="lbLoginAccounts"
+                 Visibility="Collapsed"
+                 MouseDoubleClick="lbLoginAccounts_MouseDoubleClick"/>
+
+                                <Border x:Name="statsPanel"
+        Grid.Row="1"
+        Background="Transparent"
+        Margin="0,14,0,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <Border Grid.Column="0"
+                Background="#141B24"
+                CornerRadius="14"
+                Padding="14"
+                Margin="0,0,10,0">
+                                            <StackPanel>
+                                                <TextBlock Text="Games"
+                           FontSize="11"
+                           Opacity="0.65"
+                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock x:Name="txtStatsGamesValue"
+                           Text="0"
+                           Margin="0,4,0,0"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource TextColorBrush}"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Grid.Column="1"
+                Background="#141B24"
+                CornerRadius="14"
+                Padding="14"
+                Margin="0,0,10,0">
+                                            <StackPanel>
+                                                <TextBlock Text="Wins"
+                           FontSize="11"
+                           Opacity="0.65"
+                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock x:Name="txtStatsWinsValue"
+                           Text="0"
+                           Margin="0,4,0,0"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           Foreground="#22BABB"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Grid.Column="2"
+                Background="#141B24"
+                CornerRadius="14"
+                Padding="14"
+                Margin="0,0,10,0">
+                                            <StackPanel>
+                                                <TextBlock Text="Losses"
+                           FontSize="11"
+                           Opacity="0.65"
+                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock x:Name="txtStatsLossesValue"
+                           Text="0"
+                           Margin="0,4,0,0"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           Foreground="#F24405"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Grid.Column="3"
+                Background="#141B24"
+                CornerRadius="14"
+                Padding="14"
+                Margin="0,0,10,0">
+                                            <StackPanel>
+                                                <TextBlock Text="Win Rate"
+                           FontSize="11"
+                           Opacity="0.65"
+                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock x:Name="txtStatsWinRateValue"
+                           Text="0%"
+                           Margin="0,4,0,0"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource TextColorBrush}"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Button Grid.Column="4"
+                x:Name="btnRefreshQuickStats"
+                Style="{StaticResource GhostIconButton}"
+                Click="btnRefreshQuickStats_Click"
+                ToolTip="Refresh rank data"
+                VerticalAlignment="Stretch"
+                Margin="0,0,0,0">
+                                            <Path Data="M12,2 A10,10 0 1 1 4.2,5.7 M4,1.5 V6 H8.5"
+                  Stroke="#A8B3C7"
+                  StrokeThickness="1.8"
+                  StrokeStartLineCap="Round"
+                  StrokeEndLineCap="Round"
+                  Stretch="Uniform"
+                  Width="15"
+                  Height="15"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+
+                                <TextBlock x:Name="txtTotalGames" Visibility="Collapsed"/>
                             </Grid>
-                        </Grid>
-                    </TabItem>
-                    <!-- Add to your TabControl -->
-                    <TabItem Header="SETTINGS" Style="{StaticResource TabItemStyle}">
-                        
-                        <Border Background="{StaticResource CardBackgroundBrush}" Padding="20">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" Style="{StaticResource DarkScrollViewerStyle}">
-                                <StackPanel>
+                        </TabItem>
 
-                                    <!-- API Key Section -->
-                                    <TextBlock Text="RIOT API KEY" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
-                                    <Border Background="{StaticResource SecondaryBackgroundBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,20">
-                                        <StackPanel>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBox x:Name="txtApiKey" Style="{StaticResource ModernTextBox}" Grid.Column="0" Margin="0,0,10,0" VerticalContentAlignment="Center"/>
-                                                <Button x:Name="btnSaveApiKey" Content="Save" Style="{StaticResource ModernButton}" Grid.Column="1" Click="btnSaveApiKey_Click" Padding="10,5" MinHeight="30" FontSize="14"/>
-                                            </Grid>
-                                            <TextBlock Text="API Key is stored locally and used for retrieving player ranks." Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" Margin="0,10,0,0" Opacity="0.7"/>
+                        <!-- ACCOUNTS -->
+                        <TabItem Header="Accounts" Style="{StaticResource TabItemStyle}">
+                            <Grid Margin="0,16,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.15*"/>
+                                    <ColumnDefinition Width="0.85*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Left side -->
+                                <Border Grid.Column="0"
+        Background="{StaticResource CardBackgroundBrush}"
+        CornerRadius="18"
+        Padding="16"
+        Margin="0,0,14,0">
+                                    <DockPanel LastChildFill="True">
+
+                                        <!-- Header -->
+                                        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+                                            <TextBlock Text="Saved Accounts"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="{StaticResource TextColorBrush}"/>
+                                            <TextBlock Text="Select an account to edit its details."
+                       Margin="0,6,0,0"
+                       FontSize="13"
+                       Foreground="{StaticResource TextColorBrush}"
+                       Opacity="0.68"/>
                                         </StackPanel>
-                                    </Border>
 
-                                    <!-- Separator -->
-                                    <Rectangle Height="1" Fill="#3E3E4A" Margin="0,10,0,30" />
+                                        <!-- Account list -->
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalAlignment="Stretch"
+                      CanContentScroll="True"
+                      Style="{StaticResource DarkScrollViewerStyle}">
+                                            <ItemsControl x:Name="icAccounts"
+                          ItemsSource="{Binding ElementName=lbAccounts, Path=ItemsSource}"
+                          VerticalAlignment="Top">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
 
-                                    <!-- Run on Startup Section -->
-                                    <TextBlock Text="APPLICATION STARTUP" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
-                                    <Border Background="{StaticResource SecondaryBackgroundBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,20">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Style="{StaticResource InteractiveCardStyle}"
+                                Margin="0,0,0,12"
+                                Padding="14"
+                                MouseDown="AccountCard_MouseDown"
+                                Tag="{Binding}"
+                                ToolTip="{Binding Region, StringFormat='Server: {0}'}">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <Border Width="74"
+                                        Height="74"
+                                        CornerRadius="37"
+                                        Background="#10151C"
+                                        Margin="0,0,14,0">
+                                                                    <Image Source="{Binding AvatarPath, Converter={StaticResource StringToImageSourceConverter}}"
+                                           Stretch="UniformToFill"/>
+                                                                </Border>
+
+                                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                                    <TextBlock Text="{Binding GameName}"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextColorBrush}"
+                                               TextTrimming="CharacterEllipsis"/>
+
+                                                                    <TextBlock Text="{Binding RankInfo, Converter={StaticResource RankInfoConverter}}"
+                                               Margin="0,4,0,0"
+                                               FontSize="13"
+                                               Foreground="{StaticResource TextColorBrush}"
+                                               Opacity="0.88"/>
+
+                                                                    <TextBlock Margin="0,6,0,0"
+                                               FontSize="13"
+                                               Foreground="{StaticResource TextColorBrush}">
+                                        <Run Text="{Binding LeaguePoints}"/>
+                                        <Run Text=" LP  •  "/>
+                                        <Run Text="{Binding Wins}" Foreground="#22BABB"/>
+                                        <Run Text="W / " Foreground="{StaticResource TextColorBrush}"/>
+                                        <Run Text="{Binding Losses}" Foreground="#F24405"/>
+                                        <Run Text="L" Foreground="{StaticResource TextColorBrush}"/>
+                                                                    </TextBlock>
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </DockPanel>
+                                </Border>
+
+                                <ListBox x:Name="lbAccounts"
+                                         Visibility="Collapsed"
+                                         SelectionChanged="lbAccounts_SelectionChanged"/>
+
+                                <!-- Right side -->
+                                <Border Grid.Column="1"
+                                        Background="{StaticResource CardBackgroundBrush}"
+                                        CornerRadius="18"
+                                        Padding="16">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                  Style="{StaticResource DarkScrollViewerStyle}">
                                         <StackPanel>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Run application when Windows starts" Foreground="{StaticResource TextColorBrush}" FontSize="14" VerticalAlignment="Center"/>
-                                                <ToggleButton x:Name="tglRunOnStartup" Grid.Column="1" Content="OFF" Width="100" Height="40" Style="{StaticResource ModernToggleButton}" Checked="tglRunOnStartup_Checked" Unchecked="tglRunOnStartup_Unchecked"/>
-                                            </Grid>
-                                            <TextBlock Text="If enabled, the application will start minimized to the system tray when you log into Windows." Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" Margin="0,10,0,0" Opacity="0.7"/>
-                                        </StackPanel>
-                                    </Border>
+                                            <TextBlock Text="Account Details"
+                                                       FontSize="18"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource TextColorBrush}"/>
+                                            <TextBlock Text="Create a new account or update the selected one."
+                                                       Margin="0,6,0,16"
+                                                       FontSize="13"
+                                                       Foreground="{StaticResource TextColorBrush}"
+                                                       Opacity="0.68"/>
 
-                                    <!-- Separator -->
-                                    <Rectangle Height="1" Fill="#3E3E4A" Margin="0,10,0,30" />
-
-                                    <!-- Auto Accept Section -->
-                                    <TextBlock Text="AUTO ACCEPT MATCHES" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
-                                    <Border Background="{StaticResource SecondaryBackgroundBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,20">
-                                        <StackPanel>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Automatically accept matches when found" Foreground="{StaticResource TextColorBrush}" FontSize="14" VerticalAlignment="Center"/>
-                                                <ToggleButton x:Name="tglAutoAccept" Grid.Column="1" Content="OFF" Width="100" Height="40" Style="{StaticResource ModernToggleButton}" Checked="tglAutoAccept_Checked" Unchecked="tglAutoAccept_Unchecked"/>
-                                            </Grid>
-                                            <!-- Status Indicator -->
-                                            <Border Background="#2A2A36" CornerRadius="8" Padding="15" Margin="0,15,0,0">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <Ellipse x:Name="autoAcceptStatusIndicator" Width="12" Height="12" Fill="#707070" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                                    <TextBlock Grid.Column="1" x:Name="txtAutoAcceptStatus" Text="Auto-accept is inactive. Enable to automatically accept game matches." Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                                </Grid>
-                                            </Border>
-                                        </StackPanel>
-                                    </Border>
-
-                                    <!-- Separator -->
-                                    <Rectangle Height="1" Fill="#3E3E4A" Margin="0,10,0,30" />
-                                    
-                                    <!-- Quick Login Hotkey Section -->
-                                    <TextBlock Text="QUICK LOGIN HOTKEY" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
-                                    <Border Background="{StaticResource SecondaryBackgroundBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,20">
-                                        <StackPanel>
-                                            <TextBlock Text="Set the key for the Ctrl + Alt + [Key] shortcut to open the quick login window." Foreground="{StaticResource TextColorBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/> <!-- "Ctrl + Alt + " Text -->
-                                                    <ColumnDefinition Width="*" MinWidth="60"/> <!-- Key TextBox -->
-                                                    <ColumnDefinition Width="Auto"/> <!-- Save Button -->
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Text="Ctrl + Alt + " VerticalAlignment="Center" Foreground="{StaticResource TextColorBrush}" Margin="0,0,5,0" Grid.Column="0"/>
-                                                <TextBox x:Name="txtHotkeyKey" Width="60" Style="{StaticResource ModernTextBox}" VerticalAlignment="Center" Grid.Column="1" MaxLength="1" CharacterCasing="Upper" Text="L" PreviewTextInput="txtHotkeyKey_PreviewTextInput" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
-                                                <Button x:Name="btnSaveHotkey" Content="Save Hotkey" Style="{StaticResource ModernButton}" Click="btnSaveHotkey_Click" Margin="15,0,0,0" Grid.Column="2" HorizontalAlignment="Left" Padding="10,5" MinHeight="30" FontSize="14"/>                                                
-                                            </Grid>
-                                            <TextBlock x:Name="lblCurrentHotkey" Text="Current Hotkey: Ctrl + Alt + L" Foreground="{StaticResource TextColorBrush}" Margin="0,10,0,0" FontStyle="Italic" Opacity="0.8"/>
-                                        </StackPanel>
-                                    </Border>
-
-                                    <!-- Separator -->
-                                    <Rectangle Height="1" Fill="#3E3E4A" Margin="0,10,0,30" />
-                                    
-                                    <!-- Auto Pick/Ban Settings -->
-                                    <TextBlock Text="AUTO PICK/BAN SETTINGS" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
-                                    <Border Background="{StaticResource SecondaryBackgroundBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,20">
-                                        <StackPanel>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Automatically pick champions when found" Foreground="{StaticResource TextColorBrush}" FontSize="14" VerticalAlignment="Center"/>
-                                                <ToggleButton x:Name="tglAutoPickEnabled" Grid.Column="1" Content="OFF" Width="100" Height="40" Style="{StaticResource ModernToggleButton}" Checked="chkAutoPickEnabled_Checked" Unchecked="chkAutoPickEnabled_Unchecked"/>
-                                            </Grid>
-                                            <!-- Status Indicator -->
-                                            <Border Background="#2A2A36" CornerRadius="8" Padding="15" Margin="0,15,0,0">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <Ellipse x:Name="autoPickStatusIndicator" Width="12" Height="12" Fill="#707070" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                                    <TextBlock Grid.Column="1" x:Name="txtAutoPickStatus" Text="Auto-pick is inactive. Enable to automatically pick champions." Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                                </Grid>
-                                            </Border>
-                                        </StackPanel>
-                                    </Border>
-
-                                    <!-- Separator -->
-                                    <Rectangle Height="1" Fill="#3E3E4A" Margin="0,10,0,30" />
-                                    
-                                    <!-- App Updates Section -->
-                                    <TextBlock Text="APP UPDATES" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
-                                    <Border Background="{StaticResource SecondaryBackgroundBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,20">
-                                        <StackPanel>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel Grid.Column="0">
-                                                    <TextBlock Text="Check for application updates" Foreground="{StaticResource TextColorBrush}" FontSize="14" VerticalAlignment="Center"/>
-                                                    <TextBlock x:Name="txtCurrentVersion" Text="Current version: v1.0.0" Foreground="{StaticResource TextColorBrush}" FontSize="12" Opacity="0.7" Margin="0,5,0,0"/>
+                                            <!-- Region -->
+                                            <StackPanel Margin="0,0,0,14">
+                                                <TextBlock Text="Region"
+                                                           FontSize="13"
+                                                           Margin="0,0,0,6"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.8"/>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <ToggleButton x:Name="btnEUNE"
+                                                                  Content="EUNE"
+                                                                  Width="120"
+                                                                  IsChecked="True"
+                                                                  Style="{StaticResource ModernToggleButton}"
+                                                                  Checked="btnEUNE_Checked"/>
+                                                    <ToggleButton x:Name="btnEUW"
+                                                                  Content="EUW"
+                                                                  Width="120"
+                                                                  Margin="10,0,0,0"
+                                                                  Style="{StaticResource ModernToggleButton}"
+                                                                  Checked="btnEUW_Checked"/>
                                                 </StackPanel>
-                                                <Button x:Name="btnCheckUpdates" Content="Check for Updates" Style="{StaticResource ModernButton}" Grid.Column="1" Click="btnCheckUpdates_Click" Padding="15,8" MinHeight="40" FontSize="14"/>
-                                            </Grid>
-                                            <TextBlock Text="Automatically checks for updates when the application starts. Click the button above to manually check for updates." Foreground="{StaticResource TextColorBrush}" FontSize="14" TextWrapping="Wrap" Margin="0,10,0,0" Opacity="0.7"/>
-                                        </StackPanel>
-                                    </Border>
+                                            </StackPanel>
 
-                                </StackPanel>
-                            </ScrollViewer>
+                                            <!-- Login -->
+                                            <StackPanel Margin="0,0,0,14">
+                                                <TextBlock Text="Account Login"
+                                                           FontSize="13"
+                                                           Margin="0,0,0,6"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.8"/>
+                                                <TextBox x:Name="txtAccountLogin"
+                                                         Style="{StaticResource ModernTextBox}"/>
+                                            </StackPanel>
+
+                                            <!-- Game Name -->
+                                            <StackPanel Margin="0,0,0,14">
+                                                <TextBlock Text="Game Name"
+                                                           FontSize="13"
+                                                           Margin="0,0,0,6"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.8"/>
+                                                <TextBox x:Name="txtGameName"
+                                                         Style="{StaticResource ModernTextBox}"/>
+                                            </StackPanel>
+
+                                            <!-- Tagline -->
+                                            <StackPanel Margin="0,0,0,14">
+                                                <TextBlock Text="Tagline"
+                                                           FontSize="13"
+                                                           Margin="0,0,0,6"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.8"/>
+                                                <TextBox x:Name="txtTagLine"
+                                                         Style="{StaticResource ModernTextBox}"/>
+                                            </StackPanel>
+
+                                            <!-- Avatar -->
+                                            <StackPanel Margin="0,0,0,14">
+                                                <TextBlock Text="Avatar"
+                                                           FontSize="13"
+                                                           Margin="0,0,0,6"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.8"/>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button x:Name="btnSelectAvatar"
+                                                            Content="Select Avatar"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Click="btnSelectAvatar_Click"
+                                                            Margin="0,0,12,0"/>
+                                                    <Border Width="64"
+                                                            Height="64"
+                                                            CornerRadius="12"
+                                                            Background="#10151C">
+                                                        <Image x:Name="imgAvatarPreview"
+                                                               Stretch="UniformToFill"/>
+                                                    </Border>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- Password -->
+                                            <StackPanel Margin="0,0,0,18">
+                                                <TextBlock Text="Password"
+                                                           FontSize="13"
+                                                           Margin="0,0,0,6"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.8"/>
+                                                <PasswordBox x:Name="txtAccountPassword"
+                                                             Template="{StaticResource ModernPasswordBox}"
+                                                             Foreground="{StaticResource TextColorBrush}"
+                                                             BorderThickness="1"
+                                                             FontSize="14"/>
+                                            </StackPanel>
+
+                                            <!-- Buttons -->
+                                            <StackPanel>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                    <Button x:Name="btnAddAccount"
+                                                            Content="Add Account"
+                                                            Style="{StaticResource ModernButton}"
+                                                            Click="btnAddAccount_Click"
+                                                            Margin="0,0,10,0"/>
+
+                                                    <Button x:Name="btnUpdateAccount"
+                                                            Content="Update"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Click="btnUpdateAccount_Click"
+                                                            Margin="0,0,10,0"/>
+
+                                                    <Button x:Name="btnDeleteAccount"
+                                                            Content="Delete"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Click="btnDeleteAccount_Click"/>
+                                                </StackPanel>
+
+                                                <Button x:Name="btnCheckRank"
+                                                        Content="Refresh Rank Data"
+                                                        Style="{StaticResource SecondaryButton}"
+                                                        Click="btnCheckRank_Click"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </Border>
+                            </Grid>
+                        </TabItem>
+
+                        <!-- SETTINGS -->
+                        <TabItem x:Name="SettingsTab"
+                                 Header="Settings"
+                                 Style="{StaticResource TabItemStyle}">
+                            <Grid Margin="0,16,0,0">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                              Style="{StaticResource DarkScrollViewerStyle}">
+                                    <StackPanel>
+
+                                        <!-- API -->
+                                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                                CornerRadius="18"
+                                                Padding="18"
+                                                Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <TextBlock Text="Riot API Key"
+                                                           FontSize="18"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock Text="Used to fetch player rank and account data."
+                                                           Margin="0,6,0,14"
+                                                           FontSize="13"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.68"/>
+
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBox x:Name="txtApiKey"
+                                                             Grid.Column="0"
+                                                             Margin="0,0,10,0"
+                                                             Style="{StaticResource ModernTextBox}"/>
+
+                                                    <Button x:Name="btnSaveApiKey"
+                                                            Grid.Column="1"
+                                                            Content="Save"
+                                                            Style="{StaticResource ModernButton}"
+                                                            Click="btnSaveApiKey_Click"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Startup -->
+                                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                                CornerRadius="18"
+                                                Padding="18"
+                                                Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <TextBlock Text="Application Startup"
+                                                           FontSize="18"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock Text="Start the app automatically with Windows."
+                                                           Margin="0,6,0,14"
+                                                           FontSize="13"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.68"/>
+
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="Run application when Windows starts"
+                                                               FontSize="14"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{StaticResource TextColorBrush}"/>
+
+                                                    <ToggleButton x:Name="tglRunOnStartup"
+                                                                  Grid.Column="1"
+                                                                  Width="100"
+                                                                  Content="OFF"
+                                                                  Style="{StaticResource ModernToggleButton}"
+                                                                  Checked="tglRunOnStartup_Checked"
+                                                                  Unchecked="tglRunOnStartup_Unchecked"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Auto Accept -->
+                                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                                CornerRadius="18"
+                                                Padding="18"
+                                                Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <TextBlock Text="Auto Accept"
+                                                           FontSize="18"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock Text="Automatically accept a match when League finds one."
+                                                           Margin="0,6,0,14"
+                                                           FontSize="13"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.68"/>
+
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="Enable automatic match accept"
+                                                               FontSize="14"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{StaticResource TextColorBrush}"/>
+
+                                                    <ToggleButton x:Name="tglAutoAccept"
+                                                                  Grid.Column="1"
+                                                                  Width="100"
+                                                                  Content="OFF"
+                                                                  Style="{StaticResource ModernToggleButton}"
+                                                                  Checked="tglAutoAccept_Checked"
+                                                                  Unchecked="tglAutoAccept_Unchecked"/>
+                                                </Grid>
+
+                                                <Border Background="{StaticResource SecondaryBackgroundBrush}"
+                                                        CornerRadius="12"
+                                                        Padding="14"
+                                                        Margin="0,14,0,0">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <Ellipse x:Name="autoAcceptStatusIndicator"
+                                                                 Width="12"
+                                                                 Height="12"
+                                                                 Fill="#707070"
+                                                                 Margin="0,0,10,0"
+                                                                 VerticalAlignment="Center"/>
+
+                                                        <TextBlock Grid.Column="1"
+                                                                   x:Name="txtAutoAcceptStatus"
+                                                                   Text="Auto-accept is inactive. Enable to automatically accept game matches."
+                                                                   FontSize="13"
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="{StaticResource TextColorBrush}"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </Border>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Hotkey -->
+                                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                                CornerRadius="18"
+                                                Padding="18"
+                                                Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <TextBlock Text="Quick Login Hotkey"
+                                                           FontSize="18"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock Text="Shortcut format: Ctrl + Alt + [Key]"
+                                                           Margin="0,6,0,14"
+                                                           FontSize="13"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.68"/>
+
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="Ctrl + Alt +"
+                                                               Margin="0,0,10,0"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{StaticResource TextColorBrush}"/>
+
+                                                    <TextBox x:Name="txtHotkeyKey"
+                                                             Grid.Column="1"
+                                                             Width="68"
+                                                             MaxLength="1"
+                                                             CharacterCasing="Upper"
+                                                             Text="L"
+                                                             HorizontalContentAlignment="Center"
+                                                             Style="{StaticResource ModernTextBox}"
+                                                             PreviewTextInput="txtHotkeyKey_PreviewTextInput"/>
+
+                                                    <Button x:Name="btnSaveHotkey"
+                                                            Grid.Column="2"
+                                                            Margin="12,0,0,0"
+                                                            Content="Save Hotkey"
+                                                            Style="{StaticResource ModernButton}"
+                                                            Click="btnSaveHotkey_Click"/>
+                                                </Grid>
+
+                                                <TextBlock x:Name="lblCurrentHotkey"
+                                                           Text="Current Hotkey: Ctrl + Alt + L"
+                                                           Margin="0,12,0,0"
+                                                           FontSize="13"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.76"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Updates -->
+                                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                                CornerRadius="18"
+                                                Padding="18">
+                                            <StackPanel>
+                                                <TextBlock Text="App Updates"
+                                                           FontSize="18"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock Text="Check for new versions of the application."
+                                                           Margin="0,6,0,14"
+                                                           FontSize="13"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.68"/>
+
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock x:Name="txtCurrentVersion"
+                                                                   Text="Current version: v1.0.0"
+                                                                   FontSize="14"
+                                                                   Foreground="{StaticResource TextColorBrush}"/>
+                                                    </StackPanel>
+
+                                                    <Button x:Name="btnCheckUpdates"
+                                                            Grid.Column="1"
+                                                            Content="Check for Updates"
+                                                            Style="{StaticResource ModernButton}"
+                                                            Click="btnCheckUpdates_Click"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
+                        </TabItem>
+
+                        <!-- Hidden placeholder tab to preserve compile compatibility -->
+                        <TabItem Header="Auto-Pick"
+                                 Style="{StaticResource TabItemStyle}"
+                                 Visibility="Collapsed">
+                            <Grid/>
+                        </TabItem>
+                    </TabControl>
+
+                    <!-- Hidden controls required by existing Auto-Pick code-behind -->
+                    <StackPanel Visibility="Collapsed">
+                        <CheckBox x:Name="chkAutoPickEnabled"
+                                  Checked="chkAutoPickEnabled_Checked"
+                                  Unchecked="chkAutoPickEnabled_Unchecked"/>
+                        <CheckBox x:Name="chkAutoBanEnabled"
+                                  Checked="chkAutoBanEnabled_Checked"
+                                  Unchecked="chkAutoBanEnabled_Unchecked"/>
+                        <CheckBox x:Name="chkAutoSpellsEnabled"
+                                  Checked="chkAutoSpellsEnabled_Checked"
+                                  Unchecked="chkAutoSpellsEnabled_Unchecked"/>
+                        <CheckBox x:Name="chkInstantLock"
+                                  Checked="chkInstantLock_Checked"
+                                  Unchecked="chkInstantLock_Unchecked"/>
+                        <CheckBox x:Name="chkInstantBan"
+                                  Checked="chkInstantBan_Checked"
+                                  Unchecked="chkInstantBan_Unchecked"/>
+
+                        <TextBox x:Name="txtPickHoverDelay" Text="1000"/>
+                        <TextBox x:Name="txtPickLockDelay" Text="2000"/>
+                        <TextBox x:Name="txtBanHoverDelay" Text="1000"/>
+                        <TextBox x:Name="txtBanLockDelay" Text="2000"/>
+
+                        <Border x:Name="primaryChampCard" MouseDown="primaryChampCard_MouseDown">
+                            <Grid>
+                                <Image/>
+                                <TextBlock/>
+                            </Grid>
                         </Border>
-                    </TabItem>
-                    <TabItem Header="AUTO-PICK" Style="{StaticResource TabItemStyle}">
-                        <Grid Margin="0,20,0,0">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
 
-                            <!-- Top Controls -->
-                            <StackPanel Grid.Row="0" Margin="0,0,0,15">
-                                <TextBlock Text="AUTO-PICK SETTINGS" FontSize="16" FontWeight="SemiBold" 
-                      Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
+                        <Border x:Name="secondaryChampCard" MouseDown="secondaryChampCard_MouseDown">
+                            <Grid>
+                                <Image/>
+                                <TextBlock/>
+                            </Grid>
+                        </Border>
 
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
+                        <Border x:Name="banChampCard" MouseDown="banChampCard_MouseDown">
+                            <Grid>
+                                <Image/>
+                                <TextBlock/>
+                            </Grid>
+                        </Border>
 
-                                    <StackPanel Grid.Column="0" Orientation="Vertical" Margin="0,0,15,0">
-                                        <CheckBox x:Name="chkAutoPickEnabled" Content="Enable Auto-Pick" 
-                             Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,5"
-                             Checked="chkAutoPickEnabled_Checked" Unchecked="chkAutoPickEnabled_Unchecked"/>
-                                        <CheckBox x:Name="chkAutoBanEnabled" Content="Enable Auto-Ban" 
-                             Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,5"
-                             Checked="chkAutoBanEnabled_Checked" Unchecked="chkAutoBanEnabled_Unchecked"/>
-                                        <CheckBox x:Name="chkAutoSpellsEnabled" Content="Enable Auto-Spells" 
-                             Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,5"
-                             Checked="chkAutoSpellsEnabled_Checked" Unchecked="chkAutoSpellsEnabled_Unchecked"/>
-                                    </StackPanel>
+                        <Border x:Name="spell1Card" MouseDown="spell1Card_MouseDown">
+                            <Grid>
+                                <Image/>
+                                <TextBlock/>
+                            </Grid>
+                        </Border>
 
-                                    <StackPanel Grid.Column="1" Orientation="Vertical">
-                                        <CheckBox x:Name="chkInstantLock" Content="Instant Lock-in (Pick)" 
-                             Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,5"
-                             IsEnabled="{Binding ElementName=chkAutoPickEnabled, Path=IsChecked}"
-                             Checked="chkInstantLock_Checked" Unchecked="chkInstantLock_Unchecked"/>
-                                        <CheckBox x:Name="chkInstantBan" Content="Instant Lock-in (Ban)" 
-                             Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,5"
-                             IsEnabled="{Binding ElementName=chkAutoBanEnabled, Path=IsChecked}"
-                             Checked="chkInstantBan_Checked" Unchecked="chkInstantBan_Unchecked"/>
-                                    </StackPanel>
-                                </Grid>
-                            </StackPanel>
-
-                            <!-- Main Content - Selection Tabs -->
-                            <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
-                                <TabItem Header="Pick Champions" Style="{StaticResource TabItemStyle}">
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="*"/>
-                                        </Grid.RowDefinitions>
-
-                                        <!-- Champion Selection -->
-                                        <Grid Grid.Row="0" Margin="0,0,0,15">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
-                                            </Grid.RowDefinitions>
-
-                                            <!-- Primary Champion -->
-                                            <TextBlock Grid.Column="0" Grid.Row="0" Text="PRIMARY CHAMPION" 
-                                  Foreground="{StaticResource TextColorBrush}" FontSize="14" 
-                                  Margin="0,0,10,5"/>
-                                            <Border Grid.Column="0" Grid.Row="1" Style="{StaticResource AccountCard}" 
-                                Height="180" Width="180" HorizontalAlignment="Left"
-                                x:Name="primaryChampCard" MouseDown="primaryChampCard_MouseDown">
-                                                <Grid>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="Auto"/>
-                                                    </Grid.RowDefinitions>
-                                                    <Image Grid.Row="0" Source="{Binding PrimaryChampionImage}"
-                                       Width="120" Height="120" Stretch="UniformToFill" 
-                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                                                    <TextBlock Grid.Row="1" Text="{Binding PrimaryChampionName}" 
-                                           FontSize="16" FontWeight="Bold" TextAlignment="Center"
-                                           HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
-                                                </Grid>
-                                            </Border>
-
-                                            <!-- Secondary Champion -->
-                                            <TextBlock Grid.Column="1" Grid.Row="0" Text="SECONDARY CHAMPION" 
-                                  Foreground="{StaticResource TextColorBrush}" FontSize="14" 
-                                  Margin="10,0,0,5"/>
-                                            <Border Grid.Column="1" Grid.Row="1" Style="{StaticResource AccountCard}" 
-                                Height="180" Width="180" HorizontalAlignment="Left" Margin="10,0,0,0"
-                                x:Name="secondaryChampCard" MouseDown="secondaryChampCard_MouseDown">
-                                                <Grid>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="Auto"/>
-                                                    </Grid.RowDefinitions>
-                                                    <Image Grid.Row="0" Source="{Binding SecondaryChampionImage}"
-                                       Width="120" Height="120" Stretch="UniformToFill" 
-                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                                                    <TextBlock Grid.Row="1" Text="{Binding SecondaryChampionName}" 
-                                           FontSize="16" FontWeight="Bold" TextAlignment="Center"
-                                           HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
-                                                </Grid>
-                                            </Border>
-                                        </Grid>
-
-                                        <!-- Delay Settings -->
-                                        <StackPanel Grid.Row="1">
-                                            <TextBlock Text="PICK TIMING SETTINGS" FontSize="16" FontWeight="SemiBold"
-                                  Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
-
-                                            <Grid Margin="0,0,0,10">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Champion Hover Delay (ms):" 
-                                      Foreground="{StaticResource TextColorBrush}" VerticalAlignment="Center"/>
-                                                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                                    <Button x:Name="btnDecreaseHoverDelay" Content="-" Width="40" Height="40"
-                                        Style="{StaticResource SecondaryButton}" Click="btnDecreaseHoverDelay_Click"/>
-                                                    <TextBox x:Name="txtPickHoverDelay" Width="80" Margin="10,0" TextAlignment="Center"
-                                         Style="{StaticResource ModernTextBox}" Text="0"/>
-                                                    <Button x:Name="btnIncreaseHoverDelay" Content="+" Width="40" Height="40"
-                                        Style="{StaticResource SecondaryButton}" Click="btnIncreaseHoverDelay_Click"/>
-                                                </StackPanel>
-                                            </Grid>
-
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Champion Lock-in Delay (ms):" 
-                                      Foreground="{StaticResource TextColorBrush}" VerticalAlignment="Center"/>
-                                                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                                    <Button x:Name="btnDecreaseLockDelay" Content="-" Width="40" Height="40"
-                                        Style="{StaticResource SecondaryButton}" Click="btnDecreaseLockDelay_Click"/>
-                                                    <TextBox x:Name="txtPickLockDelay" Width="80" Margin="10,0" TextAlignment="Center"
-                                         Style="{StaticResource ModernTextBox}" Text="1000"/>
-                                                    <Button x:Name="btnIncreaseLockDelay" Content="+" Width="40" Height="40"
-                                        Style="{StaticResource SecondaryButton}" Click="btnIncreaseLockDelay_Click"/>
-                                                </StackPanel>
-                                            </Grid>
-                                        </StackPanel>
-                                    </Grid>
-                                </TabItem>
-
-                                <TabItem Header="Ban Champion" Style="{StaticResource TabItemStyle}">
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="*"/>
-                                        </Grid.RowDefinitions>
-
-                                        <!-- Ban Champion Selection -->
-                                        <StackPanel Grid.Row="0" Margin="0,0,0,15">
-                                            <TextBlock Text="CHAMPION TO BAN" Foreground="{StaticResource TextColorBrush}" 
-                                  FontSize="14" Margin="0,0,0,5"/>
-                                            <Border Style="{StaticResource AccountCard}" Height="180" Width="180" 
-                                HorizontalAlignment="Left" x:Name="banChampCard" 
-                                MouseDown="banChampCard_MouseDown">
-                                                <Grid>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="Auto"/>
-                                                    </Grid.RowDefinitions>
-                                                    <Image Grid.Row="0" Source="{Binding BanChampionImage}"
-                                       Width="120" Height="120" Stretch="UniformToFill" 
-                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                                                    <TextBlock Grid.Row="1" Text="{Binding BanChampionName}" 
-                                           FontSize="16" FontWeight="Bold" TextAlignment="Center"
-                                           HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
-                                                </Grid>
-                                            </Border>
-                                        </StackPanel>
-
-                                        <!-- Ban Delay Settings -->
-                                        <StackPanel Grid.Row="1">
-                                            <TextBlock Text="BAN TIMING SETTINGS" FontSize="16" FontWeight="SemiBold"
-                                  Foreground="{StaticResource TextColorBrush}" Margin="0,0,0,10"/>
-
-                                            <Grid Margin="0,0,0,10">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Ban Hover Delay (ms):" 
-                                      Foreground="{StaticResource TextColorBrush}" VerticalAlignment="Center"/>
-                                                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                                    <Button x:Name="btnDecreaseBanHoverDelay" Content="-" Width="40" Height="40"
-                                        Style="{StaticResource SecondaryButton}" Click="btnDecreaseBanHoverDelay_Click"/>
-                                                    <TextBox x:Name="txtBanHoverDelay" Width="80" Margin="10,0" TextAlignment="Center"
-                                         Style="{StaticResource ModernTextBox}" Text="0"/>
-                                                    <Button x:Name="btnIncreaseBanHoverDelay" Content="+" Width="40" Height="40"
-                                        Style="{StaticResource SecondaryButton}" Click="btnIncreaseBanHoverDelay_Click"/>
-                                                </StackPanel>
-                                            </Grid>
-
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Ban Lock-in Delay (ms):" 
-                                      Foreground="{StaticResource TextColorBrush}" VerticalAlignment="Center"/>
-                                                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                                    <Button x:Name="btnDecreaseBanLockDelay" Content="-" Width="40" Height="40"
-                                        Style="{StaticResource SecondaryButton}" Click="btnDecreaseBanLockDelay_Click"/>
-                                                    <TextBox x:Name="txtBanLockDelay" Width="80" Margin="10,0" TextAlignment="Center"
-                                         Style="{StaticResource ModernTextBox}" Text="1000"/>
-                                                    <Button x:Name="btnIncreaseBanLockDelay" Content="+" Width="40" Height="40"
-                                        Style="{StaticResource SecondaryButton}" Click="btnIncreaseBanLockDelay_Click"/>
-                                                </StackPanel>
-                                            </Grid>
-                                        </StackPanel>
-                                    </Grid>
-                                </TabItem>
-
-                                <TabItem Header="Summoner Spells" Style="{StaticResource TabItemStyle}">
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="*"/>
-                                        </Grid.RowDefinitions>
-
-                                        <!-- Spell Selection -->
-                                        <Grid Grid.Row="0" Margin="0,0,0,15">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
-                                            </Grid.RowDefinitions>
-
-                                            <!-- Spell 1 -->
-                                            <TextBlock Grid.Column="0" Grid.Row="0" Text="SPELL 1" 
-                                  Foreground="{StaticResource TextColorBrush}" FontSize="14" 
-                                  Margin="0,0,10,5"/>
-                                            <Border Grid.Column="0" Grid.Row="1" Style="{StaticResource AccountCard}" 
-                                Height="180" Width="180" HorizontalAlignment="Left"
-                                x:Name="spell1Card" MouseDown="spell1Card_MouseDown">
-                                                <Grid>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="Auto"/>
-                                                    </Grid.RowDefinitions>
-                                                    <Image Grid.Row="0" Source="{Binding Spell1Image}"
-                                       Width="120" Height="120" Stretch="UniformToFill" 
-                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                                                    <TextBlock Grid.Row="1" Text="{Binding Spell1Name}" 
-                                           FontSize="16" FontWeight="Bold" TextAlignment="Center"
-                                           HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
-                                                </Grid>
-                                            </Border>
-
-                                            <!-- Spell 2 -->
-                                            <TextBlock Grid.Column="1" Grid.Row="0" Text="SPELL 2" 
-                                  Foreground="{StaticResource TextColorBrush}" FontSize="14" 
-                                  Margin="10,0,0,5"/>
-                                            <Border Grid.Column="1" Grid.Row="1" Style="{StaticResource AccountCard}" 
-                                Height="180" Width="180" HorizontalAlignment="Left" Margin="10,0,0,0"
-                                x:Name="spell2Card" MouseDown="spell2Card_MouseDown">
-                                                <Grid>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="Auto"/>
-                                                    </Grid.RowDefinitions>
-                                                    <Image Grid.Row="0" Source="{Binding Spell2Image}"
-                                       Width="120" Height="120" Stretch="UniformToFill" 
-                                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                                                    <TextBlock Grid.Row="1" Text="{Binding Spell2Name}" 
-                                           FontSize="16" FontWeight="Bold" TextAlignment="Center"
-                                           HorizontalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
-                                                </Grid>
-                                            </Border>
-                                        </Grid>
-
-                                        <!-- Description -->
-                                        <TextBlock Grid.Row="1" Text="Summoner spells will automatically be selected when entering champion select." 
-                              Foreground="{StaticResource TextColorBrush}" TextWrapping="Wrap"/>
-                                    </Grid>
-                                </TabItem>
-                            </TabControl>
-                        </Grid>
-                    </TabItem>
-                </TabControl>
+                        <Border x:Name="spell2Card" MouseDown="spell2Card_MouseDown">
+                            <Grid>
+                                <Image/>
+                                <TextBlock/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Border>
     </Grid>
