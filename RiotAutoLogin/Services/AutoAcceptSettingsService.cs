@@ -7,7 +7,9 @@ namespace RiotAutoLogin.Services
 {
     public static class AutoAcceptSettingsService
     {
-        public const int MaxDelaySeconds = 30;
+        // League's ready check is short. Keep this below the full queue-pop timer so
+        // the local LCU request still has enough time to be sent after polling detects ReadyCheck.
+        public const int MaxDelaySeconds = 7;
         private static readonly string SettingsFilePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "RiotClientAutoLogin", "autoaccept_settings.json");
