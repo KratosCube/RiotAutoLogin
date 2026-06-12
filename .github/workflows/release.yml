@@ -1,0 +1,70 @@
+name: Build release executable
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to upload the executable to, for example v1.1.1
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    name: Build and upload Windows executable
+    runs-on: windows-latest
+
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      PROJECT_PATH: RiotAutoLogin/RiotAutoLogin.csproj
+      PUBLISH_DIR: publish
+      ARTIFACT_DIR: artifact
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore $env:PROJECT_PATH
+
+      - name: Publish self-contained single-file exe
+        run: >
+          dotnet publish $env:PROJECT_PATH
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output $env:PUBLISH_DIR
+          /p:PublishSingleFile=true
+          /p:IncludeNativeLibrariesForSelfExtract=true
+          /p:EnableCompressionInSingleFile=true
+
+      - name: Prepare release asset
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:ARTIFACT_DIR | Out-Null
+          $source = Join-Path $env:PUBLISH_DIR "RiotAutoLogin.exe"
+          $assetName = "RiotAutoLogin-$env:RELEASE_TAG-win-x64.exe"
+          $destination = Join-Path $env:ARTIFACT_DIR $assetName
+
+          if (!(Test-Path $source)) {
+            Write-Error "Published executable was not found at $source"
+          }
+
+          Copy-Item $source $destination -Force
+          Write-Host "Prepared release asset: $destination"
+
+      - name: Upload exe to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: artifact/*.exe
+          fail_on_unmatched_files: true
