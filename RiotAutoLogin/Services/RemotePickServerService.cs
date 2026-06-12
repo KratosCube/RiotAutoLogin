@@ -221,6 +221,7 @@ namespace RiotAutoLogin.Services
 
             if (!LCUService.CheckIfLeagueClientIsOpen())
             {
+                state.PhaseLabel = "League Closed";
                 state.Message = "League Client is not running.";
                 await AddChampionAndSpellListsAsync(state, new HashSet<int>(), new HashSet<int>());
                 return state;
@@ -235,6 +236,7 @@ namespace RiotAutoLogin.Services
 
             if (!state.IsInChampSelect)
             {
+                state.PhaseLabel = GetGameflowPhaseLabel(state.Phase);
                 state.Message = state.Phase == "None"
                     ? "Waiting for League Client state..."
                     : $"Current phase: {state.Phase}. Waiting for champion select.";
@@ -246,6 +248,7 @@ namespace RiotAutoLogin.Services
             string[] sessionResult = LCUService.ClientRequest("GET", "lol-champ-select/v1/session");
             if (sessionResult[0] != "200")
             {
+                state.PhaseLabel = "Champ Select";
                 state.Message = $"Could not read champion select session. Status: {sessionResult[0]}";
                 await AddChampionAndSpellListsAsync(state, bannedChampionIds, pickedChampionIds);
                 return state;
@@ -258,7 +261,9 @@ namespace RiotAutoLogin.Services
             ParsePicks(root, pickedChampionIds);
             ParseLocalPlayerSelection(root, state);
             ParseAvailableSpellIds(root, state);
+            ParseTimer(root, state);
             ParseActions(root, state);
+            state.PhaseLabel = GetChampSelectPhaseLabel(state, bannedChampionIds);
 
             state.BannedChampionIds = bannedChampionIds.OrderBy(id => id).ToList();
             state.PickedChampionIds = pickedChampionIds.OrderBy(id => id).ToList();
@@ -346,8 +351,6 @@ namespace RiotAutoLogin.Services
 
             bool success = false;
 
-            // In draft, the local player's pick action often exists before it is in progress.
-            // Hovering that future pick action is closer to how the client declares intent than patching the active ban action.
             if (!string.IsNullOrWhiteSpace(state.PickActionId))
                 success = LCUService.SelectChampion(request.ChampionId, state.PickActionId, complete: false);
 
@@ -427,7 +430,6 @@ namespace RiotAutoLogin.Services
                 if (result[0].StartsWith("2"))
                     return RequestLeave("ChampSelect", result);
 
-                // Some clients return 404 for the old quit endpoint. The reliable dodge fallback is closing the League client.
                 bool closed = CloseLeagueClientForDodge();
                 return new RemotePickActionResult
                 {
@@ -691,6 +693,62 @@ namespace RiotAutoLogin.Services
             var spellIds = new HashSet<int>();
             CollectAvailableSpellIds(root, spellIds);
             state.AvailableSpellIds = spellIds.OrderBy(id => id).ToList();
+        }
+
+        private static void ParseTimer(JsonElement root, RemotePickState state)
+        {
+            if (!root.TryGetProperty("timer", out JsonElement timerElement) || timerElement.ValueKind != JsonValueKind.Object)
+                return;
+
+            if (timerElement.TryGetProperty("phase", out JsonElement phaseElement))
+                state.ChampSelectPhase = phaseElement.GetString() ?? string.Empty;
+
+            if (timerElement.TryGetProperty("adjustedTimeLeftInPhase", out JsonElement leftElement) && TryGetInt(leftElement, out int timeLeftMs))
+                state.TimeLeftInPhaseMs = Math.Max(0, timeLeftMs);
+
+            if (timerElement.TryGetProperty("totalTimeInPhase", out JsonElement totalElement) && TryGetInt(totalElement, out int totalMs))
+                state.TotalTimeInPhaseMs = Math.Max(0, totalMs);
+
+            if (timerElement.TryGetProperty("isInfinite", out JsonElement infiniteElement) && infiniteElement.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                state.IsTimerInfinite = infiniteElement.GetBoolean();
+        }
+
+        private static string GetGameflowPhaseLabel(string phase)
+        {
+            return phase switch
+            {
+                "Lobby" => "Lobby",
+                "Matchmaking" => "In Queue",
+                "ReadyCheck" => "Match Found",
+                "ChampSelect" => "Champ Select",
+                "InProgress" => "In Game",
+                "WaitingForStats" or "PreEndOfGame" or "EndOfGame" => "Post Game",
+                _ => "Waiting"
+            };
+        }
+
+        private static string GetChampSelectPhaseLabel(RemotePickState state, HashSet<int> bannedChampionIds)
+        {
+            if (state.CanBan)
+                return "Ban Phase";
+
+            if (state.CanPick)
+                return "Pick Phase";
+
+            string phase = state.ChampSelectPhase.ToUpperInvariant();
+            if (phase.Contains("PLANNING"))
+                return "Pre-Ban Planning";
+
+            if (phase.Contains("BAN") && !phase.Contains("PICK"))
+                return "Ban Phase";
+
+            if (phase.Contains("BAN") || phase.Contains("PICK"))
+                return bannedChampionIds.Count == 0 ? "Ban / Pick Phase" : "Pick Phase";
+
+            if (phase.Contains("FINAL"))
+                return "Finalize Loadout";
+
+            return "Champ Select";
         }
 
         private static void CollectAvailableSpellIds(JsonElement element, HashSet<int> spellIds)
