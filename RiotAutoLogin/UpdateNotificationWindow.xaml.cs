@@ -12,15 +12,16 @@ namespace RiotAutoLogin
         private readonly UpdateInfo _updateInfo;
         private readonly UpdateService _updateService;
         private string? _downloadedFilePath;
+        private bool _installStarted;
 
         public UpdateNotificationWindow(UpdateInfo updateInfo, UpdateService updateService)
         {
             InitializeComponent();
             _updateInfo = updateInfo;
             _updateService = updateService;
-            
+
             InitializeUI();
-            
+
             // Subscribe to update progress
             _updateService.UpdateProgressChanged += OnUpdateProgressChanged;
         }
@@ -33,8 +34,8 @@ namespace RiotAutoLogin
                                $"Latest version: v{_updateInfo.LatestVersion}";
 
             // Changelog
-            txtChangelog.Text = string.IsNullOrEmpty(_updateInfo.Changelog) 
-                ? "No changelog available." 
+            txtChangelog.Text = string.IsNullOrEmpty(_updateInfo.Changelog)
+                ? "No changelog available."
                 : _updateInfo.Changelog;
 
             // File size
@@ -55,7 +56,9 @@ namespace RiotAutoLogin
                 btnDownload.Content = "Downloading...";
 
                 // Create download path
-                var tempDir = Path.GetTempPath();
+                var tempDir = Path.Combine(Path.GetTempPath(), "RiotAutoLogin", "Updates");
+                Directory.CreateDirectory(tempDir);
+
                 var fileName = $"RiotAutoLogin-v{_updateInfo.LatestVersion}.exe";
                 _downloadedFilePath = Path.Combine(tempDir, fileName);
 
@@ -69,19 +72,19 @@ namespace RiotAutoLogin
                     btnDownload.IsEnabled = true;
                     btnDownload.Click -= btnDownload_Click;
                     btnDownload.Click += btnInstall_Click;
-                    
+
                     txtProgress.Text = "Download completed! Click 'Install & Restart' to update.";
                 }
                 else
                 {
-                    MessageBox.Show("Failed to download the update. Please try again later.", 
+                    MessageBox.Show("Failed to download the update. Please try again later.",
                         "Download Failed", MessageBoxButton.OK, MessageBoxImage.Error);
                     ResetDownloadButton();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error downloading update: {ex.Message}", 
+                MessageBox.Show($"Error downloading update: {ex.Message}",
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 ResetDownloadButton();
             }
@@ -93,7 +96,7 @@ namespace RiotAutoLogin
             {
                 if (string.IsNullOrEmpty(_downloadedFilePath) || !File.Exists(_downloadedFilePath))
                 {
-                    MessageBox.Show("Downloaded file not found. Please download again.", 
+                    MessageBox.Show("Downloaded file not found. Please download again.",
                         "Installation Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
@@ -104,25 +107,37 @@ namespace RiotAutoLogin
 
                 if (result == MessageBoxResult.Yes)
                 {
-                    // Install the update (this will close the application)
-                    _updateService.InstallUpdate(_downloadedFilePath, restartApp: true);
+                    btnDownload.IsEnabled = false;
+                    btnDownload.Content = "Installing...";
+                    _installStarted = true;
+
+                    // Install the update. The updater batch needs the downloaded file after this window closes,
+                    // so OnClosed must not delete it once installation has started.
+                    bool started = _updateService.InstallUpdate(_downloadedFilePath, restartApp: true);
+                    if (!started)
+                    {
+                        _installStarted = false;
+                        btnDownload.IsEnabled = true;
+                        btnDownload.Content = "Install & Restart";
+                    }
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error installing update: {ex.Message}", 
+                _installStarted = false;
+                MessageBox.Show($"Error installing update: {ex.Message}",
                     "Installation Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private void btnLater_Click(object sender, RoutedEventArgs e)
         {
-            this.Close();
+            Close();
         }
 
         private void btnClose_Click(object sender, RoutedEventArgs e)
         {
-            this.Close();
+            Close();
         }
 
         private void OnUpdateProgressChanged(UpdateProgress progress)
@@ -135,7 +150,7 @@ namespace RiotAutoLogin
 
                 if (progress.Status == UpdateStatus.Error)
                 {
-                    MessageBox.Show($"Update error: {progress.Message}", 
+                    MessageBox.Show($"Update error: {progress.Message}",
                         "Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     ResetDownloadButton();
                 }
@@ -153,9 +168,10 @@ namespace RiotAutoLogin
         {
             // Unsubscribe from events
             _updateService.UpdateProgressChanged -= OnUpdateProgressChanged;
-            
-            // Clean up downloaded file if not installing
-            if (!string.IsNullOrEmpty(_downloadedFilePath) && File.Exists(_downloadedFilePath))
+
+            // Clean up downloaded file only when the user closes/cancels the updater.
+            // During installation, the external batch file still needs this file after the app exits.
+            if (!_installStarted && !string.IsNullOrEmpty(_downloadedFilePath) && File.Exists(_downloadedFilePath))
             {
                 try
                 {
@@ -166,8 +182,8 @@ namespace RiotAutoLogin
                     // Ignore cleanup errors
                 }
             }
-            
+
             base.OnClosed(e);
         }
     }
-} 
+}
