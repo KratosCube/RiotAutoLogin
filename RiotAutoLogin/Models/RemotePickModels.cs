@@ -19,6 +19,7 @@ namespace RiotAutoLogin.Models
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
+        public string ImageUrl { get; set; } = string.Empty;
         public bool IsBanned { get; set; }
         public bool IsPicked { get; set; }
         public bool IsDisabled => IsBanned || IsPicked;
