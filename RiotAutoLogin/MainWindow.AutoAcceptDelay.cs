@@ -1,3 +1,4 @@
+using RiotAutoLogin.Models;
 using RiotAutoLogin.Services;
 using System;
 using System.Globalization;
@@ -13,6 +14,8 @@ namespace RiotAutoLogin
     {
         private TextBox? _autoAcceptDelaySecondsTextBox;
         private TextBlock? _autoAcceptDelayHintTextBlock;
+        private bool _manualUpdateCheckRequested;
+        private bool _manualUpdateFeedbackInitialized;
 
         static MainWindow()
         {
@@ -27,6 +30,7 @@ namespace RiotAutoLogin
             if (sender is MainWindow window)
             {
                 window.InitializeAutoAcceptDelayUi();
+                window.InitializeManualUpdateFeedback();
             }
         }
 
@@ -135,6 +139,59 @@ namespace RiotAutoLogin
 
             container.Child = root;
             return container;
+        }
+
+        private void InitializeManualUpdateFeedback()
+        {
+            if (_manualUpdateFeedbackInitialized)
+                return;
+
+            if (FindName("btnCheckUpdates") is not Button checkUpdatesButton)
+                return;
+
+            _manualUpdateFeedbackInitialized = true;
+
+            // The original Click handler in MainWindow.xaml.cs still performs the update check.
+            // These handlers only mark the check as manual so UpdateProgressChanged can show visible feedback.
+            checkUpdatesButton.PreviewMouseLeftButtonDown += (_, _) => _manualUpdateCheckRequested = true;
+            checkUpdatesButton.Click += (_, _) => _manualUpdateCheckRequested = true;
+            checkUpdatesButton.KeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Enter || e.Key == Key.Space)
+                    _manualUpdateCheckRequested = true;
+            };
+
+            _updateService.UpdateProgressChanged += OnManualUpdateProgressChanged;
+        }
+
+        private void OnManualUpdateProgressChanged(UpdateProgress progress)
+        {
+            if (!_manualUpdateCheckRequested)
+                return;
+
+            if (progress.Status == UpdateStatus.NoUpdateAvailable)
+            {
+                _manualUpdateCheckRequested = false;
+                Dispatcher.Invoke(() => MessageBox.Show(
+                    progress.Message,
+                    "No Updates Available",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information));
+            }
+            else if (progress.Status == UpdateStatus.Error)
+            {
+                _manualUpdateCheckRequested = false;
+                Dispatcher.Invoke(() => MessageBox.Show(
+                    progress.Message,
+                    "Update Check Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning));
+            }
+            else if (progress.Status == UpdateStatus.UpdateAvailable)
+            {
+                // The existing UpdateAvailable event opens the update window.
+                _manualUpdateCheckRequested = false;
+            }
         }
 
         private void AutoAcceptDelaySecondsTextBox_KeyDown(object sender, KeyEventArgs e)
