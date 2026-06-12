@@ -99,10 +99,10 @@ namespace RiotAutoLogin.Services
     .status-card::after { right: 0; }
     .phase { color: var(--cyan); font: 800 11px system-ui, sans-serif; letter-spacing: .18em; text-transform: uppercase; }
     .message { margin-top: 6px; font-size: 17px; line-height: 1.25; }
+    .status-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 11px; align-items: center; }
     .turn-pill {
       display: inline-flex;
       align-items: center;
-      margin-top: 11px;
       padding: 7px 10px;
       border: 1px solid rgba(10,200,185,.48);
       color: #d7fffb;
@@ -113,6 +113,18 @@ namespace RiotAutoLogin.Services
     }
     .turn-pill.waiting { border-color: rgba(200,170,110,.33); color: var(--gold); background: rgba(200,170,110,.08); }
     .turn-pill.ban { border-color: rgba(182,74,85,.7); color: #ffd7dc; background: rgba(182,74,85,.14); }
+    .leave-button {
+      border: 1px solid rgba(182,74,85,.72);
+      background: rgba(182,74,85,.13);
+      color: #ffd7dc;
+      min-height: 31px;
+      padding: 0 11px;
+      font: 800 10px system-ui, sans-serif;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      cursor: pointer;
+    }
+    .leave-button:disabled { opacity: .35; cursor: not-allowed; }
 
     .layout {
       display: grid;
@@ -266,6 +278,7 @@ namespace RiotAutoLogin.Services
     .spell-option { display:flex; align-items:center; gap:9px; padding:8px; min-height:52px; border:1px solid rgba(200,170,110,.28); background:rgba(255,255,255,.035); color:var(--text); text-align:left; cursor:pointer; }
     .spell-option img { width:34px; height:34px; border:1px solid rgba(200,170,110,.4); }
     .spell-option strong { font: 700 12px system-ui, sans-serif; }
+    .spell-help { color: var(--muted); font: 12px system-ui, sans-serif; padding: 0 12px 12px; }
 
     .toast { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 40; padding: 13px 15px; border: 1px solid rgba(200,170,110,.42); background: rgba(7, 13, 21, .97); color: var(--text); box-shadow: 0 16px 40px rgba(0,0,0,.45); display: none; font: 14px system-ui, sans-serif; }
 
@@ -277,7 +290,8 @@ namespace RiotAutoLogin.Services
       .status-card { margin: 8px 0; padding: 10px; }
       .phase { font-size: 10px; }
       .message { font-size: 14px; }
-      .turn-pill { margin-top: 8px; padding: 6px 9px; font-size: 10px; }
+      .turn-pill { padding: 6px 9px; font-size: 10px; }
+      .leave-button { min-height: 30px; }
       .layout { grid-template-columns: 1fr; gap: 8px; }
       .panel.side { display: none; }
       .mobile-loadout { display: block; margin-bottom: 9px; }
@@ -304,7 +318,10 @@ namespace RiotAutoLogin.Services
     <section class="status-card">
       <div id="phase" class="phase">Connecting</div>
       <div id="message" class="message">Connecting to RiotAutoLogin Remote Pick...</div>
-      <div id="turn" class="turn-pill waiting">Waiting</div>
+      <div class="status-actions">
+        <div id="turn" class="turn-pill waiting">Waiting</div>
+        <button id="leaveButton" class="leave-button" disabled>Leave Lobby</button>
+      </div>
     </section>
 
     <section id="mobileLoadout" class="panel mobile-loadout"></section>
@@ -338,6 +355,7 @@ namespace RiotAutoLogin.Services
         <button id="closeSpellModal" class="small-button">Close</button>
       </div>
       <div id="spellGrid" class="spell-grid"></div>
+      <div class="spell-help">Only summoner spells reported as available for the current queue are shown here.</div>
     </div>
   </div>
 
@@ -346,7 +364,6 @@ namespace RiotAutoLogin.Services
   <script>
     let state = null;
     let query = '';
-    let spellSlotToChange = 1;
     const championsEl = document.getElementById('champions');
     const pickedListEl = document.getElementById('pickedList');
     const bannedListEl = document.getElementById('bannedList');
@@ -361,6 +378,7 @@ namespace RiotAutoLogin.Services
     const spellModalEl = document.getElementById('spellModal');
     const spellGridEl = document.getElementById('spellGrid');
     const spellModalTitleEl = document.getElementById('spellModalTitle');
+    const leaveButtonEl = document.getElementById('leaveButton');
 
     searchEl.addEventListener('input', () => {
       query = searchEl.value.trim().toLowerCase();
@@ -368,6 +386,7 @@ namespace RiotAutoLogin.Services
     });
     document.getElementById('closeSpellModal').onclick = () => closeSpellModal();
     spellModalEl.addEventListener('click', event => { if (event.target === spellModalEl) closeSpellModal(); });
+    leaveButtonEl.onclick = () => leaveLobby();
 
     function showToast(message) {
       toastEl.textContent = message;
@@ -386,6 +405,7 @@ namespace RiotAutoLogin.Services
         messageEl.textContent = 'Disconnected from Remote Pick server.';
         turnEl.textContent = 'Offline';
         turnEl.className = 'turn-pill waiting';
+        leaveButtonEl.disabled = true;
       }
     }
 
@@ -398,6 +418,8 @@ namespace RiotAutoLogin.Services
       messageEl.textContent = state.message || `Phase: ${state.phase}`;
       turnEl.textContent = canBan ? 'Your ban turn' : canPick ? 'Your pick turn' : state.isInChampSelect ? 'Hover intent available' : 'Waiting';
       turnEl.className = canBan ? 'turn-pill ban' : canPick ? 'turn-pill' : 'turn-pill waiting';
+      leaveButtonEl.disabled = !state.canLeave;
+      leaveButtonEl.textContent = state.phase === 'Matchmaking' ? 'Cancel Queue' : state.phase === 'ReadyCheck' ? 'Decline' : state.phase === 'ChampSelect' ? 'Dodge' : 'Leave Lobby';
 
       renderLoadout(desktopLoadoutEl);
       renderLoadout(mobileLoadoutEl);
@@ -500,10 +522,12 @@ namespace RiotAutoLogin.Services
     }
 
     function openSpellModal(slot) {
-      spellSlotToChange = slot;
       spellModalTitleEl.textContent = `Choose summoner spell ${slot}`;
       spellGridEl.innerHTML = '';
-      for (const spell of state.summonerSpells) {
+      const availableSpells = state.summonerSpells.filter(spell => spell.isAvailable);
+      const spellsToShow = availableSpells.length ? availableSpells : state.summonerSpells;
+
+      for (const spell of spellsToShow) {
         const button = document.createElement('button');
         button.className = 'spell-option';
         button.innerHTML = `<img src="${escapeAttr(spell.imageUrl)}" alt=""><div><strong>${escapeHtml(spell.name)}</strong></div>`;
@@ -526,6 +550,16 @@ namespace RiotAutoLogin.Services
       const result = await response.json();
       showToast(result.message || (result.success ? 'Spell updated.' : 'Spell change failed.'));
       closeSpellModal();
+      await loadState();
+    }
+
+    async function leaveLobby() {
+      const label = leaveButtonEl.textContent || 'Leave Lobby';
+      if (!confirm(`${label}?`)) return;
+
+      const response = await fetch('/api/leave', { method: 'POST' });
+      const result = await response.json();
+      showToast(result.message || (result.success ? 'Leave request sent.' : 'Leave failed.'));
       await loadState();
     }
 
