@@ -185,6 +185,11 @@ namespace RiotAutoLogin.Services
                     RemotePickActionResult result = await SelectSpellAsync(body);
                     await WriteJsonResponseAsync(stream, result.Success ? 200 : 400, result.Success ? "OK" : "Bad Request", result, cancellationToken);
                 }
+                else if (method == "POST" && path.StartsWith("/api/leave", StringComparison.OrdinalIgnoreCase))
+                {
+                    RemotePickActionResult result = await LeaveLobbyAsync();
+                    await WriteJsonResponseAsync(stream, result.Success ? 200 : 400, result.Success ? "OK" : "Bad Request", result, cancellationToken);
+                }
                 else
                 {
                     await WriteTextResponseAsync(stream, 404, "Not Found", "Not found", cancellationToken);
@@ -221,6 +226,7 @@ namespace RiotAutoLogin.Services
 
             state.Phase = await LCUService.GetCurrentGamePhaseAsync();
             state.IsInChampSelect = state.Phase == "ChampSelect";
+            state.CanLeave = state.Phase is "Lobby" or "Matchmaking" or "ReadyCheck" or "ChampSelect";
 
             var bannedChampionIds = new HashSet<int>();
             var pickedChampionIds = new HashSet<int>();
@@ -249,6 +255,7 @@ namespace RiotAutoLogin.Services
             ParseBans(root, bannedChampionIds);
             ParsePicks(root, pickedChampionIds);
             ParseLocalPlayerSelection(root, state);
+            ParseAvailableSpellIds(root, state);
             ParseCurrentAction(root, state);
 
             state.BannedChampionIds = bannedChampionIds.OrderBy(id => id).ToList();
@@ -335,19 +342,13 @@ namespace RiotAutoLogin.Services
             if (state.PickedChampionIds.Contains(request.ChampionId))
                 return new RemotePickActionResult { Success = false, Message = "This champion is already picked." };
 
-            bool success = false;
-
-            if (!string.IsNullOrWhiteSpace(state.ActionId) && state.ActionType == "pick")
-            {
-                success = LCUService.SelectChampion(request.ChampionId, state.ActionId, complete: false);
-            }
+            bool success = TryPatchMySelection(new { championPickIntent = request.ChampionId });
 
             if (!success)
-            {
-                string bodyJson = JsonSerializer.Serialize(new { championId = request.ChampionId }, _jsonOptions);
-                string[] result = LCUService.ClientRequest("PATCH", "lol-champ-select/v1/session/my-selection", bodyJson);
-                success = result[0].StartsWith("2");
-            }
+                success = TryPatchMySelection(new { championId = request.ChampionId });
+
+            if (!success && !string.IsNullOrWhiteSpace(state.ActionId) && state.ActionType == "pick")
+                success = LCUService.SelectChampion(request.ChampionId, state.ActionId, complete: false);
 
             return new RemotePickActionResult
             {
@@ -374,12 +375,52 @@ namespace RiotAutoLogin.Services
             if (!LCUService.CheckIfLeagueClientIsOpen())
                 return new RemotePickActionResult { Success = false, Message = "League Client is not running." };
 
+            RemotePickState state = await GetStateAsync();
+            if (state.AvailableSpellIds.Count > 0 &&
+                !state.AvailableSpellIds.Contains(request.SpellId) &&
+                request.SpellId != state.Spell1Id &&
+                request.SpellId != state.Spell2Id)
+            {
+                return new RemotePickActionResult { Success = false, Message = "This summoner spell is not available in the current queue." };
+            }
+
             bool success = LCUService.SelectSummonerSpell(request.SpellId, request.Slot);
             return new RemotePickActionResult
             {
                 Success = success,
                 Message = success ? "Summoner spell updated." : "League Client rejected the spell change."
             };
+        }
+
+        public async Task<RemotePickActionResult> LeaveLobbyAsync()
+        {
+            if (!LCUService.CheckIfLeagueClientIsOpen())
+                return new RemotePickActionResult { Success = false, Message = "League Client is not running." };
+
+            string phase = await LCUService.GetCurrentGamePhaseAsync();
+            string[] result = phase switch
+            {
+                "ReadyCheck" => LCUService.ClientRequest("POST", "lol-matchmaking/v1/ready-check/decline"),
+                "Matchmaking" => LCUService.ClientRequest("DELETE", "lol-matchmaking/v1/search"),
+                "Lobby" => LCUService.ClientRequest("DELETE", "lol-lobby/v2/lobby"),
+                "ChampSelect" => LCUService.ClientRequest("POST", "lol-champ-select/v1/session/quit"),
+                _ => new[] { "400", $"Cannot leave during phase: {phase}" }
+            };
+
+            bool success = result[0].StartsWith("2");
+            return new RemotePickActionResult
+            {
+                Success = success,
+                Message = success ? "Leave request sent." : $"Leave failed during {phase}. Status: {result[0]}"
+            };
+        }
+
+        private bool TryPatchMySelection(object payload)
+        {
+            string bodyJson = JsonSerializer.Serialize(payload, _jsonOptions);
+            string[] result = LCUService.ClientRequest("PATCH", "lol-champ-select/v1/session/my-selection", bodyJson);
+            Debug.WriteLine($"Remote hover PATCH my-selection result: {result[0]} / body: {bodyJson}");
+            return result[0].StartsWith("2");
         }
 
         private RemotePickRequest? ParseChampionRequest(string body)
@@ -421,7 +462,11 @@ namespace RiotAutoLogin.Services
                     Description = spell.Description,
                     ImageUrl = spell.ImageUrl,
                     IsSpell1 = state.Spell1Id == spell.Id,
-                    IsSpell2 = state.Spell2Id == spell.Id
+                    IsSpell2 = state.Spell2Id == spell.Id,
+                    IsAvailable = state.AvailableSpellIds.Count == 0 ||
+                                  state.AvailableSpellIds.Contains(spell.Id) ||
+                                  state.Spell1Id == spell.Id ||
+                                  state.Spell2Id == spell.Id
                 })
                 .ToList();
         }
@@ -468,8 +513,9 @@ namespace RiotAutoLogin.Services
                 return;
 
             List<SummonerSpellModel> spells = await LCUService.GetSummonerSpellsAsync();
-            var remoteSpells = new List<RemoteSummonerSpellDto>();
+            MergeDefaultSummonerSpells(spells);
 
+            var remoteSpells = new List<RemoteSummonerSpellDto>();
             foreach (SummonerSpellModel spell in spells.Where(spell => spell.Id > 0).OrderBy(spell => spell.Name))
             {
                 string imageUrl = spell.ImageUrl ?? string.Empty;
@@ -493,6 +539,30 @@ namespace RiotAutoLogin.Services
             }
 
             _remoteSpellCache = remoteSpells;
+        }
+
+        private static void MergeDefaultSummonerSpells(List<SummonerSpellModel> spells)
+        {
+            SummonerSpellModel[] defaults =
+            {
+                new() { Name = "Cleanse", Id = 1, Description = "Removes disables and summoner spell debuffs." },
+                new() { Name = "Exhaust", Id = 3, Description = "Slows an enemy champion and reduces their damage." },
+                new() { Name = "Flash", Id = 4, Description = "Teleports your champion a short distance." },
+                new() { Name = "Ghost", Id = 6, Description = "Gain movement speed and ghosting." },
+                new() { Name = "Heal", Id = 7, Description = "Restores health to your champion and an ally." },
+                new() { Name = "Smite", Id = 11, Description = "Deals true damage to monsters or minions." },
+                new() { Name = "Teleport", Id = 12, Description = "Teleports to an allied structure, minion, or ward." },
+                new() { Name = "Clarity", Id = 13, Description = "Restores mana to you and nearby allies." },
+                new() { Name = "Ignite", Id = 14, Description = "Deals true damage over time to an enemy champion." },
+                new() { Name = "Barrier", Id = 21, Description = "Shields your champion from damage." },
+                new() { Name = "Mark", Id = 32, Description = "Throw a snowball and dash to the marked target." }
+            };
+
+            foreach (SummonerSpellModel spell in defaults)
+            {
+                if (spells.All(existing => existing.Id != spell.Id))
+                    spells.Add(spell);
+            }
         }
 
         private static void ParseBans(JsonElement root, HashSet<int> bannedChampionIds)
@@ -549,6 +619,45 @@ namespace RiotAutoLogin.Services
                     state.Spell2Id = spell2Id;
 
                 return;
+            }
+        }
+
+        private static void ParseAvailableSpellIds(JsonElement root, RemotePickState state)
+        {
+            var spellIds = new HashSet<int>();
+            CollectAvailableSpellIds(root, spellIds);
+            state.AvailableSpellIds = spellIds.OrderBy(id => id).ToList();
+        }
+
+        private static void CollectAvailableSpellIds(JsonElement element, HashSet<int> spellIds)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    bool looksLikeAvailableSpellList =
+                        property.NameEquals("allowableSpellIds") ||
+                        property.NameEquals("availableSpellIds") ||
+                        property.NameEquals("allowedSpellIds");
+
+                    if (looksLikeAvailableSpellList && property.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (JsonElement idElement in property.Value.EnumerateArray())
+                        {
+                            if (TryGetInt(idElement, out int spellId) && spellId > 0)
+                                spellIds.Add(spellId);
+                        }
+                    }
+                    else if (property.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+                    {
+                        CollectAvailableSpellIds(property.Value, spellIds);
+                    }
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement child in element.EnumerateArray())
+                    CollectAvailableSpellIds(child, spellIds);
             }
         }
 
