@@ -13,26 +13,24 @@ namespace RiotAutoLogin.Services
     :root {
       color-scheme: dark;
       --bg: #03070d;
-      --panel: rgba(8, 16, 26, .88);
-      --panel-strong: rgba(4, 9, 16, .96);
-      --line: rgba(196, 161, 92, .36);
+      --panel: rgba(8, 16, 26, .9);
+      --panel-strong: rgba(4, 9, 16, .97);
+      --line: rgba(196, 161, 92, .38);
       --gold: #c8aa6e;
       --gold-strong: #f0d58a;
       --cyan: #0ac8b9;
       --red: #b64a55;
-      --green: #35c37d;
       --text: #f3ead7;
       --muted: #9aa6b2;
       font-family: Georgia, 'Times New Roman', serif;
     }
 
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html, body { min-height: 100%; }
     body {
       margin: 0;
       color: var(--text);
       background:
-        radial-gradient(circle at 50% 7%, rgba(54, 92, 116, .34), transparent 32rem),
+        radial-gradient(circle at 50% 8%, rgba(54, 92, 116, .34), transparent 32rem),
         radial-gradient(circle at 80% 20%, rgba(190, 135, 54, .16), transparent 28rem),
         linear-gradient(135deg, #02060b 0%, #0b1018 48%, #02050a 100%);
       overflow-x: hidden;
@@ -49,65 +47,77 @@ namespace RiotAutoLogin.Services
       opacity: .9;
     }
 
-    .app { min-height: 100vh; padding: 12px; position: relative; }
+    .app { min-height: 100vh; padding: 10px; position: relative; }
+
+    .sticky-status {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      margin: -10px -10px 10px;
+      padding: 9px 10px 10px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(3,7,13,.99), rgba(3,7,13,.9));
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 35px rgba(0,0,0,.4);
+    }
+
     .topbar {
       display: grid;
       grid-template-columns: 1fr auto 1fr;
       align-items: center;
-      gap: 10px;
-      padding: 10px 8px 13px;
-      border-bottom: 1px solid var(--line);
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      backdrop-filter: blur(10px);
-      background: linear-gradient(180deg, rgba(3,7,13,.98), rgba(3,7,13,.78));
+      gap: 8px;
+      margin-bottom: 9px;
     }
 
-    .side-title { color: var(--muted); font: 700 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .18em; }
-    .side-title.right { text-align: right; }
     h1 {
       margin: 0;
       text-align: center;
       letter-spacing: .08em;
-      font-size: clamp(20px, 5.4vw, 32px);
+      font-size: clamp(18px, 5vw, 31px);
       color: var(--gold-strong);
       text-shadow: 0 2px 18px rgba(240,213,138,.22);
       white-space: nowrap;
     }
 
-    .status-card {
-      margin: 12px auto;
-      max-width: 980px;
-      padding: 12px;
+    .side-title { color: var(--muted); font: 700 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .18em; }
+    .side-title.right { text-align: right; }
+
+    .phase-dock {
+      max-width: 1120px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: stretch;
       border: 1px solid var(--line);
-      background: linear-gradient(180deg, rgba(18, 31, 44, .9), rgba(5, 11, 19, .92));
-      box-shadow: inset 0 0 35px rgba(200,170,110,.04), 0 18px 45px rgba(0,0,0,.35);
-      position: relative;
-      overflow: hidden;
+      background: linear-gradient(180deg, rgba(18, 31, 44, .94), rgba(5, 11, 19, .96));
+      box-shadow: inset 0 0 35px rgba(200,170,110,.04);
     }
-    .status-card::before, .status-card::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      width: 32%;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, var(--gold), transparent);
-      opacity: .8;
-    }
-    .status-card::before { left: 0; }
-    .status-card::after { right: 0; }
+
+    .phase-main { padding: 10px; min-width: 0; }
     .phase { color: var(--cyan); font: 800 11px system-ui, sans-serif; letter-spacing: .18em; text-transform: uppercase; }
-    .message { margin-top: 6px; font-size: 17px; line-height: 1.25; }
-    .status-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 11px; align-items: center; }
+    .message { margin-top: 5px; font-size: 15px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .timer-box {
+      min-width: 96px;
+      display: grid;
+      place-items: center;
+      padding: 8px 10px;
+      border-left: 1px solid rgba(200,170,110,.25);
+      background: rgba(0,0,0,.2);
+    }
+    .timer-value { font: 900 28px system-ui, sans-serif; color: var(--gold-strong); line-height: 1; }
+    .timer-label { margin-top: 3px; font: 800 9px system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .16em; }
+
+    .status-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; align-items: center; }
     .turn-pill {
       display: inline-flex;
       align-items: center;
-      padding: 7px 10px;
+      padding: 6px 9px;
       border: 1px solid rgba(10,200,185,.48);
       color: #d7fffb;
       background: rgba(10,200,185,.09);
-      font: 800 11px system-ui, sans-serif;
+      font: 800 10px system-ui, sans-serif;
       text-transform: uppercase;
       letter-spacing: .12em;
     }
@@ -117,14 +127,29 @@ namespace RiotAutoLogin.Services
       border: 1px solid rgba(182,74,85,.72);
       background: rgba(182,74,85,.13);
       color: #ffd7dc;
-      min-height: 31px;
-      padding: 0 11px;
+      min-height: 29px;
+      padding: 0 10px;
       font: 800 10px system-ui, sans-serif;
       text-transform: uppercase;
       letter-spacing: .1em;
       cursor: pointer;
     }
     .leave-button:disabled { opacity: .35; cursor: not-allowed; }
+
+    .accepted-alert {
+      display: none;
+      max-width: 1120px;
+      margin: 9px auto 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(10,200,185,.65);
+      color: #d7fffb;
+      background: linear-gradient(90deg, rgba(10,200,185,.18), rgba(10,200,185,.06));
+      font: 900 13px system-ui, sans-serif;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      animation: pulseAlert 1s ease-in-out infinite alternate;
+    }
+    @keyframes pulseAlert { from { box-shadow: 0 0 0 rgba(10,200,185,0); } to { box-shadow: 0 0 24px rgba(10,200,185,.26); } }
 
     .layout {
       display: grid;
@@ -151,15 +176,7 @@ namespace RiotAutoLogin.Services
     }
     .rail-list { padding: 10px; display: grid; gap: 8px; }
     .rail-empty { color: var(--muted); font: 12px system-ui, sans-serif; padding: 10px; }
-    .mini-card {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 7px;
-      background: rgba(255,255,255,.035);
-      border: 1px solid rgba(255,255,255,.055);
-      min-height: 50px;
-    }
+    .mini-card { display: flex; align-items: center; gap: 9px; padding: 7px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.055); min-height: 50px; }
     .mini-card img { width: 38px; height: 38px; object-fit: cover; border: 1px solid rgba(200,170,110,.45); background:#061019; }
     .mini-card .name { font: 700 12px system-ui, sans-serif; }
     .mini-card .sub { color: var(--muted); font: 10px system-ui, sans-serif; margin-top: 2px; }
@@ -167,96 +184,28 @@ namespace RiotAutoLogin.Services
 
     .center { min-width: 0; }
     .mobile-loadout { display: none; }
-    .search-wrap {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 9px;
-      margin-bottom: 10px;
-    }
+    .search-wrap { display: grid; grid-template-columns: 1fr auto; gap: 9px; margin-bottom: 10px; }
     input {
-      width: 100%;
-      border: 1px solid rgba(200,170,110,.32);
-      background: rgba(5, 10, 18, .9);
-      color: var(--text);
-      padding: 13px 13px;
-      font: 15px system-ui, sans-serif;
-      outline: none;
-      border-radius: 0;
+      width: 100%; border: 1px solid rgba(200,170,110,.32); background: rgba(5, 10, 18, .9); color: var(--text);
+      padding: 13px; font: 15px system-ui, sans-serif; outline: none; border-radius: 0;
     }
     input:focus { border-color: rgba(10,200,185,.75); box-shadow: 0 0 0 2px rgba(10,200,185,.12); }
-    .count {
-      display: grid;
-      place-items: center;
-      min-width: 64px;
-      border: 1px solid rgba(200,170,110,.32);
-      color: var(--gold);
-      background: rgba(5, 10, 18, .9);
-      font: 800 11px system-ui, sans-serif;
-      text-transform: uppercase;
-    }
+    .count { display: grid; place-items: center; min-width: 64px; border: 1px solid rgba(200,170,110,.32); color: var(--gold); background: rgba(5, 10, 18, .9); font: 800 11px system-ui, sans-serif; text-transform: uppercase; }
 
-    .champion-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-      gap: 9px;
-    }
-    .champion {
-      position: relative;
-      overflow: hidden;
-      border: 1px solid rgba(200,170,110,.34);
-      background: #080d14;
-      color: var(--text);
-      box-shadow: 0 8px 24px rgba(0,0,0,.25);
-      min-height: 178px;
-    }
+    .champion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 9px; }
+    .champion { position: relative; overflow: hidden; border: 1px solid rgba(200,170,110,.34); background: #080d14; color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,.25); min-height: 178px; }
     .portrait { position: relative; height: 98px; overflow: hidden; background: #061019; }
     .portrait img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .18s ease, filter .18s ease; }
     .champion.available:hover { border-color: var(--gold-strong); }
     .champion.available:hover img { filter: brightness(1.12); transform: scale(1.03); }
-    .champion-name {
-      padding: 8px 8px 7px;
-      background: linear-gradient(180deg, rgba(8, 14, 23, .92), rgba(4, 7, 12, .98));
-      font: 800 11px system-ui, sans-serif;
-      text-transform: uppercase;
-      letter-spacing: .04em;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+    .champion-name { padding: 8px 8px 7px; background: linear-gradient(180deg, rgba(8, 14, 23, .92), rgba(4, 7, 12, .98)); font: 800 11px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .champion.disabled .portrait img { filter: grayscale(1) brightness(.38); }
-    .champion.disabled .portrait::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, transparent 45%, rgba(182,74,85,.95) 48%, rgba(182,74,85,.95) 52%, transparent 55%);
-      pointer-events: none;
-    }
-    .badge {
-      position: absolute;
-      top: 7px;
-      left: 7px;
-      z-index: 2;
-      padding: 4px 6px;
-      background: rgba(5, 8, 12, .84);
-      border: 1px solid rgba(200,170,110,.42);
-      color: var(--gold-strong);
-      font: 800 9px system-ui, sans-serif;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-    }
+    .champion.disabled .portrait::after { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, transparent 45%, rgba(182,74,85,.95) 48%, rgba(182,74,85,.95) 52%, transparent 55%); pointer-events: none; }
+    .badge { position: absolute; top: 7px; left: 7px; z-index: 2; padding: 4px 6px; background: rgba(5, 8, 12, .84); border: 1px solid rgba(200,170,110,.42); color: var(--gold-strong); font: 800 9px system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
     .badge.banned { color: #ffb3ba; border-color: rgba(182,74,85,.9); }
     .badge.intent { color: #d7fffb; border-color: rgba(10,200,185,.8); }
     .champion-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 7px 8px; }
-    .champion-actions button, .spell-button, .small-button {
-      border: 1px solid rgba(200,170,110,.35);
-      background: rgba(9, 16, 25, .92);
-      color: var(--text);
-      min-height: 34px;
-      font: 800 10px system-ui, sans-serif;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      cursor: pointer;
-    }
+    .champion-actions button, .spell-button, .small-button { border: 1px solid rgba(200,170,110,.35); background: rgba(9, 16, 25, .92); color: var(--text); min-height: 34px; font: 800 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; cursor: pointer; }
     .champion-actions button:disabled { opacity: .35; cursor: not-allowed; }
     .champion-actions .lock { border-color: rgba(10,200,185,.55); color: #d7fffb; }
     .champion-actions .ban { border-color: rgba(182,74,85,.7); color: #ffd7dc; }
@@ -284,18 +233,22 @@ namespace RiotAutoLogin.Services
 
     @media (max-width: 900px) {
       .app { padding: 8px; padding-bottom: 96px; }
-      .topbar { grid-template-columns: 1fr; padding: 8px 4px 10px; }
+      .sticky-status { margin: -8px -8px 8px; padding: 8px; }
+      .topbar { grid-template-columns: 1fr; margin-bottom: 7px; }
       .side-title { display: none; }
-      h1 { font-size: 22px; white-space: normal; }
-      .status-card { margin: 8px 0; padding: 10px; }
+      h1 { font-size: 20px; white-space: normal; }
+      .phase-dock { grid-template-columns: 1fr auto; }
+      .phase-main { padding: 9px; }
       .phase { font-size: 10px; }
-      .message { font-size: 14px; }
-      .turn-pill { padding: 6px 9px; font-size: 10px; }
+      .message { font-size: 13px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+      .timer-box { min-width: 76px; padding: 7px; }
+      .timer-value { font-size: 25px; }
+      .turn-pill { padding: 6px 8px; font-size: 9px; }
       .leave-button { min-height: 30px; }
       .layout { grid-template-columns: 1fr; gap: 8px; }
       .panel.side { display: none; }
       .mobile-loadout { display: block; margin-bottom: 9px; }
-      .search-wrap { grid-template-columns: 1fr 54px; position: sticky; top: 57px; z-index: 8; background: rgba(3,7,13,.9); padding-bottom: 8px; }
+      .search-wrap { grid-template-columns: 1fr 54px; position: sticky; top: 151px; z-index: 8; background: rgba(3,7,13,.92); padding-bottom: 8px; }
       input { padding: 12px; font-size: 15px; }
       .champion-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
       .champion { min-height: 162px; }
@@ -309,20 +262,30 @@ namespace RiotAutoLogin.Services
 </head>
 <body>
   <div class="app">
-    <div class="topbar">
-      <div class="side-title">Ally picks</div>
-      <h1>CHOOSE YOUR CHAMPION</h1>
-      <div class="side-title right">Enemy picks</div>
-    </div>
-
-    <section class="status-card">
-      <div id="phase" class="phase">Connecting</div>
-      <div id="message" class="message">Connecting to RiotAutoLogin Remote Pick...</div>
-      <div class="status-actions">
-        <div id="turn" class="turn-pill waiting">Waiting</div>
-        <button id="leaveButton" class="leave-button" disabled>Leave Lobby</button>
+    <div class="sticky-status">
+      <div class="topbar">
+        <div class="side-title">Ally picks</div>
+        <h1>CHOOSE YOUR CHAMPION</h1>
+        <div class="side-title right">Enemy picks</div>
       </div>
-    </section>
+
+      <section class="phase-dock">
+        <div class="phase-main">
+          <div id="phase" class="phase">Connecting</div>
+          <div id="message" class="message">Connecting to RiotAutoLogin Remote Pick...</div>
+          <div class="status-actions">
+            <div id="turn" class="turn-pill waiting">Waiting</div>
+            <button id="leaveButton" class="leave-button" disabled>Leave Lobby</button>
+          </div>
+        </div>
+        <div class="timer-box">
+          <div id="timer" class="timer-value">--</div>
+          <div class="timer-label">seconds</div>
+        </div>
+      </section>
+
+      <div id="acceptedAlert" class="accepted-alert">Match accepted — champion select started. Pick/ban from this page.</div>
+    </div>
 
     <section id="mobileLoadout" class="panel mobile-loadout"></section>
 
@@ -363,6 +326,8 @@ namespace RiotAutoLogin.Services
 
   <script>
     let state = null;
+    let previousPhase = null;
+    let matchAlertDismissTimer = null;
     let query = '';
     const championsEl = document.getElementById('champions');
     const pickedListEl = document.getElementById('pickedList');
@@ -370,6 +335,8 @@ namespace RiotAutoLogin.Services
     const phaseEl = document.getElementById('phase');
     const messageEl = document.getElementById('message');
     const turnEl = document.getElementById('turn');
+    const timerEl = document.getElementById('timer');
+    const acceptedAlertEl = document.getElementById('acceptedAlert');
     const searchEl = document.getElementById('search');
     const countEl = document.getElementById('count');
     const toastEl = document.getElementById('toast');
@@ -395,16 +362,33 @@ namespace RiotAutoLogin.Services
       showToast.timer = setTimeout(() => toastEl.style.display = 'none', 2600);
     }
 
+    function showAcceptedAlert() {
+      acceptedAlertEl.style.display = 'block';
+      showToast('Match accepted. Champion select started.');
+      if ('vibrate' in navigator) navigator.vibrate([300, 120, 300]);
+      clearTimeout(matchAlertDismissTimer);
+      matchAlertDismissTimer = setTimeout(() => acceptedAlertEl.style.display = 'none', 15000);
+    }
+
     async function loadState() {
       try {
         const response = await fetch('/api/state', { cache: 'no-store' });
-        state = await response.json();
+        const nextState = await response.json();
+        const oldPhase = previousPhase;
+        previousPhase = nextState.phase;
+        state = nextState;
+
+        if (state.phase === 'ChampSelect' && oldPhase && oldPhase !== 'ChampSelect') {
+          showAcceptedAlert();
+        }
+
         render();
       } catch (error) {
         phaseEl.textContent = 'Disconnected';
         messageEl.textContent = 'Disconnected from Remote Pick server.';
         turnEl.textContent = 'Offline';
         turnEl.className = 'turn-pill waiting';
+        timerEl.textContent = '--';
         leaveButtonEl.disabled = true;
       }
     }
@@ -414,8 +398,9 @@ namespace RiotAutoLogin.Services
 
       const canPick = state.canPick || (state.isMyTurn && state.actionType === 'pick');
       const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
-      phaseEl.textContent = state.phase || 'Unknown';
+      phaseEl.textContent = `${state.phaseLabel || state.phase || 'Unknown'}${state.champSelectPhase ? ' · ' + state.champSelectPhase : ''}`;
       messageEl.textContent = state.message || `Phase: ${state.phase}`;
+      timerEl.textContent = formatTimer(state);
       turnEl.textContent = canBan ? 'Your ban turn' : canPick ? 'Your pick turn' : state.isInChampSelect ? 'Hover intent available' : 'Waiting';
       turnEl.className = canBan ? 'turn-pill ban' : canPick ? 'turn-pill' : 'turn-pill waiting';
       leaveButtonEl.disabled = !state.canLeave;
@@ -455,6 +440,12 @@ namespace RiotAutoLogin.Services
 
       renderRail(pickedListEl, state.champions.filter(c => c.isPicked), 'Picked');
       renderRail(bannedListEl, state.champions.filter(c => c.isBanned), 'Banned', true);
+    }
+
+    function formatTimer(currentState) {
+      if (currentState.isTimerInfinite) return '∞';
+      if (typeof currentState.timeLeftInPhaseMs !== 'number' || currentState.timeLeftInPhaseMs < 0) return '--';
+      return String(Math.ceil(currentState.timeLeftInPhaseMs / 1000));
     }
 
     function renderLoadout(target) {
