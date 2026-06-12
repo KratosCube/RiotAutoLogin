@@ -28,6 +28,7 @@ namespace RiotAutoLogin.Services
         private CancellationTokenSource? _cts;
         private Task? _serverTask;
         private List<ChampionModel>? _championCache;
+        private List<RemoteChampionDto>? _remoteChampionCache;
 
         public bool IsRunning { get; private set; }
         public int Port { get; private set; } = DefaultPort;
@@ -156,7 +157,7 @@ namespace RiotAutoLogin.Services
 
                 if (method == "GET" && (path == "/" || path.StartsWith("/?", StringComparison.Ordinal)))
                 {
-                    await WriteHtmlResponseAsync(stream, GetIndexHtml(), cancellationToken);
+                    await WriteHtmlResponseAsync(stream, RemotePickPageHtml.Get(), cancellationToken);
                 }
                 else if (method == "GET" && path.StartsWith("/api/state", StringComparison.OrdinalIgnoreCase))
                 {
@@ -283,19 +284,54 @@ namespace RiotAutoLogin.Services
 
         private async Task AddChampionListAsync(RemotePickState state, HashSet<int> bannedChampionIds, HashSet<int> pickedChampionIds)
         {
-            _championCache ??= await DataDragonService.GetAllChampionsAsync();
+            await EnsureRemoteChampionCacheAsync();
 
-            state.Champions = _championCache
-                .Where(champion => champion.Id > 0)
-                .OrderBy(champion => champion.Name)
+            state.Champions = (_remoteChampionCache ?? new List<RemoteChampionDto>())
                 .Select(champion => new RemoteChampionDto
                 {
                     Id = champion.Id,
                     Name = champion.Name,
+                    ImageUrl = champion.ImageUrl,
                     IsBanned = bannedChampionIds.Contains(champion.Id),
                     IsPicked = pickedChampionIds.Contains(champion.Id)
                 })
                 .ToList();
+        }
+
+        private async Task EnsureRemoteChampionCacheAsync()
+        {
+            if (_remoteChampionCache != null)
+                return;
+
+            _championCache ??= await DataDragonService.GetAllChampionsAsync();
+
+            var champions = _championCache
+                .Where(champion => champion.Id > 0)
+                .OrderBy(champion => champion.Name)
+                .ToList();
+
+            var remoteChampions = new List<RemoteChampionDto>();
+            foreach (ChampionModel champion in champions)
+            {
+                string imageUrl = string.Empty;
+                try
+                {
+                    imageUrl = await DataDragonService.GetChampionImageUrlAsync(champion.Name);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Could not get champion image URL for {champion.Name}: {ex.Message}");
+                }
+
+                remoteChampions.Add(new RemoteChampionDto
+                {
+                    Id = champion.Id,
+                    Name = champion.Name,
+                    ImageUrl = imageUrl
+                });
+            }
+
+            _remoteChampionCache = remoteChampions;
         }
 
         private static void ParseBans(JsonElement root, HashSet<int> bannedChampionIds)
@@ -464,124 +500,6 @@ namespace RiotAutoLogin.Services
             }
 
             return "127.0.0.1";
-        }
-
-        private static string GetIndexHtml()
-        {
-            return """
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RiotAutoLogin Remote Pick</title>
-  <style>
-    :root { color-scheme: dark; font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
-    body { margin: 0; background: #0b111a; color: #e6edf7; }
-    header { position: sticky; top: 0; z-index: 2; padding: 14px 16px; background: rgba(14, 21, 31, .96); border-bottom: 1px solid #263447; }
-    h1 { margin: 0; font-size: 20px; }
-    #status { margin-top: 6px; color: #a8b3c7; font-size: 14px; }
-    #turn { margin-top: 8px; font-weight: 700; }
-    main { padding: 14px; }
-    input { width: 100%; box-sizing: border-box; padding: 13px 14px; margin-bottom: 14px; border-radius: 12px; border: 1px solid #2f4058; background: #111a27; color: #e6edf7; font-size: 16px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 10px; }
-    button.champion { min-height: 62px; padding: 10px; border: 1px solid #33465f; border-radius: 14px; background: #141f2e; color: #e6edf7; font-size: 14px; text-align: left; }
-    button.champion:not(:disabled):active { transform: scale(.98); }
-    button.champion:not(:disabled) { cursor: pointer; }
-    button.champion.disabled { opacity: .38; text-decoration: line-through; }
-    .tag { display: block; margin-top: 5px; color: #f2a365; font-size: 12px; }
-    .picked .tag { color: #91d7ff; }
-    .toast { position: fixed; left: 14px; right: 14px; bottom: 14px; padding: 13px 14px; border-radius: 12px; background: #172235; border: 1px solid #33465f; display: none; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Remote Pick</h1>
-    <div id="status">Connecting...</div>
-    <div id="turn"></div>
-  </header>
-  <main>
-    <input id="search" placeholder="Search champion..." autocomplete="off">
-    <div id="champions" class="grid"></div>
-  </main>
-  <div id="toast" class="toast"></div>
-
-  <script>
-    let state = null;
-    let query = '';
-    const championsEl = document.getElementById('champions');
-    const statusEl = document.getElementById('status');
-    const turnEl = document.getElementById('turn');
-    const searchEl = document.getElementById('search');
-    const toastEl = document.getElementById('toast');
-
-    searchEl.addEventListener('input', () => {
-      query = searchEl.value.trim().toLowerCase();
-      render();
-    });
-
-    function showToast(message) {
-      toastEl.textContent = message;
-      toastEl.style.display = 'block';
-      clearTimeout(showToast.timer);
-      showToast.timer = setTimeout(() => toastEl.style.display = 'none', 2500);
-    }
-
-    async function loadState() {
-      try {
-        const response = await fetch('/api/state', { cache: 'no-store' });
-        state = await response.json();
-        render();
-      } catch (error) {
-        statusEl.textContent = 'Disconnected from Remote Pick server.';
-        turnEl.textContent = '';
-      }
-    }
-
-    function render() {
-      if (!state) return;
-
-      statusEl.textContent = state.message || `Phase: ${state.phase}`;
-      turnEl.textContent = state.isMyTurn && state.actionType === 'pick'
-        ? 'Your pick turn'
-        : state.isInChampSelect ? 'Watching champ select' : 'Waiting';
-
-      const filtered = state.champions.filter(champion => champion.name.toLowerCase().includes(query));
-      championsEl.innerHTML = '';
-
-      for (const champion of filtered) {
-        const button = document.createElement('button');
-        button.className = 'champion' + (champion.isDisabled ? ' disabled' : '') + (champion.isPicked ? ' picked' : '');
-        button.disabled = champion.isDisabled || !state.isMyTurn || state.actionType !== 'pick';
-        button.innerHTML = `<strong>${escapeHtml(champion.name)}</strong>${champion.isBanned ? '<span class="tag">Banned</span>' : champion.isPicked ? '<span class="tag">Picked</span>' : ''}`;
-        button.onclick = () => pick(champion.id, champion.name);
-        championsEl.appendChild(button);
-      }
-    }
-
-    async function pick(championId, championName) {
-      if (!confirm(`Lock in ${championName}?`)) return;
-
-      const response = await fetch('/api/pick', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ championId })
-      });
-      const result = await response.json();
-      showToast(result.message || (result.success ? 'Picked.' : 'Pick failed.'));
-      await loadState();
-    }
-
-    function escapeHtml(text) {
-      return text.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
-    }
-
-    loadState();
-    setInterval(loadState, 800);
-  </script>
-</body>
-</html>
-""";
         }
 
         public void Dispose()
