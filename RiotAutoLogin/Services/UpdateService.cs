@@ -266,48 +266,51 @@ namespace RiotAutoLogin.Services
 
                 var batchPath = Path.Combine(updaterDirectory, $"RiotAutoLoginUpdate-{Guid.NewGuid():N}.bat");
                 var logPath = Path.Combine(updaterDirectory, "RiotAutoLoginUpdate.log");
-                var restartCommand = restartApp ? $"start \"\" /D \"{currentExeDirectory}\" \"{currentExePath}\"" : "";
+                var restartCommand = restartApp ? $"start \"\" /D \"{currentExeDirectory}\" \"{currentExePath}\"" : "rem Restart disabled";
 
-                var batchContent = $@"@echo off
-setlocal
-set ""SOURCE={updateFilePath}""
-set ""TARGET={currentExePath}""
-set ""TARGET_DIR={currentExeDirectory}""
-set ""APP_PID={currentProcess.Id}""
-set ""LOG={logPath}""
+                var batchLines = new[]
+                {
+                    "@echo off",
+                    "setlocal",
+                    $"set \"SOURCE={updateFilePath}\"",
+                    $"set \"TARGET={currentExePath}\"",
+                    $"set \"TARGET_DIR={currentExeDirectory}\"",
+                    $"set \"APP_PID={currentProcess.Id}\"",
+                    $"set \"LOG={logPath}\"",
+                    string.Empty,
+                    "echo [%date% %time%] RiotAutoLogin updater started. > \"%LOG%\"",
+                    "echo Waiting for RiotAutoLogin process %APP_PID% to exit... >> \"%LOG%\"",
+                    string.Empty,
+                    "for /L %%i in (1,1,60) do (",
+                    "    tasklist /FI \"PID eq %APP_PID%\" 2>NUL | find \"%APP_PID%\" >NUL",
+                    "    if errorlevel 1 goto replace",
+                    "    timeout /t 1 /nobreak >NUL",
+                    ")",
+                    string.Empty,
+                    "echo Process did not exit in time. Trying replacement anyway. >> \"%LOG%\"",
+                    string.Empty,
+                    ":replace",
+                    "if not exist \"%SOURCE%\" (",
+                    "    echo Update file not found: %SOURCE% >> \"%LOG%\"",
+                    "    goto end",
+                    ")",
+                    string.Empty,
+                    "copy /Y \"%SOURCE%\" \"%TARGET%\" >> \"%LOG%\" 2>&1",
+                    "if errorlevel 1 (",
+                    "    echo Failed to copy update to target. >> \"%LOG%\"",
+                    "    goto end",
+                    ")",
+                    string.Empty,
+                    "del \"%SOURCE%\" >NUL 2>&1",
+                    "echo Update installed successfully. >> \"%LOG%\"",
+                    restartCommand,
+                    string.Empty,
+                    ":end",
+                    "endlocal",
+                    "del \"%~f0\" >NUL 2>&1"
+                };
 
-echo [%date% %time%] RiotAutoLogin updater started. > "%LOG%"
-echo Waiting for RiotAutoLogin process %APP_PID% to exit... >> "%LOG%"
-
-for /L %%i in (1,1,60) do (
-    tasklist /FI ""PID eq %APP_PID%"" 2>NUL | findstr /R /C:""^[^ ]*[ ]*%APP_PID%[ ]"" >NUL
-    if errorlevel 1 goto replace
-    timeout /t 1 /nobreak >NUL
-)
-
-echo Process did not exit in time. Trying replacement anyway. >> "%LOG%"
-
-:replace
-if not exist "%SOURCE%" (
-    echo Update file not found: %SOURCE% >> "%LOG%"
-    goto end
-)
-
-copy /Y "%SOURCE%" "%TARGET%" >> "%LOG%" 2>&1
-if errorlevel 1 (
-    echo Failed to copy update to target. >> "%LOG%"
-    goto end
-)
-
-del "%SOURCE%" >NUL 2>&1
-echo Update installed successfully. >> "%LOG%"
-{restartCommand}
-
-:end
-endlocal
-del "%~f0" >NUL 2>&1
-";
-
+                var batchContent = string.Join(Environment.NewLine, batchLines) + Environment.NewLine;
                 File.WriteAllText(batchPath, batchContent);
 
                 var processInfo = new ProcessStartInfo
