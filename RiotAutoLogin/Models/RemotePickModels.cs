@@ -5,6 +5,11 @@ namespace RiotAutoLogin.Models
     public class RemotePickState
     {
         public string Phase { get; set; } = "None";
+        public string ChampSelectPhase { get; set; } = string.Empty;
+        public string PhaseLabel { get; set; } = "Waiting";
+        public int TimeLeftInPhaseMs { get; set; } = -1;
+        public int TotalTimeInPhaseMs { get; set; } = -1;
+        public bool IsTimerInfinite { get; set; }
         public bool IsInChampSelect { get; set; }
         public bool IsMyTurn { get; set; }
         public bool CanPick => IsMyTurn && ActionType == "pick";
