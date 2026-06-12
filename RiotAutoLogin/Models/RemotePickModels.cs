@@ -28,6 +28,8 @@ namespace RiotAutoLogin.Models
         public List<int> AvailableSpellIds { get; set; } = new();
         public List<RemoteChampionDto> Champions { get; set; } = new();
         public List<RemoteSummonerSpellDto> SummonerSpells { get; set; } = new();
+        public List<RemoteRunePageDto> RunePages { get; set; } = new();
+        public RemoteRunePageDto? CurrentRunePage { get; set; }
     }
 
     public class RemoteChampionDto
@@ -53,6 +55,15 @@ namespace RiotAutoLogin.Models
         public bool IsAvailable { get; set; } = true;
     }
 
+    public class RemoteRunePageDto
+    {
+        public long Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public bool IsCurrent { get; set; }
+        public bool IsEditable { get; set; }
+        public bool IsDeletable { get; set; }
+    }
+
     public class RemotePickRequest
     {
         public int ChampionId { get; set; }
@@ -62,6 +73,11 @@ namespace RiotAutoLogin.Models
     {
         public int SpellId { get; set; }
         public int Slot { get; set; }
+    }
+
+    public class RemoteRunePageRequest
+    {
+        public long PageId { get; set; }
     }
 
     public class RemotePickActionResult
