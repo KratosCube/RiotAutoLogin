@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Reflection;
-using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using RiotAutoLogin.Models;
@@ -35,7 +34,7 @@ namespace RiotAutoLogin.Services
 
             _httpClient = new HttpClient();
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "RiotAutoLogin-UpdateChecker");
-            
+
             LoadSettings();
         }
 
@@ -49,10 +48,10 @@ namespace RiotAutoLogin.Services
 
             try
             {
-                ReportProgress(new UpdateProgress 
-                { 
-                    Status = UpdateStatus.Checking, 
-                    Message = "Checking for updates..." 
+                ReportProgress(new UpdateProgress
+                {
+                    Status = UpdateStatus.Checking,
+                    Message = "Checking for updates..."
                 });
 
                 var response = await _httpClient.GetStringAsync(_githubApiUrl);
@@ -64,10 +63,10 @@ namespace RiotAutoLogin.Services
                     if (release.Prerelease && !_settings.IncludePrereleases)
                     {
                         updateInfo.LatestVersion = updateInfo.CurrentVersion;
-                        ReportProgress(new UpdateProgress 
-                        { 
-                            Status = UpdateStatus.NoUpdateAvailable, 
-                            Message = "No updates available (prerelease skipped)" 
+                        ReportProgress(new UpdateProgress
+                        {
+                            Status = UpdateStatus.NoUpdateAvailable,
+                            Message = "No updates available (prerelease skipped)"
                         });
                         return updateInfo;
                     }
@@ -93,20 +92,31 @@ namespace RiotAutoLogin.Services
 
                         if (updateInfo.IsUpdateAvailable)
                         {
-                            ReportProgress(new UpdateProgress 
-                            { 
-                                Status = UpdateStatus.UpdateAvailable, 
-                                Message = $"Update available: v{latestVersion}" 
+                            if (string.IsNullOrWhiteSpace(updateInfo.DownloadUrl))
+                            {
+                                ReportProgress(new UpdateProgress
+                                {
+                                    Status = UpdateStatus.Error,
+                                    Message = "Update found, but no .exe asset is attached to the latest GitHub release."
+                                });
+
+                                return updateInfo;
+                            }
+
+                            ReportProgress(new UpdateProgress
+                            {
+                                Status = UpdateStatus.UpdateAvailable,
+                                Message = $"Update available: v{latestVersion}"
                             });
-                            
+
                             UpdateAvailable?.Invoke(updateInfo);
                         }
                         else
                         {
-                            ReportProgress(new UpdateProgress 
-                            { 
-                                Status = UpdateStatus.NoUpdateAvailable, 
-                                Message = "You have the latest version" 
+                            ReportProgress(new UpdateProgress
+                            {
+                                Status = UpdateStatus.NoUpdateAvailable,
+                                Message = "You have the latest version"
                             });
                         }
                     }
@@ -117,10 +127,10 @@ namespace RiotAutoLogin.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error checking for updates: {ex.Message}");
-                ReportProgress(new UpdateProgress 
-                { 
-                    Status = UpdateStatus.Error, 
+                Debug.WriteLine($"Error checking for updates: {ex.Message}");
+                ReportProgress(new UpdateProgress
+                {
+                    Status = UpdateStatus.Error,
                     Message = $"Update check failed: {ex.Message}",
                     Error = ex
                 });
@@ -136,12 +146,20 @@ namespace RiotAutoLogin.Services
 
             try
             {
-                ReportProgress(new UpdateProgress 
-                { 
-                    Status = UpdateStatus.Downloading, 
+                ReportProgress(new UpdateProgress
+                {
+                    Status = UpdateStatus.Downloading,
                     Message = "Downloading update...",
                     TotalBytes = updateInfo.FileSize ?? 0
                 });
+
+                string? downloadDirectory = Path.GetDirectoryName(downloadPath);
+                if (!string.IsNullOrWhiteSpace(downloadDirectory))
+                    Directory.CreateDirectory(downloadDirectory);
+
+                string tempDownloadPath = downloadPath + ".download";
+                if (File.Exists(tempDownloadPath))
+                    File.Delete(tempDownloadPath);
 
                 using var response = await _httpClient.GetAsync(updateInfo.DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
                 response.EnsureSuccessStatusCode();
@@ -150,31 +168,37 @@ namespace RiotAutoLogin.Services
                 var downloadedBytes = 0L;
 
                 using var contentStream = await response.Content.ReadAsStreamAsync();
-                using var fileStream = new FileStream(downloadPath, FileMode.Create, FileAccess.Write, FileShare.None);
-
-                var buffer = new byte[8192];
-                int bytesRead;
-
-                while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                using (var fileStream = new FileStream(tempDownloadPath, FileMode.Create, FileAccess.Write, FileShare.None))
                 {
-                    await fileStream.WriteAsync(buffer, 0, bytesRead);
-                    downloadedBytes += bytesRead;
+                    var buffer = new byte[8192];
+                    int bytesRead;
 
-                    var progressPercentage = totalBytes > 0 ? (int)((downloadedBytes * 100) / totalBytes) : 0;
-                    
-                    ReportProgress(new UpdateProgress 
-                    { 
-                        Status = UpdateStatus.Downloading, 
-                        Message = $"Downloading... {progressPercentage}%",
-                        ProgressPercentage = progressPercentage,
-                        BytesDownloaded = downloadedBytes,
-                        TotalBytes = totalBytes
-                    });
+                    while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                    {
+                        await fileStream.WriteAsync(buffer, 0, bytesRead);
+                        downloadedBytes += bytesRead;
+
+                        var progressPercentage = totalBytes > 0 ? (int)((downloadedBytes * 100) / totalBytes) : 0;
+
+                        ReportProgress(new UpdateProgress
+                        {
+                            Status = UpdateStatus.Downloading,
+                            Message = $"Downloading... {progressPercentage}%",
+                            ProgressPercentage = progressPercentage,
+                            BytesDownloaded = downloadedBytes,
+                            TotalBytes = totalBytes
+                        });
+                    }
                 }
 
-                ReportProgress(new UpdateProgress 
-                { 
-                    Status = UpdateStatus.Downloaded, 
+                if (File.Exists(downloadPath))
+                    File.Delete(downloadPath);
+
+                File.Move(tempDownloadPath, downloadPath);
+
+                ReportProgress(new UpdateProgress
+                {
+                    Status = UpdateStatus.Downloaded,
                     Message = "Download completed",
                     ProgressPercentage = 100
                 });
@@ -183,10 +207,10 @@ namespace RiotAutoLogin.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error downloading update: {ex.Message}");
-                ReportProgress(new UpdateProgress 
-                { 
-                    Status = UpdateStatus.Error, 
+                Debug.WriteLine($"Error downloading update: {ex.Message}");
+                ReportProgress(new UpdateProgress
+                {
+                    Status = UpdateStatus.Error,
                     Message = $"Download failed: {ex.Message}",
                     Error = ex
                 });
@@ -198,59 +222,120 @@ namespace RiotAutoLogin.Services
         {
             try
             {
-                ReportProgress(new UpdateProgress 
-                { 
-                    Status = UpdateStatus.Installing, 
-                    Message = "Installing update..." 
+                ReportProgress(new UpdateProgress
+                {
+                    Status = UpdateStatus.Installing,
+                    Message = "Installing update..."
                 });
 
-                // Create a batch file to replace the executable and restart the app
-                var currentExePath = Process.GetCurrentProcess().MainModule?.FileName;
-                if (string.IsNullOrEmpty(currentExePath))
+                if (string.IsNullOrWhiteSpace(updateFilePath) || !File.Exists(updateFilePath))
+                {
+                    ReportProgress(new UpdateProgress
+                    {
+                        Status = UpdateStatus.Error,
+                        Message = "Installation failed: downloaded update file was not found."
+                    });
                     return false;
+                }
 
-                var batchPath = Path.Combine(Path.GetTempPath(), "RiotAutoLoginUpdate.bat");
-                var batchContent = $@"
-@echo off
-timeout /t 2 /nobreak > nul
-copy ""{updateFilePath}"" ""{currentExePath}"" /y
-del ""{updateFilePath}""
-{(restartApp ? $"start \"\" \"{currentExePath}\"" : "")}
-del ""{batchPath}""
+                var currentProcess = Process.GetCurrentProcess();
+                var currentExePath = currentProcess.MainModule?.FileName;
+                if (string.IsNullOrWhiteSpace(currentExePath) || !File.Exists(currentExePath))
+                {
+                    ReportProgress(new UpdateProgress
+                    {
+                        Status = UpdateStatus.Error,
+                        Message = "Installation failed: could not locate the running application executable."
+                    });
+                    return false;
+                }
+
+                string? currentExeDirectory = Path.GetDirectoryName(currentExePath);
+                if (string.IsNullOrWhiteSpace(currentExeDirectory))
+                {
+                    ReportProgress(new UpdateProgress
+                    {
+                        Status = UpdateStatus.Error,
+                        Message = "Installation failed: could not locate the application directory."
+                    });
+                    return false;
+                }
+
+                var updaterDirectory = Path.Combine(Path.GetTempPath(), "RiotAutoLogin", "Updater");
+                Directory.CreateDirectory(updaterDirectory);
+
+                var batchPath = Path.Combine(updaterDirectory, $"RiotAutoLoginUpdate-{Guid.NewGuid():N}.bat");
+                var logPath = Path.Combine(updaterDirectory, "RiotAutoLoginUpdate.log");
+                var restartCommand = restartApp ? $"start \"\" /D \"{currentExeDirectory}\" \"{currentExePath}\"" : "";
+
+                var batchContent = $@"@echo off
+setlocal
+set ""SOURCE={updateFilePath}""
+set ""TARGET={currentExePath}""
+set ""TARGET_DIR={currentExeDirectory}""
+set ""APP_PID={currentProcess.Id}""
+set ""LOG={logPath}""
+
+echo [%date% %time%] RiotAutoLogin updater started. > "%LOG%"
+echo Waiting for RiotAutoLogin process %APP_PID% to exit... >> "%LOG%"
+
+for /L %%i in (1,1,60) do (
+    tasklist /FI ""PID eq %APP_PID%"" 2>NUL | findstr /R /C:""^[^ ]*[ ]*%APP_PID%[ ]"" >NUL
+    if errorlevel 1 goto replace
+    timeout /t 1 /nobreak >NUL
+)
+
+echo Process did not exit in time. Trying replacement anyway. >> "%LOG%"
+
+:replace
+if not exist "%SOURCE%" (
+    echo Update file not found: %SOURCE% >> "%LOG%"
+    goto end
+)
+
+copy /Y "%SOURCE%" "%TARGET%" >> "%LOG%" 2>&1
+if errorlevel 1 (
+    echo Failed to copy update to target. >> "%LOG%"
+    goto end
+)
+
+del "%SOURCE%" >NUL 2>&1
+echo Update installed successfully. >> "%LOG%"
+{restartCommand}
+
+:end
+endlocal
+del "%~f0" >NUL 2>&1
 ";
 
                 File.WriteAllText(batchPath, batchContent);
 
-                // Start the batch file and exit current process
                 var processInfo = new ProcessStartInfo
                 {
                     FileName = batchPath,
+                    WorkingDirectory = updaterDirectory,
                     WindowStyle = ProcessWindowStyle.Hidden,
-                    UseShellExecute = false
+                    UseShellExecute = true,
+                    CreateNoWindow = true
                 };
 
                 Process.Start(processInfo);
 
-                ReportProgress(new UpdateProgress 
-                { 
-                    Status = UpdateStatus.Installed, 
-                    Message = "Update installed successfully" 
+                ReportProgress(new UpdateProgress
+                {
+                    Status = UpdateStatus.Installed,
+                    Message = "Updater started. The application will close and restart."
                 });
 
-                // Exit current application
-                if (restartApp)
-                {
-                    Application.Current.Shutdown();
-                }
-
+                Application.Current.Shutdown();
                 return true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error installing update: {ex.Message}");
-                ReportProgress(new UpdateProgress 
-                { 
-                    Status = UpdateStatus.Error, 
+                Debug.WriteLine($"Error installing update: {ex.Message}");
+                ReportProgress(new UpdateProgress
+                {
+                    Status = UpdateStatus.Error,
                     Message = $"Installation failed: {ex.Message}",
                     Error = ex
                 });
@@ -305,7 +390,7 @@ del ""{batchPath}""
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error loading update settings: {ex.Message}");
+                Debug.WriteLine($"Error loading update settings: {ex.Message}");
                 _settings = new UpdateSettings();
             }
         }
@@ -320,7 +405,7 @@ del ""{batchPath}""
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error saving update settings: {ex.Message}");
+                Debug.WriteLine($"Error saving update settings: {ex.Message}");
             }
         }
 
@@ -329,4 +414,4 @@ del ""{batchPath}""
             UpdateProgressChanged?.Invoke(progress);
         }
     }
-} 
+}
