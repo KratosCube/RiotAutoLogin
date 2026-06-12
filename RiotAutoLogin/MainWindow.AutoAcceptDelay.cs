@@ -264,7 +264,7 @@ namespace RiotAutoLogin
 
             var copyButton = new Button
             {
-                Content = "Copy Link",
+                Content = "Copy Links",
                 Style = TryFindResource("SecondaryButton") as Style,
                 IsEnabled = false
             };
@@ -273,8 +273,10 @@ namespace RiotAutoLogin
                 if (!_remotePickServerService.IsRunning)
                     return;
 
-                Clipboard.SetText(_remotePickServerService.LocalUrl);
-                UpdateRemotePickStatus("Link copied. Open it on your phone while connected to the same Wi-Fi.");
+                Clipboard.SetText(_remotePickServerService.LocalUrlDisplay);
+                UpdateRemotePickStatus(
+                    "Links copied. If one address does not work, try the next one. Your phone must be on the same Wi-Fi.",
+                    _remotePickServerService.LocalUrlDisplay);
             };
 
             _remotePickToggle.Checked += (_, _) => copyButton.IsEnabled = true;
@@ -294,7 +296,9 @@ namespace RiotAutoLogin
                 if (_remotePickToggle != null)
                     _remotePickToggle.Content = "ON";
 
-                UpdateRemotePickStatus("Remote Pick is running. Open this address on your phone:", _remotePickServerService.LocalUrl);
+                UpdateRemotePickStatus(
+                    "Remote Pick is running. Try these addresses on your phone; one may be a VPN/virtual adapter, so use the Wi-Fi/LAN address that works:",
+                    _remotePickServerService.LocalUrlDisplay);
             }
             catch (Exception ex)
             {
