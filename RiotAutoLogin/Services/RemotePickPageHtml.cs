@@ -61,24 +61,8 @@ namespace RiotAutoLogin.Services
       box-shadow: 0 12px 35px rgba(0,0,0,.4);
     }
 
-    .topbar {
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 9px;
-    }
-
-    h1 {
-      margin: 0;
-      text-align: center;
-      letter-spacing: .08em;
-      font-size: clamp(18px, 5vw, 31px);
-      color: var(--gold-strong);
-      text-shadow: 0 2px 18px rgba(240,213,138,.22);
-      white-space: nowrap;
-    }
-
+    .topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-bottom: 9px; }
+    h1 { margin: 0; text-align: center; letter-spacing: .08em; font-size: clamp(18px, 5vw, 31px); color: var(--gold-strong); text-shadow: 0 2px 18px rgba(240,213,138,.22); white-space: nowrap; }
     .side-title { color: var(--muted); font: 700 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .18em; }
     .side-title.right { text-align: right; }
 
@@ -98,82 +82,23 @@ namespace RiotAutoLogin.Services
     .phase { color: var(--cyan); font: 800 11px system-ui, sans-serif; letter-spacing: .18em; text-transform: uppercase; }
     .message { margin-top: 5px; font-size: 15px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    .timer-box {
-      min-width: 96px;
-      display: grid;
-      place-items: center;
-      padding: 8px 10px;
-      border-left: 1px solid rgba(200,170,110,.25);
-      background: rgba(0,0,0,.2);
-    }
+    .timer-box { min-width: 96px; display: grid; place-items: center; padding: 8px 10px; border-left: 1px solid rgba(200,170,110,.25); background: rgba(0,0,0,.2); }
     .timer-value { font: 900 28px system-ui, sans-serif; color: var(--gold-strong); line-height: 1; }
     .timer-label { margin-top: 3px; font: 800 9px system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .16em; }
 
     .status-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; align-items: center; }
-    .turn-pill {
-      display: inline-flex;
-      align-items: center;
-      padding: 6px 9px;
-      border: 1px solid rgba(10,200,185,.48);
-      color: #d7fffb;
-      background: rgba(10,200,185,.09);
-      font: 800 10px system-ui, sans-serif;
-      text-transform: uppercase;
-      letter-spacing: .12em;
-    }
+    .turn-pill { display: inline-flex; align-items: center; padding: 6px 9px; border: 1px solid rgba(10,200,185,.48); color: #d7fffb; background: rgba(10,200,185,.09); font: 800 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .12em; }
     .turn-pill.waiting { border-color: rgba(200,170,110,.33); color: var(--gold); background: rgba(200,170,110,.08); }
     .turn-pill.ban { border-color: rgba(182,74,85,.7); color: #ffd7dc; background: rgba(182,74,85,.14); }
-    .leave-button {
-      border: 1px solid rgba(182,74,85,.72);
-      background: rgba(182,74,85,.13);
-      color: #ffd7dc;
-      min-height: 29px;
-      padding: 0 10px;
-      font: 800 10px system-ui, sans-serif;
-      text-transform: uppercase;
-      letter-spacing: .1em;
-      cursor: pointer;
-    }
+    .leave-button { border: 1px solid rgba(182,74,85,.72); background: rgba(182,74,85,.13); color: #ffd7dc; min-height: 29px; padding: 0 10px; font: 800 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .1em; cursor: pointer; }
     .leave-button:disabled { opacity: .35; cursor: not-allowed; }
 
-    .accepted-alert {
-      display: none;
-      max-width: 1120px;
-      margin: 9px auto 0;
-      padding: 10px 12px;
-      border: 1px solid rgba(10,200,185,.65);
-      color: #d7fffb;
-      background: linear-gradient(90deg, rgba(10,200,185,.18), rgba(10,200,185,.06));
-      font: 900 13px system-ui, sans-serif;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      animation: pulseAlert 1s ease-in-out infinite alternate;
-    }
+    .accepted-alert { display: none; max-width: 1120px; margin: 9px auto 0; padding: 10px 12px; border: 1px solid rgba(10,200,185,.65); color: #d7fffb; background: linear-gradient(90deg, rgba(10,200,185,.18), rgba(10,200,185,.06)); font: 900 13px system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; animation: pulseAlert 1s ease-in-out infinite alternate; }
     @keyframes pulseAlert { from { box-shadow: 0 0 0 rgba(10,200,185,0); } to { box-shadow: 0 0 24px rgba(10,200,185,.26); } }
 
-    .layout {
-      display: grid;
-      grid-template-columns: 230px minmax(0, 1fr) 250px;
-      gap: 12px;
-      max-width: 1180px;
-      margin: 0 auto;
-      align-items: start;
-    }
-    .panel {
-      border: 1px solid rgba(200,170,110,.27);
-      background: var(--panel);
-      box-shadow: inset 0 0 30px rgba(0,0,0,.28);
-      min-height: 120px;
-    }
-    .panel h2, .section-title {
-      margin: 0;
-      padding: 11px 12px;
-      border-bottom: 1px solid rgba(200,170,110,.18);
-      color: var(--gold);
-      font: 800 11px system-ui, sans-serif;
-      text-transform: uppercase;
-      letter-spacing: .16em;
-    }
+    .layout { display: grid; grid-template-columns: 230px minmax(0, 1fr) 250px; gap: 12px; max-width: 1180px; margin: 0 auto; align-items: start; }
+    .panel { border: 1px solid rgba(200,170,110,.27); background: var(--panel); box-shadow: inset 0 0 30px rgba(0,0,0,.28); min-height: 120px; }
+    .panel h2, .section-title { margin: 0; padding: 11px 12px; border-bottom: 1px solid rgba(200,170,110,.18); color: var(--gold); font: 800 11px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .16em; }
     .rail-list { padding: 10px; display: grid; gap: 8px; }
     .rail-empty { color: var(--muted); font: 12px system-ui, sans-serif; padding: 10px; }
     .mini-card { display: flex; align-items: center; gap: 9px; padding: 7px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.055); min-height: 50px; }
@@ -185,10 +110,7 @@ namespace RiotAutoLogin.Services
     .center { min-width: 0; }
     .mobile-loadout { display: none; }
     .search-wrap { display: grid; grid-template-columns: 1fr auto; gap: 9px; margin-bottom: 10px; }
-    input {
-      width: 100%; border: 1px solid rgba(200,170,110,.32); background: rgba(5, 10, 18, .9); color: var(--text);
-      padding: 13px; font: 15px system-ui, sans-serif; outline: none; border-radius: 0;
-    }
+    input { width: 100%; border: 1px solid rgba(200,170,110,.32); background: rgba(5, 10, 18, .9); color: var(--text); padding: 13px; font: 15px system-ui, sans-serif; outline: none; border-radius: 0; }
     input:focus { border-color: rgba(10,200,185,.75); box-shadow: 0 0 0 2px rgba(10,200,185,.12); }
     .count { display: grid; place-items: center; min-width: 64px; border: 1px solid rgba(200,170,110,.32); color: var(--gold); background: rgba(5, 10, 18, .9); font: 800 11px system-ui, sans-serif; text-transform: uppercase; }
 
@@ -205,8 +127,8 @@ namespace RiotAutoLogin.Services
     .badge.banned { color: #ffb3ba; border-color: rgba(182,74,85,.9); }
     .badge.intent { color: #d7fffb; border-color: rgba(10,200,185,.8); }
     .champion-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 7px 8px; }
-    .champion-actions button, .spell-button, .small-button { border: 1px solid rgba(200,170,110,.35); background: rgba(9, 16, 25, .92); color: var(--text); min-height: 34px; font: 800 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; cursor: pointer; }
-    .champion-actions button:disabled { opacity: .35; cursor: not-allowed; }
+    .champion-actions button, .spell-button, .small-button, .rune-page-button { border: 1px solid rgba(200,170,110,.35); background: rgba(9, 16, 25, .92); color: var(--text); min-height: 34px; font: 800 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; cursor: pointer; }
+    .champion-actions button:disabled, .rune-page-button:disabled { opacity: .35; cursor: not-allowed; }
     .champion-actions .lock { border-color: rgba(10,200,185,.55); color: #d7fffb; }
     .champion-actions .ban { border-color: rgba(182,74,85,.7); color: #ffd7dc; }
     .champion-actions .hover { color: var(--gold); }
@@ -217,7 +139,13 @@ namespace RiotAutoLogin.Services
     .spell-button img { width: 34px; height: 34px; border: 1px solid rgba(200,170,110,.45); background:#061019; }
     .spell-button span { display: block; color: var(--gold); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
     .spell-button strong { display:block; font-size:12px; color:var(--text); margin-top:2px; }
-    .rune-placeholder { margin-top: 10px; padding: 10px; border: 1px dashed rgba(200,170,110,.28); color: var(--gold); text-align: center; background: rgba(200,170,110,.05); }
+    .rune-block { margin-top: 10px; border: 1px solid rgba(200,170,110,.18); background: rgba(200,170,110,.04); }
+    .rune-current { padding: 9px 10px; color: var(--gold); font: 800 11px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; border-bottom: 1px solid rgba(200,170,110,.14); }
+    .rune-list { display: grid; gap: 6px; padding: 8px; }
+    .rune-page-button { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; padding: 8px; text-align: left; text-transform: none; letter-spacing: 0; min-height: 40px; }
+    .rune-page-button.current { border-color: rgba(10,200,185,.55); color: #d7fffb; }
+    .rune-page-button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rune-page-button em { color: var(--gold); font-style: normal; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
 
     .modal-backdrop { position: fixed; inset: 0; z-index: 30; display: none; background: rgba(0,0,0,.72); padding: 16px; overflow: auto; }
     .modal { max-width: 680px; margin: 4vh auto; border: 1px solid var(--line); background: var(--panel-strong); box-shadow: 0 20px 70px rgba(0,0,0,.6); }
@@ -329,6 +257,10 @@ namespace RiotAutoLogin.Services
     let previousPhase = null;
     let matchAlertDismissTimer = null;
     let query = '';
+    let timerBaseTimeLeftMs = null;
+    let timerBasePerfMs = 0;
+    let timerIsInfinite = false;
+
     const championsEl = document.getElementById('champions');
     const pickedListEl = document.getElementById('pickedList');
     const bannedListEl = document.getElementById('bannedList');
@@ -371,9 +303,13 @@ namespace RiotAutoLogin.Services
     }
 
     async function loadState() {
+      const requestStartedAt = performance.now();
       try {
         const response = await fetch('/api/state', { cache: 'no-store' });
         const nextState = await response.json();
+        const responseReceivedAt = performance.now();
+        syncTimerFromState(nextState, responseReceivedAt - requestStartedAt);
+
         const oldPhase = previousPhase;
         previousPhase = nextState.phase;
         state = nextState;
@@ -388,8 +324,40 @@ namespace RiotAutoLogin.Services
         messageEl.textContent = 'Disconnected from Remote Pick server.';
         turnEl.textContent = 'Offline';
         turnEl.className = 'turn-pill waiting';
-        timerEl.textContent = '--';
+        timerBaseTimeLeftMs = null;
+        updateTimerDisplay();
         leaveButtonEl.disabled = true;
+      }
+    }
+
+    function syncTimerFromState(nextState, roundTripMs) {
+      timerIsInfinite = Boolean(nextState.isTimerInfinite);
+
+      if (typeof nextState.timeLeftInPhaseMs !== 'number' || nextState.timeLeftInPhaseMs < 0) {
+        timerBaseTimeLeftMs = null;
+        timerBasePerfMs = performance.now();
+        return;
+      }
+
+      const estimatedNetworkDelayMs = Math.max(0, roundTripMs) / 2;
+      timerBaseTimeLeftMs = Math.max(0, nextState.timeLeftInPhaseMs - estimatedNetworkDelayMs);
+      timerBasePerfMs = performance.now();
+    }
+
+    function getCurrentTimerMs() {
+      if (timerIsInfinite) return Infinity;
+      if (timerBaseTimeLeftMs === null) return null;
+      return Math.max(0, timerBaseTimeLeftMs - (performance.now() - timerBasePerfMs));
+    }
+
+    function updateTimerDisplay() {
+      const currentMs = getCurrentTimerMs();
+      if (currentMs === Infinity) {
+        timerEl.textContent = '∞';
+      } else if (currentMs === null) {
+        timerEl.textContent = '--';
+      } else {
+        timerEl.textContent = String(Math.ceil(currentMs / 1000));
       }
     }
 
@@ -400,7 +368,7 @@ namespace RiotAutoLogin.Services
       const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
       phaseEl.textContent = `${state.phaseLabel || state.phase || 'Unknown'}${state.champSelectPhase ? ' · ' + state.champSelectPhase : ''}`;
       messageEl.textContent = state.message || `Phase: ${state.phase}`;
-      timerEl.textContent = formatTimer(state);
+      updateTimerDisplay();
       turnEl.textContent = canBan ? 'Your ban turn' : canPick ? 'Your pick turn' : state.isInChampSelect ? 'Hover intent available' : 'Waiting';
       turnEl.className = canBan ? 'turn-pill ban' : canPick ? 'turn-pill' : 'turn-pill waiting';
       leaveButtonEl.disabled = !state.canLeave;
@@ -442,12 +410,6 @@ namespace RiotAutoLogin.Services
       renderRail(bannedListEl, state.champions.filter(c => c.isBanned), 'Banned', true);
     }
 
-    function formatTimer(currentState) {
-      if (currentState.isTimerInfinite) return '∞';
-      if (typeof currentState.timeLeftInPhaseMs !== 'number' || currentState.timeLeftInPhaseMs < 0) return '--';
-      return String(Math.ceil(currentState.timeLeftInPhaseMs / 1000));
-    }
-
     function renderLoadout(target) {
       if (!target || !state) return;
       const spell1 = state.summonerSpells.find(spell => spell.isSpell1) || null;
@@ -459,10 +421,30 @@ namespace RiotAutoLogin.Services
             ${renderSpellButton(1, spell1)}
             ${renderSpellButton(2, spell2)}
           </div>
-          <div class="rune-placeholder">Runes coming later</div>
+          ${renderRunePages()}
         </div>`;
       target.querySelector('[data-slot="1"]').onclick = () => openSpellModal(1);
       target.querySelector('[data-slot="2"]').onclick = () => openSpellModal(2);
+      for (const button of target.querySelectorAll('[data-rune-page-id]')) {
+        button.onclick = () => selectRunePage(Number(button.dataset.runePageId));
+      }
+    }
+
+    function renderRunePages() {
+      const pages = state.runePages || [];
+      const current = state.currentRunePage || pages.find(page => page.isCurrent) || null;
+      if (!pages.length) {
+        return `<div class="rune-block"><div class="rune-current">Runes unavailable</div></div>`;
+      }
+
+      return `<div class="rune-block">
+        <div class="rune-current">Runes: ${current ? escapeHtml(current.name) : 'Choose page'}</div>
+        <div class="rune-list">
+          ${pages.map(page => `<button class="rune-page-button ${page.isCurrent ? 'current' : ''}" data-rune-page-id="${page.id}" ${page.isCurrent ? 'disabled' : ''}>
+            <span>${escapeHtml(page.name)}</span><em>${page.isCurrent ? 'Active' : 'Set'}</em>
+          </button>`).join('')}
+        </div>
+      </div>`;
     }
 
     function renderSpellButton(slot, spell) {
@@ -544,6 +526,17 @@ namespace RiotAutoLogin.Services
       await loadState();
     }
 
+    async function selectRunePage(pageId) {
+      const response = await fetch('/api/rune-page', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId })
+      });
+      const result = await response.json();
+      showToast(result.message || (result.success ? 'Rune page selected.' : 'Rune page change failed.'));
+      await loadState();
+    }
+
     async function leaveLobby() {
       const label = leaveButtonEl.textContent || 'Leave Lobby';
       if (!confirm(`${label}?`)) return;
@@ -564,6 +557,7 @@ namespace RiotAutoLogin.Services
 
     loadState();
     setInterval(loadState, 800);
+    setInterval(updateTimerDisplay, 100);
   </script>
 </body>
 </html>
