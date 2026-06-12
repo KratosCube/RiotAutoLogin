@@ -29,6 +29,7 @@ namespace RiotAutoLogin.Services
         private Task? _serverTask;
         private List<ChampionModel>? _championCache;
         private List<RemoteChampionDto>? _remoteChampionCache;
+        private List<RemoteSummonerSpellDto>? _remoteSpellCache;
 
         public bool IsRunning { get; private set; }
         public int Port { get; private set; } = DefaultPort;
@@ -169,6 +170,21 @@ namespace RiotAutoLogin.Services
                     RemotePickActionResult result = await PickChampionAsync(body);
                     await WriteJsonResponseAsync(stream, result.Success ? 200 : 400, result.Success ? "OK" : "Bad Request", result, cancellationToken);
                 }
+                else if (method == "POST" && path.StartsWith("/api/ban", StringComparison.OrdinalIgnoreCase))
+                {
+                    RemotePickActionResult result = await BanChampionAsync(body);
+                    await WriteJsonResponseAsync(stream, result.Success ? 200 : 400, result.Success ? "OK" : "Bad Request", result, cancellationToken);
+                }
+                else if (method == "POST" && path.StartsWith("/api/hover", StringComparison.OrdinalIgnoreCase))
+                {
+                    RemotePickActionResult result = await HoverChampionAsync(body);
+                    await WriteJsonResponseAsync(stream, result.Success ? 200 : 400, result.Success ? "OK" : "Bad Request", result, cancellationToken);
+                }
+                else if (method == "POST" && path.StartsWith("/api/spell", StringComparison.OrdinalIgnoreCase))
+                {
+                    RemotePickActionResult result = await SelectSpellAsync(body);
+                    await WriteJsonResponseAsync(stream, result.Success ? 200 : 400, result.Success ? "OK" : "Bad Request", result, cancellationToken);
+                }
                 else
                 {
                     await WriteTextResponseAsync(stream, 404, "Not Found", "Not found", cancellationToken);
@@ -199,7 +215,7 @@ namespace RiotAutoLogin.Services
             if (!LCUService.CheckIfLeagueClientIsOpen())
             {
                 state.Message = "League Client is not running.";
-                await AddChampionListAsync(state, new HashSet<int>(), new HashSet<int>());
+                await AddChampionAndSpellListsAsync(state, new HashSet<int>(), new HashSet<int>());
                 return state;
             }
 
@@ -215,7 +231,7 @@ namespace RiotAutoLogin.Services
                     ? "Waiting for League Client state..."
                     : $"Current phase: {state.Phase}. Waiting for champion select.";
 
-                await AddChampionListAsync(state, bannedChampionIds, pickedChampionIds);
+                await AddChampionAndSpellListsAsync(state, bannedChampionIds, pickedChampionIds);
                 return state;
             }
 
@@ -223,7 +239,7 @@ namespace RiotAutoLogin.Services
             if (sessionResult[0] != "200")
             {
                 state.Message = $"Could not read champion select session. Status: {sessionResult[0]}";
-                await AddChampionListAsync(state, bannedChampionIds, pickedChampionIds);
+                await AddChampionAndSpellListsAsync(state, bannedChampionIds, pickedChampionIds);
                 return state;
             }
 
@@ -232,40 +248,34 @@ namespace RiotAutoLogin.Services
 
             ParseBans(root, bannedChampionIds);
             ParsePicks(root, pickedChampionIds);
+            ParseLocalPlayerSelection(root, state);
             ParseCurrentAction(root, state);
 
             state.BannedChampionIds = bannedChampionIds.OrderBy(id => id).ToList();
             state.PickedChampionIds = pickedChampionIds.OrderBy(id => id).ToList();
             state.Message = state.IsMyTurn
                 ? state.ActionType == "pick"
-                    ? "It is your pick. Choose a champion."
-                    : $"It is your {state.ActionType} turn. Remote Pick currently supports picking only."
-                : "Waiting for your pick turn.";
+                    ? "It is your pick. Lock in or hover a champion."
+                    : state.ActionType == "ban"
+                        ? "It is your ban. Choose a champion to ban."
+                        : $"It is your {state.ActionType} turn."
+                : "You can hover an intended pick while waiting for your turn.";
 
-            await AddChampionListAsync(state, bannedChampionIds, pickedChampionIds);
+            await AddChampionAndSpellListsAsync(state, bannedChampionIds, pickedChampionIds);
             return state;
         }
 
         public async Task<RemotePickActionResult> PickChampionAsync(string body)
         {
-            RemotePickRequest? request;
-            try
-            {
-                request = JsonSerializer.Deserialize<RemotePickRequest>(body, _jsonOptions);
-            }
-            catch
-            {
-                return new RemotePickActionResult { Success = false, Message = "Invalid pick request." };
-            }
-
-            if (request == null || request.ChampionId <= 0)
+            RemotePickRequest? request = ParseChampionRequest(body);
+            if (request == null)
                 return new RemotePickActionResult { Success = false, Message = "Invalid champion." };
 
             RemotePickState state = await GetStateAsync();
             if (!state.IsInChampSelect)
                 return new RemotePickActionResult { Success = false, Message = "You are not in champion select." };
 
-            if (!state.IsMyTurn || !state.ActionType.Equals("pick", StringComparison.OrdinalIgnoreCase))
+            if (!state.CanPick)
                 return new RemotePickActionResult { Success = false, Message = "It is not your pick turn." };
 
             if (state.BannedChampionIds.Contains(request.ChampionId))
@@ -278,13 +288,117 @@ namespace RiotAutoLogin.Services
             return new RemotePickActionResult
             {
                 Success = success,
-                Message = success ? "Champion picked." : "League Client rejected the pick request."
+                Message = success ? "Champion locked in." : "League Client rejected the pick request."
             };
         }
 
-        private async Task AddChampionListAsync(RemotePickState state, HashSet<int> bannedChampionIds, HashSet<int> pickedChampionIds)
+        public async Task<RemotePickActionResult> BanChampionAsync(string body)
+        {
+            RemotePickRequest? request = ParseChampionRequest(body);
+            if (request == null)
+                return new RemotePickActionResult { Success = false, Message = "Invalid champion." };
+
+            RemotePickState state = await GetStateAsync();
+            if (!state.IsInChampSelect)
+                return new RemotePickActionResult { Success = false, Message = "You are not in champion select." };
+
+            if (!state.CanBan)
+                return new RemotePickActionResult { Success = false, Message = "It is not your ban turn." };
+
+            if (state.BannedChampionIds.Contains(request.ChampionId))
+                return new RemotePickActionResult { Success = false, Message = "This champion is already banned." };
+
+            if (state.PickedChampionIds.Contains(request.ChampionId))
+                return new RemotePickActionResult { Success = false, Message = "This champion is already picked." };
+
+            bool success = LCUService.SelectChampion(request.ChampionId, state.ActionId, complete: true);
+            return new RemotePickActionResult
+            {
+                Success = success,
+                Message = success ? "Champion banned." : "League Client rejected the ban request."
+            };
+        }
+
+        public async Task<RemotePickActionResult> HoverChampionAsync(string body)
+        {
+            RemotePickRequest? request = ParseChampionRequest(body);
+            if (request == null)
+                return new RemotePickActionResult { Success = false, Message = "Invalid champion." };
+
+            RemotePickState state = await GetStateAsync();
+            if (!state.IsInChampSelect)
+                return new RemotePickActionResult { Success = false, Message = "You are not in champion select." };
+
+            if (state.BannedChampionIds.Contains(request.ChampionId))
+                return new RemotePickActionResult { Success = false, Message = "This champion is banned." };
+
+            if (state.PickedChampionIds.Contains(request.ChampionId))
+                return new RemotePickActionResult { Success = false, Message = "This champion is already picked." };
+
+            bool success = false;
+
+            if (!string.IsNullOrWhiteSpace(state.ActionId) && state.ActionType == "pick")
+            {
+                success = LCUService.SelectChampion(request.ChampionId, state.ActionId, complete: false);
+            }
+
+            if (!success)
+            {
+                string bodyJson = JsonSerializer.Serialize(new { championId = request.ChampionId }, _jsonOptions);
+                string[] result = LCUService.ClientRequest("PATCH", "lol-champ-select/v1/session/my-selection", bodyJson);
+                success = result[0].StartsWith("2");
+            }
+
+            return new RemotePickActionResult
+            {
+                Success = success,
+                Message = success ? "Champion intent updated." : "League Client rejected the hover request."
+            };
+        }
+
+        public async Task<RemotePickActionResult> SelectSpellAsync(string body)
+        {
+            RemoteSpellRequest? request;
+            try
+            {
+                request = JsonSerializer.Deserialize<RemoteSpellRequest>(body, _jsonOptions);
+            }
+            catch
+            {
+                return new RemotePickActionResult { Success = false, Message = "Invalid spell request." };
+            }
+
+            if (request == null || request.SpellId <= 0 || request.Slot is not (1 or 2))
+                return new RemotePickActionResult { Success = false, Message = "Invalid summoner spell." };
+
+            if (!LCUService.CheckIfLeagueClientIsOpen())
+                return new RemotePickActionResult { Success = false, Message = "League Client is not running." };
+
+            bool success = LCUService.SelectSummonerSpell(request.SpellId, request.Slot);
+            return new RemotePickActionResult
+            {
+                Success = success,
+                Message = success ? "Summoner spell updated." : "League Client rejected the spell change."
+            };
+        }
+
+        private RemotePickRequest? ParseChampionRequest(string body)
+        {
+            try
+            {
+                RemotePickRequest? request = JsonSerializer.Deserialize<RemotePickRequest>(body, _jsonOptions);
+                return request == null || request.ChampionId <= 0 ? null : request;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private async Task AddChampionAndSpellListsAsync(RemotePickState state, HashSet<int> bannedChampionIds, HashSet<int> pickedChampionIds)
         {
             await EnsureRemoteChampionCacheAsync();
+            await EnsureRemoteSpellCacheAsync();
 
             state.Champions = (_remoteChampionCache ?? new List<RemoteChampionDto>())
                 .Select(champion => new RemoteChampionDto
@@ -293,7 +407,21 @@ namespace RiotAutoLogin.Services
                     Name = champion.Name,
                     ImageUrl = champion.ImageUrl,
                     IsBanned = bannedChampionIds.Contains(champion.Id),
-                    IsPicked = pickedChampionIds.Contains(champion.Id)
+                    IsPicked = pickedChampionIds.Contains(champion.Id),
+                    IsSelected = state.SelectedChampionId == champion.Id,
+                    IsIntent = state.PickIntentChampionId == champion.Id
+                })
+                .ToList();
+
+            state.SummonerSpells = (_remoteSpellCache ?? new List<RemoteSummonerSpellDto>())
+                .Select(spell => new RemoteSummonerSpellDto
+                {
+                    Id = spell.Id,
+                    Name = spell.Name,
+                    Description = spell.Description,
+                    ImageUrl = spell.ImageUrl,
+                    IsSpell1 = state.Spell1Id == spell.Id,
+                    IsSpell2 = state.Spell2Id == spell.Id
                 })
                 .ToList();
         }
@@ -334,6 +462,39 @@ namespace RiotAutoLogin.Services
             _remoteChampionCache = remoteChampions;
         }
 
+        private async Task EnsureRemoteSpellCacheAsync()
+        {
+            if (_remoteSpellCache != null)
+                return;
+
+            List<SummonerSpellModel> spells = await LCUService.GetSummonerSpellsAsync();
+            var remoteSpells = new List<RemoteSummonerSpellDto>();
+
+            foreach (SummonerSpellModel spell in spells.Where(spell => spell.Id > 0).OrderBy(spell => spell.Name))
+            {
+                string imageUrl = spell.ImageUrl ?? string.Empty;
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(imageUrl) && !string.IsNullOrWhiteSpace(spell.Name))
+                        imageUrl = await DataDragonService.GetSummonerSpellImageUrlAsync(spell.Name);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Could not get summoner spell image URL for {spell.Name}: {ex.Message}");
+                }
+
+                remoteSpells.Add(new RemoteSummonerSpellDto
+                {
+                    Id = spell.Id,
+                    Name = spell.Name ?? $"Spell {spell.Id}",
+                    Description = spell.Description ?? string.Empty,
+                    ImageUrl = imageUrl
+                });
+            }
+
+            _remoteSpellCache = remoteSpells;
+        }
+
         private static void ParseBans(JsonElement root, HashSet<int> bannedChampionIds)
         {
             if (!root.TryGetProperty("bans", out JsonElement bansElement))
@@ -347,6 +508,48 @@ namespace RiotAutoLogin.Services
         {
             AddChampionIdsFromTeam(root, "myTeam", pickedChampionIds);
             AddChampionIdsFromTeam(root, "theirTeam", pickedChampionIds);
+        }
+
+        private static void ParseLocalPlayerSelection(JsonElement root, RemotePickState state)
+        {
+            if (!root.TryGetProperty("localPlayerCellId", out JsonElement localCellElement) ||
+                !TryGetInt(localCellElement, out int localPlayerCellId))
+            {
+                return;
+            }
+
+            if (!root.TryGetProperty("myTeam", out JsonElement myTeamElement) || myTeamElement.ValueKind != JsonValueKind.Array)
+                return;
+
+            foreach (JsonElement player in myTeamElement.EnumerateArray())
+            {
+                if (!player.TryGetProperty("cellId", out JsonElement cellElement) ||
+                    !TryGetInt(cellElement, out int cellId) ||
+                    cellId != localPlayerCellId)
+                {
+                    continue;
+                }
+
+                if (player.TryGetProperty("championId", out JsonElement championIdElement) &&
+                    TryGetInt(championIdElement, out int championId))
+                {
+                    state.SelectedChampionId = championId;
+                }
+
+                if (player.TryGetProperty("championPickIntent", out JsonElement intentElement) &&
+                    TryGetInt(intentElement, out int intentChampionId))
+                {
+                    state.PickIntentChampionId = intentChampionId;
+                }
+
+                if (player.TryGetProperty("spell1Id", out JsonElement spell1Element) && TryGetInt(spell1Element, out int spell1Id))
+                    state.Spell1Id = spell1Id;
+
+                if (player.TryGetProperty("spell2Id", out JsonElement spell2Element) && TryGetInt(spell2Element, out int spell2Id))
+                    state.Spell2Id = spell2Id;
+
+                return;
+            }
         }
 
         private static void AddChampionIdsFromTeam(JsonElement root, string propertyName, HashSet<int> championIds)
@@ -410,7 +613,7 @@ namespace RiotAutoLogin.Services
                         ? GetJsonValueAsString(idElement)
                         : string.Empty;
                     state.ActionType = action.TryGetProperty("type", out JsonElement typeElement)
-                        ? typeElement.GetString() ?? string.Empty
+                        ? (typeElement.GetString() ?? string.Empty).ToLowerInvariant()
                         : string.Empty;
                     return;
                 }
