@@ -12,6 +12,7 @@ namespace RiotAutoLogin.Models
         public bool CanLeave { get; set; }
         public string ActionId { get; set; } = string.Empty;
         public string ActionType { get; set; } = string.Empty;
+        public string PickActionId { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
         public int SelectedChampionId { get; set; }
         public int PickIntentChampionId { get; set; }
