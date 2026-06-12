@@ -187,6 +187,11 @@ namespace RiotAutoLogin.Services
                     RemotePickActionResult result = await SelectSpellAsync(body);
                     await WriteJsonResponseAsync(stream, result.Success ? 200 : 400, result.Success ? "OK" : "Bad Request", result, cancellationToken);
                 }
+                else if (method == "POST" && path.StartsWith("/api/rune-page", StringComparison.OrdinalIgnoreCase))
+                {
+                    RemotePickActionResult result = await SelectRunePageAsync(body);
+                    await WriteJsonResponseAsync(stream, result.Success ? 200 : 400, result.Success ? "OK" : "Bad Request", result, cancellationToken);
+                }
                 else if (method == "POST" && path.StartsWith("/api/leave", StringComparison.OrdinalIgnoreCase))
                 {
                     RemotePickActionResult result = await LeaveLobbyAsync();
@@ -223,7 +228,7 @@ namespace RiotAutoLogin.Services
             {
                 state.PhaseLabel = "League Closed";
                 state.Message = "League Client is not running.";
-                await AddChampionAndSpellListsAsync(state, new HashSet<int>(), new HashSet<int>());
+                await AddChampionSpellAndRuneListsAsync(state, new HashSet<int>(), new HashSet<int>());
                 return state;
             }
 
@@ -241,7 +246,7 @@ namespace RiotAutoLogin.Services
                     ? "Waiting for League Client state..."
                     : $"Current phase: {state.Phase}. Waiting for champion select.";
 
-                await AddChampionAndSpellListsAsync(state, bannedChampionIds, pickedChampionIds);
+                await AddChampionSpellAndRuneListsAsync(state, bannedChampionIds, pickedChampionIds);
                 return state;
             }
 
@@ -250,7 +255,7 @@ namespace RiotAutoLogin.Services
             {
                 state.PhaseLabel = "Champ Select";
                 state.Message = $"Could not read champion select session. Status: {sessionResult[0]}";
-                await AddChampionAndSpellListsAsync(state, bannedChampionIds, pickedChampionIds);
+                await AddChampionSpellAndRuneListsAsync(state, bannedChampionIds, pickedChampionIds);
                 return state;
             }
 
@@ -275,7 +280,7 @@ namespace RiotAutoLogin.Services
                         : $"It is your {state.ActionType} turn."
                 : "You can hover an intended pick while waiting for your turn.";
 
-            await AddChampionAndSpellListsAsync(state, bannedChampionIds, pickedChampionIds);
+            await AddChampionSpellAndRuneListsAsync(state, bannedChampionIds, pickedChampionIds);
             return state;
         }
 
@@ -405,6 +410,69 @@ namespace RiotAutoLogin.Services
             };
         }
 
+        public async Task<RemotePickActionResult> SelectRunePageAsync(string body)
+        {
+            RemoteRunePageRequest? request;
+            try
+            {
+                request = JsonSerializer.Deserialize<RemoteRunePageRequest>(body, _jsonOptions);
+            }
+            catch
+            {
+                return new RemotePickActionResult { Success = false, Message = "Invalid rune page request." };
+            }
+
+            if (request == null || request.PageId <= 0)
+                return new RemotePickActionResult { Success = false, Message = "Invalid rune page." };
+
+            if (!LCUService.CheckIfLeagueClientIsOpen())
+                return new RemotePickActionResult { Success = false, Message = "League Client is not running." };
+
+            string[] pagesResult = LCUService.ClientRequest("GET", "lol-perks/v1/pages");
+            if (pagesResult[0] != "200")
+                return new RemotePickActionResult { Success = false, Message = $"Could not load rune pages. Status: {pagesResult[0]}" };
+
+            string? selectedPageJson = null;
+            try
+            {
+                using JsonDocument pagesDoc = JsonDocument.Parse(pagesResult[1]);
+                if (pagesDoc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement page in pagesDoc.RootElement.EnumerateArray())
+                    {
+                        if (page.TryGetProperty("id", out JsonElement idElement) &&
+                            TryGetLong(idElement, out long pageId) &&
+                            pageId == request.PageId)
+                        {
+                            selectedPageJson = page.GetRawText();
+                            break;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not parse rune pages: {ex.Message}");
+            }
+
+            if (string.IsNullOrWhiteSpace(selectedPageJson))
+                return new RemotePickActionResult { Success = false, Message = "Rune page was not found." };
+
+            string[] result = LCUService.ClientRequest("POST", $"lol-perks/v1/pages/{request.PageId}/current");
+            if (!result[0].StartsWith("2"))
+                result = LCUService.ClientRequest("PUT", "lol-perks/v1/currentpage", selectedPageJson);
+
+            if (!result[0].StartsWith("2"))
+                result = LCUService.ClientRequest("PATCH", "lol-perks/v1/currentpage", selectedPageJson);
+
+            bool success = result[0].StartsWith("2");
+            return new RemotePickActionResult
+            {
+                Success = success,
+                Message = success ? "Rune page selected." : $"League Client rejected rune page change. Status: {result[0]}"
+            };
+        }
+
         public async Task<RemotePickActionResult> LeaveLobbyAsync()
         {
             if (!LCUService.CheckIfLeagueClientIsOpen())
@@ -430,13 +498,10 @@ namespace RiotAutoLogin.Services
                 if (result[0].StartsWith("2"))
                     return RequestLeave("ChampSelect", result);
 
-                bool closed = CloseLeagueClientForDodge();
                 return new RemotePickActionResult
                 {
-                    Success = closed,
-                    Message = closed
-                        ? "League Client was closed to dodge champion select."
-                        : $"Dodge failed. Riot returned {result[0]} and the League Client process could not be closed."
+                    Success = false,
+                    Message = $"Dodge request was rejected by League Client. Status: {result[0]}"
                 };
             }
 
@@ -451,34 +516,6 @@ namespace RiotAutoLogin.Services
                 Success = success,
                 Message = success ? "Leave request sent." : $"Leave failed during {phase}. Status: {result[0]}"
             };
-        }
-
-        private static bool CloseLeagueClientForDodge()
-        {
-            string[] processNames = { "LeagueClientUx", "LeagueClientUxRender", "LeagueClient" };
-            bool foundProcess = false;
-
-            foreach (string processName in processNames)
-            {
-                foreach (Process process in Process.GetProcessesByName(processName))
-                {
-                    foundProcess = true;
-                    try
-                    {
-                        if (!process.HasExited)
-                            process.CloseMainWindow();
-
-                        if (!process.WaitForExit(1500) && !process.HasExited)
-                            process.Kill(true);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Could not close {processName} for dodge: {ex.Message}");
-                    }
-                }
-            }
-
-            return foundProcess;
         }
 
         private bool TryPatchMySelection(object payload)
@@ -500,6 +537,12 @@ namespace RiotAutoLogin.Services
             {
                 return null;
             }
+        }
+
+        private async Task AddChampionSpellAndRuneListsAsync(RemotePickState state, HashSet<int> bannedChampionIds, HashSet<int> pickedChampionIds)
+        {
+            await AddChampionAndSpellListsAsync(state, bannedChampionIds, pickedChampionIds);
+            AddRunePages(state);
         }
 
         private async Task AddChampionAndSpellListsAsync(RemotePickState state, HashSet<int> bannedChampionIds, HashSet<int> pickedChampionIds)
@@ -535,6 +578,76 @@ namespace RiotAutoLogin.Services
                                   state.Spell2Id == spell.Id
                 })
                 .ToList();
+        }
+
+        private void AddRunePages(RemotePickState state)
+        {
+            if (!LCUService.CheckIfLeagueClientIsOpen())
+                return;
+
+            string[] pagesResult = LCUService.ClientRequest("GET", "lol-perks/v1/pages");
+            if (pagesResult[0] != "200")
+            {
+                Debug.WriteLine($"Could not load rune pages. Status: {pagesResult[0]}");
+                return;
+            }
+
+            long currentPageId = 0;
+            string[] currentPageResult = LCUService.ClientRequest("GET", "lol-perks/v1/currentpage");
+            if (currentPageResult[0] == "200")
+            {
+                try
+                {
+                    using JsonDocument currentDoc = JsonDocument.Parse(currentPageResult[1]);
+                    if (currentDoc.RootElement.TryGetProperty("id", out JsonElement idElement) &&
+                        TryGetLong(idElement, out long parsedCurrentPageId))
+                    {
+                        currentPageId = parsedCurrentPageId;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Could not parse current rune page: {ex.Message}");
+                }
+            }
+
+            try
+            {
+                using JsonDocument pagesDoc = JsonDocument.Parse(pagesResult[1]);
+                if (pagesDoc.RootElement.ValueKind != JsonValueKind.Array)
+                    return;
+
+                foreach (JsonElement page in pagesDoc.RootElement.EnumerateArray())
+                {
+                    if (!page.TryGetProperty("id", out JsonElement idElement) || !TryGetLong(idElement, out long pageId))
+                        continue;
+
+                    string pageName = page.TryGetProperty("name", out JsonElement nameElement)
+                        ? nameElement.GetString() ?? $"Rune Page {pageId}"
+                        : $"Rune Page {pageId}";
+
+                    bool isCurrent = currentPageId == pageId ||
+                                     GetBoolProperty(page, "current") ||
+                                     GetBoolProperty(page, "isCurrent");
+
+                    var dto = new RemoteRunePageDto
+                    {
+                        Id = pageId,
+                        Name = pageName,
+                        IsCurrent = isCurrent,
+                        IsEditable = GetBoolProperty(page, "isEditable"),
+                        IsDeletable = GetBoolProperty(page, "isDeletable")
+                    };
+
+                    state.RunePages.Add(dto);
+                    if (dto.IsCurrent)
+                        state.CurrentRunePage = dto;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not parse rune pages: {ex.Message}");
+            }
         }
 
         private async Task EnsureRemoteChampionCacheAsync()
@@ -859,6 +972,13 @@ namespace RiotAutoLogin.Services
             }
         }
 
+        private static bool GetBoolProperty(JsonElement element, string propertyName)
+        {
+            return element.TryGetProperty(propertyName, out JsonElement valueElement) &&
+                   valueElement.ValueKind is JsonValueKind.True or JsonValueKind.False &&
+                   valueElement.GetBoolean();
+        }
+
         private static bool TryGetInt(JsonElement element, out int value)
         {
             if (element.ValueKind == JsonValueKind.Number)
@@ -866,6 +986,18 @@ namespace RiotAutoLogin.Services
 
             if (element.ValueKind == JsonValueKind.String)
                 return int.TryParse(element.GetString(), out value);
+
+            value = 0;
+            return false;
+        }
+
+        private static bool TryGetLong(JsonElement element, out long value)
+        {
+            if (element.ValueKind == JsonValueKind.Number)
+                return element.TryGetInt64(out value);
+
+            if (element.ValueKind == JsonValueKind.String)
+                return long.TryParse(element.GetString(), out value);
 
             value = 0;
             return false;
