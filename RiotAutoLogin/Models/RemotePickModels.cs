@@ -9,6 +9,7 @@ namespace RiotAutoLogin.Models
         public bool IsMyTurn { get; set; }
         public bool CanPick => IsMyTurn && ActionType == "pick";
         public bool CanBan => IsMyTurn && ActionType == "ban";
+        public bool CanLeave { get; set; }
         public string ActionId { get; set; } = string.Empty;
         public string ActionType { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
@@ -18,6 +19,7 @@ namespace RiotAutoLogin.Models
         public int Spell2Id { get; set; }
         public List<int> BannedChampionIds { get; set; } = new();
         public List<int> PickedChampionIds { get; set; } = new();
+        public List<int> AvailableSpellIds { get; set; } = new();
         public List<RemoteChampionDto> Champions { get; set; } = new();
         public List<RemoteSummonerSpellDto> SummonerSpells { get; set; } = new();
     }
@@ -42,6 +44,7 @@ namespace RiotAutoLogin.Models
         public string ImageUrl { get; set; } = string.Empty;
         public bool IsSpell1 { get; set; }
         public bool IsSpell2 { get; set; }
+        public bool IsAvailable { get; set; } = true;
     }
 
     public class RemotePickRequest
