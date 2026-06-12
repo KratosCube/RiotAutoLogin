@@ -16,6 +16,11 @@ namespace RiotAutoLogin
         private TextBlock? _autoAcceptDelayHintTextBlock;
         private bool _manualUpdateCheckRequested;
         private bool _manualUpdateFeedbackInitialized;
+        private bool _remotePickUiInitialized;
+        private readonly RemotePickServerService _remotePickServerService = new();
+        private ToggleButton? _remotePickToggle;
+        private TextBlock? _remotePickStatusText;
+        private TextBlock? _remotePickUrlText;
 
         static MainWindow()
         {
@@ -30,6 +35,7 @@ namespace RiotAutoLogin
             if (sender is MainWindow window)
             {
                 window.InitializeAutoAcceptDelayUi();
+                window.InitializeRemotePickServerUi();
                 window.InitializeManualUpdateFeedback();
             }
         }
@@ -139,6 +145,190 @@ namespace RiotAutoLogin
 
             container.Child = root;
             return container;
+        }
+
+        private void InitializeRemotePickServerUi()
+        {
+            if (_remotePickUiInitialized)
+                return;
+
+            if (FindName("tglAutoAccept") is not ToggleButton autoAcceptToggle)
+                return;
+
+            StackPanel? autoAcceptStack = FindVisualParent<StackPanel>(autoAcceptToggle);
+            Border? autoAcceptCard = autoAcceptStack == null ? null : FindVisualParent<Border>(autoAcceptStack);
+            StackPanel? settingsStack = autoAcceptCard == null ? null : FindVisualParent<StackPanel>(autoAcceptCard);
+            if (settingsStack == null)
+                return;
+
+            _remotePickUiInitialized = true;
+
+            Border remotePickCard = CreateRemotePickCard();
+            int insertIndex = autoAcceptCard == null ? settingsStack.Children.Count : settingsStack.Children.IndexOf(autoAcceptCard) + 1;
+            settingsStack.Children.Insert(Math.Max(0, insertIndex), remotePickCard);
+
+            Closed += (_, _) => _remotePickServerService.Stop();
+        }
+
+        private Border CreateRemotePickCard()
+        {
+            var card = new Border
+            {
+                Background = TryFindResource("CardBackgroundBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(20, 25, 35)),
+                CornerRadius = new CornerRadius(18),
+                Padding = new Thickness(18),
+                Margin = new Thickness(0, 0, 0, 14)
+            };
+
+            var stack = new StackPanel();
+            card.Child = stack;
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Remote Pick Server",
+                FontSize = 18,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White
+            });
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Start a temporary LAN page for picking champions from your phone.",
+                Margin = new Thickness(0, 6, 0, 14),
+                FontSize = 13,
+                Opacity = 0.68,
+                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White,
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            var toggleGrid = new Grid();
+            toggleGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            toggleGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            toggleGrid.Children.Add(new TextBlock
+            {
+                Text = $"Enable web pick page on port {RemotePickServerService.DefaultPort}",
+                FontSize = 14,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White
+            });
+
+            _remotePickToggle = new ToggleButton
+            {
+                Width = 100,
+                Content = "OFF",
+                Style = TryFindResource("ModernToggleButton") as Style
+            };
+            _remotePickToggle.Checked += RemotePickToggle_Checked;
+            _remotePickToggle.Unchecked += RemotePickToggle_Unchecked;
+            Grid.SetColumn(_remotePickToggle, 1);
+            toggleGrid.Children.Add(_remotePickToggle);
+            stack.Children.Add(toggleGrid);
+
+            var statusPanel = new Border
+            {
+                Background = TryFindResource("SecondaryBackgroundBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(30, 38, 50)),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(14),
+                Margin = new Thickness(0, 14, 0, 0)
+            };
+
+            var statusStack = new StackPanel();
+            statusPanel.Child = statusStack;
+
+            _remotePickStatusText = new TextBlock
+            {
+                Text = "Remote Pick is stopped. Enable it only when you want to pick from your phone.",
+                FontSize = 13,
+                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White,
+                TextWrapping = TextWrapping.Wrap
+            };
+            statusStack.Children.Add(_remotePickStatusText);
+
+            _remotePickUrlText = new TextBlock
+            {
+                Text = string.Empty,
+                Margin = new Thickness(0, 8, 0, 0),
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White,
+                TextWrapping = TextWrapping.Wrap
+            };
+            statusStack.Children.Add(_remotePickUrlText);
+
+            var buttonStack = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 12, 0, 0)
+            };
+
+            var copyButton = new Button
+            {
+                Content = "Copy Link",
+                Style = TryFindResource("SecondaryButton") as Style,
+                IsEnabled = false
+            };
+            copyButton.Click += (_, _) =>
+            {
+                if (!_remotePickServerService.IsRunning)
+                    return;
+
+                Clipboard.SetText(_remotePickServerService.LocalUrl);
+                UpdateRemotePickStatus("Link copied. Open it on your phone while connected to the same Wi-Fi.");
+            };
+
+            _remotePickToggle.Checked += (_, _) => copyButton.IsEnabled = true;
+            _remotePickToggle.Unchecked += (_, _) => copyButton.IsEnabled = false;
+            buttonStack.Children.Add(copyButton);
+            statusStack.Children.Add(buttonStack);
+
+            stack.Children.Add(statusPanel);
+            return card;
+        }
+
+        private async void RemotePickToggle_Checked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                await _remotePickServerService.StartAsync();
+                if (_remotePickToggle != null)
+                    _remotePickToggle.Content = "ON";
+
+                UpdateRemotePickStatus("Remote Pick is running. Open this address on your phone:", _remotePickServerService.LocalUrl);
+            }
+            catch (Exception ex)
+            {
+                if (_remotePickToggle != null)
+                {
+                    _remotePickToggle.IsChecked = false;
+                    _remotePickToggle.Content = "OFF";
+                }
+
+                UpdateRemotePickStatus($"Failed to start Remote Pick: {ex.Message}");
+                MessageBox.Show(
+                    $"Remote Pick server could not be started:\n{ex.Message}\n\nIf Windows Firewall asks for access, allow it for Private networks.",
+                    "Remote Pick Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+
+        private void RemotePickToggle_Unchecked(object sender, RoutedEventArgs e)
+        {
+            _remotePickServerService.Stop();
+            if (_remotePickToggle != null)
+                _remotePickToggle.Content = "OFF";
+
+            UpdateRemotePickStatus("Remote Pick is stopped. Enable it only when you want to pick from your phone.");
+        }
+
+        private void UpdateRemotePickStatus(string status, string? url = null)
+        {
+            if (_remotePickStatusText != null)
+                _remotePickStatusText.Text = status;
+
+            if (_remotePickUrlText != null)
+                _remotePickUrlText.Text = url ?? string.Empty;
         }
 
         private void InitializeManualUpdateFeedback()
