@@ -33,7 +33,9 @@ namespace RiotAutoLogin.Services
 
         public bool IsRunning { get; private set; }
         public int Port { get; private set; } = DefaultPort;
-        public string LocalUrl => $"http://{GetLocalIPv4Address()}:{Port}/";
+        public IReadOnlyList<string> LocalUrls => GetLocalUrls(Port);
+        public string LocalUrl => LocalUrls.FirstOrDefault(url => !url.Contains("127.0.0.1")) ?? LocalUrls.FirstOrDefault() ?? $"http://127.0.0.1:{Port}/";
+        public string LocalUrlDisplay => string.Join(Environment.NewLine, LocalUrls);
 
         public Task StartAsync(int port = DefaultPort)
         {
@@ -46,7 +48,7 @@ namespace RiotAutoLogin.Services
             _listener.Start();
             IsRunning = true;
             _serverTask = Task.Run(() => AcceptLoopAsync(_cts.Token));
-            Debug.WriteLine($"Remote Pick server started at {LocalUrl}");
+            Debug.WriteLine($"Remote Pick server started at:{Environment.NewLine}{LocalUrlDisplay}");
             return Task.CompletedTask;
         }
 
@@ -256,7 +258,7 @@ namespace RiotAutoLogin.Services
             ParsePicks(root, pickedChampionIds);
             ParseLocalPlayerSelection(root, state);
             ParseAvailableSpellIds(root, state);
-            ParseCurrentAction(root, state);
+            ParseActions(root, state);
 
             state.BannedChampionIds = bannedChampionIds.OrderBy(id => id).ToList();
             state.PickedChampionIds = pickedChampionIds.OrderBy(id => id).ToList();
@@ -342,13 +344,21 @@ namespace RiotAutoLogin.Services
             if (state.PickedChampionIds.Contains(request.ChampionId))
                 return new RemotePickActionResult { Success = false, Message = "This champion is already picked." };
 
-            bool success = TryPatchMySelection(new { championPickIntent = request.ChampionId });
+            bool success = false;
 
-            if (!success)
-                success = TryPatchMySelection(new { championId = request.ChampionId });
+            // In draft, the local player's pick action often exists before it is in progress.
+            // Hovering that future pick action is closer to how the client declares intent than patching the active ban action.
+            if (!string.IsNullOrWhiteSpace(state.PickActionId))
+                success = LCUService.SelectChampion(request.ChampionId, state.PickActionId, complete: false);
 
             if (!success && !string.IsNullOrWhiteSpace(state.ActionId) && state.ActionType == "pick")
                 success = LCUService.SelectChampion(request.ChampionId, state.ActionId, complete: false);
+
+            if (!success)
+                success = TryPatchMySelection(new { championPickIntent = request.ChampionId });
+
+            if (!success)
+                success = TryPatchMySelection(new { championId = request.ChampionId });
 
             return new RemotePickActionResult
             {
@@ -398,21 +408,75 @@ namespace RiotAutoLogin.Services
                 return new RemotePickActionResult { Success = false, Message = "League Client is not running." };
 
             string phase = await LCUService.GetCurrentGamePhaseAsync();
-            string[] result = phase switch
-            {
-                "ReadyCheck" => LCUService.ClientRequest("POST", "lol-matchmaking/v1/ready-check/decline"),
-                "Matchmaking" => LCUService.ClientRequest("DELETE", "lol-matchmaking/v1/search"),
-                "Lobby" => LCUService.ClientRequest("DELETE", "lol-lobby/v2/lobby"),
-                "ChampSelect" => LCUService.ClientRequest("POST", "lol-champ-select/v1/session/quit"),
-                _ => new[] { "400", $"Cannot leave during phase: {phase}" }
-            };
+            if (phase == "ReadyCheck")
+                return RequestLeave("ReadyCheck", LCUService.ClientRequest("POST", "lol-matchmaking/v1/ready-check/decline"));
 
+            if (phase == "Matchmaking")
+                return RequestLeave("Matchmaking", LCUService.ClientRequest("DELETE", "lol-matchmaking/v1/search"));
+
+            if (phase == "Lobby")
+                return RequestLeave("Lobby", LCUService.ClientRequest("DELETE", "lol-lobby/v2/lobby"));
+
+            if (phase == "ChampSelect")
+            {
+                string[] result = LCUService.ClientRequest("POST", "lol-champ-select/v1/session/quit");
+                if (result[0].StartsWith("2"))
+                    return RequestLeave("ChampSelect", result);
+
+                result = LCUService.ClientRequest("DELETE", "lol-lobby/v2/lobby");
+                if (result[0].StartsWith("2"))
+                    return RequestLeave("ChampSelect", result);
+
+                // Some clients return 404 for the old quit endpoint. The reliable dodge fallback is closing the League client.
+                bool closed = CloseLeagueClientForDodge();
+                return new RemotePickActionResult
+                {
+                    Success = closed,
+                    Message = closed
+                        ? "League Client was closed to dodge champion select."
+                        : $"Dodge failed. Riot returned {result[0]} and the League Client process could not be closed."
+                };
+            }
+
+            return new RemotePickActionResult { Success = false, Message = $"Cannot leave during phase: {phase}" };
+        }
+
+        private static RemotePickActionResult RequestLeave(string phase, string[] result)
+        {
             bool success = result[0].StartsWith("2");
             return new RemotePickActionResult
             {
                 Success = success,
                 Message = success ? "Leave request sent." : $"Leave failed during {phase}. Status: {result[0]}"
             };
+        }
+
+        private static bool CloseLeagueClientForDodge()
+        {
+            string[] processNames = { "LeagueClientUx", "LeagueClientUxRender", "LeagueClient" };
+            bool foundProcess = false;
+
+            foreach (string processName in processNames)
+            {
+                foreach (Process process in Process.GetProcessesByName(processName))
+                {
+                    foundProcess = true;
+                    try
+                    {
+                        if (!process.HasExited)
+                            process.CloseMainWindow();
+
+                        if (!process.WaitForExit(1500) && !process.HasExited)
+                            process.Kill(true);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Could not close {processName} for dodge: {ex.Message}");
+                    }
+                }
+            }
+
+            return foundProcess;
         }
 
         private bool TryPatchMySelection(object payload)
@@ -689,7 +753,7 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        private static void ParseCurrentAction(JsonElement root, RemotePickState state)
+        private static void ParseActions(JsonElement root, RemotePickState state)
         {
             if (!root.TryGetProperty("localPlayerCellId", out JsonElement localCellElement) ||
                 !TryGetInt(localCellElement, out int localPlayerCellId))
@@ -707,9 +771,6 @@ namespace RiotAutoLogin.Services
 
                 foreach (JsonElement action in actionGroup.EnumerateArray())
                 {
-                    if (!action.TryGetProperty("isInProgress", out JsonElement inProgressElement) || !inProgressElement.GetBoolean())
-                        continue;
-
                     if (!action.TryGetProperty("actorCellId", out JsonElement actorCellElement) ||
                         !TryGetInt(actorCellElement, out int actorCellId) ||
                         actorCellId != localPlayerCellId)
@@ -717,14 +778,25 @@ namespace RiotAutoLogin.Services
                         continue;
                     }
 
-                    state.IsMyTurn = true;
-                    state.ActionId = action.TryGetProperty("id", out JsonElement idElement)
-                        ? GetJsonValueAsString(idElement)
-                        : string.Empty;
-                    state.ActionType = action.TryGetProperty("type", out JsonElement typeElement)
+                    string actionType = action.TryGetProperty("type", out JsonElement typeElement)
                         ? (typeElement.GetString() ?? string.Empty).ToLowerInvariant()
                         : string.Empty;
-                    return;
+
+                    string actionId = action.TryGetProperty("id", out JsonElement idElement)
+                        ? GetJsonValueAsString(idElement)
+                        : string.Empty;
+
+                    if (actionType == "pick" && string.IsNullOrWhiteSpace(state.PickActionId))
+                        state.PickActionId = actionId;
+
+                    bool isInProgress = action.TryGetProperty("isInProgress", out JsonElement inProgressElement) &&
+                                        inProgressElement.GetBoolean();
+                    if (!isInProgress)
+                        continue;
+
+                    state.IsMyTurn = true;
+                    state.ActionId = actionId;
+                    state.ActionType = actionType;
                 }
             }
         }
@@ -783,35 +855,48 @@ namespace RiotAutoLogin.Services
             await stream.WriteAsync(bodyBytes, cancellationToken);
         }
 
-        private static string GetLocalIPv4Address()
+        private static IReadOnlyList<string> GetLocalUrls(int port)
+        {
+            var urls = new List<string> { $"http://127.0.0.1:{port}/" };
+
+            foreach (IPAddress address in GetLocalIPv4Addresses())
+            {
+                string url = $"http://{address}:{port}/";
+                if (!urls.Contains(url, StringComparer.OrdinalIgnoreCase))
+                    urls.Add(url);
+            }
+
+            return urls;
+        }
+
+        private static IEnumerable<IPAddress> GetLocalIPv4Addresses()
         {
             try
             {
-                foreach (NetworkInterface networkInterface in NetworkInterface.GetAllNetworkInterfaces())
-                {
-                    if (networkInterface.OperationalStatus != OperationalStatus.Up)
-                        continue;
-
-                    if (networkInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback)
-                        continue;
-
-                    IPInterfaceProperties properties = networkInterface.GetIPProperties();
-                    foreach (UnicastIPAddressInformation address in properties.UnicastAddresses)
-                    {
-                        if (address.Address.AddressFamily == AddressFamily.InterNetwork &&
-                            !IPAddress.IsLoopback(address.Address))
-                        {
-                            return address.Address.ToString();
-                        }
-                    }
-                }
+                return NetworkInterface.GetAllNetworkInterfaces()
+                    .Where(networkInterface => networkInterface.OperationalStatus == OperationalStatus.Up)
+                    .Where(networkInterface => networkInterface.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                    .SelectMany(networkInterface => networkInterface.GetIPProperties().UnicastAddresses)
+                    .Where(address => address.Address.AddressFamily == AddressFamily.InterNetwork)
+                    .Select(address => address.Address)
+                    .Where(address => !IPAddress.IsLoopback(address))
+                    .OrderByDescending(IsPrivateIPv4Address)
+                    .ThenBy(address => address.ToString())
+                    .ToList();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Could not get local IP address: {ex.Message}");
+                Debug.WriteLine($"Could not get local IP addresses: {ex.Message}");
+                return Array.Empty<IPAddress>();
             }
+        }
 
-            return "127.0.0.1";
+        private static bool IsPrivateIPv4Address(IPAddress address)
+        {
+            byte[] bytes = address.GetAddressBytes();
+            return bytes[0] == 10 ||
+                   bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31 ||
+                   bytes[0] == 192 && bytes[1] == 168;
         }
 
         public void Dispose()
