@@ -260,6 +260,8 @@ namespace RiotAutoLogin.Services
     let timerBaseTimeLeftMs = null;
     let timerBasePerfMs = 0;
     let timerIsInfinite = false;
+    let timerPhaseKey = '';
+    let latestTimerRequestId = 0;
 
     const championsEl = document.getElementById('champions');
     const pickedListEl = document.getElementById('pickedList');
@@ -309,39 +311,115 @@ namespace RiotAutoLogin.Services
         const nextState = await response.json();
         const responseReceivedAt = performance.now();
         syncTimerFromState(nextState, responseReceivedAt - requestStartedAt);
-
-        const oldPhase = previousPhase;
-        previousPhase = nextState.phase;
+        applyPhaseTransitionAlert(nextState);
         state = nextState;
-
-        if (state.phase === 'ChampSelect' && oldPhase && oldPhase !== 'ChampSelect') {
-          showAcceptedAlert();
-        }
-
         render();
       } catch (error) {
-        phaseEl.textContent = 'Disconnected';
-        messageEl.textContent = 'Disconnected from Remote Pick server.';
-        turnEl.textContent = 'Offline';
-        turnEl.className = 'turn-pill waiting';
-        timerBaseTimeLeftMs = null;
-        updateTimerDisplay();
-        leaveButtonEl.disabled = true;
+        showDisconnectedState();
       }
     }
 
+    async function loadTimer() {
+      const requestId = ++latestTimerRequestId;
+      const requestStartedAt = performance.now();
+      try {
+        const response = await fetch('/api/timer', { cache: 'no-store' });
+        const timerState = await response.json();
+        if (requestId < latestTimerRequestId) return;
+
+        const responseReceivedAt = performance.now();
+        syncTimerFromState(timerState, responseReceivedAt - requestStartedAt);
+        applyPhaseTransitionAlert(timerState);
+
+        if (state) {
+          Object.assign(state, {
+            phase: timerState.phase,
+            champSelectPhase: timerState.champSelectPhase,
+            phaseLabel: timerState.phaseLabel,
+            timeLeftInPhaseMs: timerState.timeLeftInPhaseMs,
+            totalTimeInPhaseMs: timerState.totalTimeInPhaseMs,
+            isTimerInfinite: timerState.isTimerInfinite,
+            isInChampSelect: timerState.isInChampSelect,
+            isMyTurn: timerState.isMyTurn,
+            canLeave: timerState.canLeave,
+            actionId: timerState.actionId,
+            actionType: timerState.actionType,
+            pickActionId: timerState.pickActionId,
+            message: timerState.message,
+            selectedChampionId: timerState.selectedChampionId,
+            pickIntentChampionId: timerState.pickIntentChampionId,
+            spell1Id: timerState.spell1Id,
+            spell2Id: timerState.spell2Id,
+            bannedChampionIds: timerState.bannedChampionIds || state.bannedChampionIds,
+            availableSpellIds: timerState.availableSpellIds || state.availableSpellIds
+          });
+          updateStatusOnly();
+        } else {
+          state = timerState;
+          updateStatusOnly();
+        }
+      } catch {
+        // Do not blank the full UI on a single missed lightweight timer poll.
+      }
+    }
+
+    function applyPhaseTransitionAlert(nextState) {
+      const oldPhase = previousPhase;
+      previousPhase = nextState.phase;
+      if (nextState.phase === 'ChampSelect' && oldPhase && oldPhase !== 'ChampSelect') {
+        showAcceptedAlert();
+      }
+    }
+
+    function showDisconnectedState() {
+      phaseEl.textContent = 'Disconnected';
+      messageEl.textContent = 'Disconnected from Remote Pick server.';
+      turnEl.textContent = 'Offline';
+      turnEl.className = 'turn-pill waiting';
+      timerBaseTimeLeftMs = null;
+      updateTimerDisplay();
+      leaveButtonEl.disabled = true;
+    }
+
+    function getTimerPhaseKey(nextState) {
+      return [nextState.phase || '', nextState.champSelectPhase || '', nextState.phaseLabel || '', nextState.totalTimeInPhaseMs ?? ''].join('|');
+    }
+
     function syncTimerFromState(nextState, roundTripMs) {
+      const nextPhaseKey = getTimerPhaseKey(nextState);
       timerIsInfinite = Boolean(nextState.isTimerInfinite);
 
       if (typeof nextState.timeLeftInPhaseMs !== 'number' || nextState.timeLeftInPhaseMs < 0) {
         timerBaseTimeLeftMs = null;
         timerBasePerfMs = performance.now();
+        timerPhaseKey = nextPhaseKey;
         return;
       }
 
       const estimatedNetworkDelayMs = Math.max(0, roundTripMs) / 2;
-      timerBaseTimeLeftMs = Math.max(0, nextState.timeLeftInPhaseMs - estimatedNetworkDelayMs);
-      timerBasePerfMs = performance.now();
+      const syncedTimeLeftMs = Math.max(0, nextState.timeLeftInPhaseMs - estimatedNetworkDelayMs);
+      const currentTimerMs = getCurrentTimerMs();
+      const phaseChanged = nextPhaseKey !== timerPhaseKey;
+
+      if (phaseChanged || currentTimerMs === null || currentTimerMs === Infinity) {
+        timerBaseTimeLeftMs = syncedTimeLeftMs;
+        timerBasePerfMs = performance.now();
+        timerPhaseKey = nextPhaseKey;
+        return;
+      }
+
+      const driftMs = syncedTimeLeftMs - currentTimerMs;
+      const localTimerIsBehindClient = driftMs < -250;
+      const clientTimerJumpedForward = driftMs > 1800;
+
+      // Never keep correcting small upward drift; it causes the visible timer to bounce between two numbers.
+      // Correct downward drift quickly, because that means our page is showing too much time left.
+      if (localTimerIsBehindClient || clientTimerJumpedForward) {
+        timerBaseTimeLeftMs = syncedTimeLeftMs;
+        timerBasePerfMs = performance.now();
+      }
+
+      timerPhaseKey = nextPhaseKey;
     }
 
     function getCurrentTimerMs() {
@@ -361,9 +439,8 @@ namespace RiotAutoLogin.Services
       }
     }
 
-    function render() {
+    function updateStatusOnly() {
       if (!state) return;
-
       const canPick = state.canPick || (state.isMyTurn && state.actionType === 'pick');
       const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
       phaseEl.textContent = `${state.phaseLabel || state.phase || 'Unknown'}${state.champSelectPhase ? ' · ' + state.champSelectPhase : ''}`;
@@ -373,13 +450,22 @@ namespace RiotAutoLogin.Services
       turnEl.className = canBan ? 'turn-pill ban' : canPick ? 'turn-pill' : 'turn-pill waiting';
       leaveButtonEl.disabled = !state.canLeave;
       leaveButtonEl.textContent = state.phase === 'Matchmaking' ? 'Cancel Queue' : state.phase === 'ReadyCheck' ? 'Decline' : state.phase === 'ChampSelect' ? 'Dodge' : 'Leave Lobby';
+    }
 
+    function render() {
+      if (!state) return;
+
+      updateStatusOnly();
       renderLoadout(desktopLoadoutEl);
       renderLoadout(mobileLoadoutEl);
 
-      const filtered = state.champions.filter(champion => champion.name.toLowerCase().includes(query));
+      const champions = state.champions || [];
+      const filtered = champions.filter(champion => champion.name.toLowerCase().includes(query));
       countEl.textContent = filtered.length;
       championsEl.innerHTML = '';
+
+      const canPick = state.canPick || (state.isMyTurn && state.actionType === 'pick');
+      const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
 
       for (const champion of filtered) {
         const disabled = champion.isDisabled;
@@ -406,14 +492,15 @@ namespace RiotAutoLogin.Services
         championsEl.appendChild(card);
       }
 
-      renderRail(pickedListEl, state.champions.filter(c => c.isPicked), 'Picked');
-      renderRail(bannedListEl, state.champions.filter(c => c.isBanned), 'Banned', true);
+      renderRail(pickedListEl, champions.filter(c => c.isPicked), 'Picked');
+      renderRail(bannedListEl, champions.filter(c => c.isBanned), 'Banned', true);
     }
 
     function renderLoadout(target) {
       if (!target || !state) return;
-      const spell1 = state.summonerSpells.find(spell => spell.isSpell1) || null;
-      const spell2 = state.summonerSpells.find(spell => spell.isSpell2) || null;
+      const spells = state.summonerSpells || [];
+      const spell1 = spells.find(spell => spell.isSpell1) || null;
+      const spell2 = spells.find(spell => spell.isSpell2) || null;
       target.innerHTML = `
         <h2 class="section-title">Loadout</h2>
         <div class="loadout">
@@ -497,8 +584,9 @@ namespace RiotAutoLogin.Services
     function openSpellModal(slot) {
       spellModalTitleEl.textContent = `Choose summoner spell ${slot}`;
       spellGridEl.innerHTML = '';
-      const availableSpells = state.summonerSpells.filter(spell => spell.isAvailable);
-      const spellsToShow = availableSpells.length ? availableSpells : state.summonerSpells;
+      const spells = state.summonerSpells || [];
+      const availableSpells = spells.filter(spell => spell.isAvailable);
+      const spellsToShow = availableSpells.length ? availableSpells : spells;
 
       for (const spell of spellsToShow) {
         const button = document.createElement('button');
@@ -556,7 +644,9 @@ namespace RiotAutoLogin.Services
     }
 
     loadState();
-    setInterval(loadState, 800);
+    loadTimer();
+    setInterval(loadTimer, 250);
+    setInterval(loadState, 1600);
     setInterval(updateTimerDisplay, 100);
   </script>
 </body>
