@@ -48,7 +48,6 @@ namespace RiotAutoLogin.Services
     }
 
     .app { min-height: 100vh; padding: 10px; position: relative; }
-
     .sticky-status {
       position: sticky;
       top: 0;
@@ -81,7 +80,6 @@ namespace RiotAutoLogin.Services
     .phase-main { padding: 10px; min-width: 0; }
     .phase { color: var(--cyan); font: 800 11px system-ui, sans-serif; letter-spacing: .18em; text-transform: uppercase; }
     .message { margin-top: 5px; font-size: 15px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
     .timer-box { min-width: 96px; display: grid; place-items: center; padding: 8px 10px; border-left: 1px solid rgba(200,170,110,.25); background: rgba(0,0,0,.2); }
     .timer-value { font: 900 28px system-ui, sans-serif; color: var(--gold-strong); line-height: 1; }
     .timer-label { margin-top: 3px; font: 800 9px system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .16em; }
@@ -92,7 +90,6 @@ namespace RiotAutoLogin.Services
     .turn-pill.ban { border-color: rgba(182,74,85,.7); color: #ffd7dc; background: rgba(182,74,85,.14); }
     .leave-button { border: 1px solid rgba(182,74,85,.72); background: rgba(182,74,85,.13); color: #ffd7dc; min-height: 29px; padding: 0 10px; font: 800 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .1em; cursor: pointer; }
     .leave-button:disabled { opacity: .35; cursor: not-allowed; }
-
     .accepted-alert { display: none; max-width: 1120px; margin: 9px auto 0; padding: 10px 12px; border: 1px solid rgba(10,200,185,.65); color: #d7fffb; background: linear-gradient(90deg, rgba(10,200,185,.18), rgba(10,200,185,.06)); font: 900 13px system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; animation: pulseAlert 1s ease-in-out infinite alternate; }
     @keyframes pulseAlert { from { box-shadow: 0 0 0 rgba(10,200,185,0); } to { box-shadow: 0 0 24px rgba(10,200,185,.26); } }
 
@@ -156,7 +153,6 @@ namespace RiotAutoLogin.Services
     .spell-option img { width:34px; height:34px; border:1px solid rgba(200,170,110,.4); }
     .spell-option strong { font: 700 12px system-ui, sans-serif; }
     .spell-help { color: var(--muted); font: 12px system-ui, sans-serif; padding: 0 12px 12px; }
-
     .toast { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 40; padding: 13px 15px; border: 1px solid rgba(200,170,110,.42); background: rgba(7, 13, 21, .97); color: var(--text); box-shadow: 0 16px 40px rgba(0,0,0,.45); display: none; font: 14px system-ui, sans-serif; }
 
     @media (max-width: 900px) {
@@ -261,6 +257,7 @@ namespace RiotAutoLogin.Services
     let timerBasePerfMs = 0;
     let timerIsInfinite = false;
     let timerPhaseKey = '';
+    let lastVisibleTimerSecond = null;
     let latestTimerRequestId = 0;
 
     const championsEl = document.getElementById('champions');
@@ -305,30 +302,26 @@ namespace RiotAutoLogin.Services
     }
 
     async function loadState() {
-      const requestStartedAt = performance.now();
       try {
         const response = await fetch('/api/state', { cache: 'no-store' });
         const nextState = await response.json();
-        const responseReceivedAt = performance.now();
-        syncTimerFromState(nextState, responseReceivedAt - requestStartedAt);
+        syncTimerFromState(nextState);
         applyPhaseTransitionAlert(nextState);
         state = nextState;
         render();
-      } catch (error) {
+      } catch {
         showDisconnectedState();
       }
     }
 
     async function loadTimer() {
       const requestId = ++latestTimerRequestId;
-      const requestStartedAt = performance.now();
       try {
         const response = await fetch('/api/timer', { cache: 'no-store' });
         const timerState = await response.json();
         if (requestId < latestTimerRequestId) return;
 
-        const responseReceivedAt = performance.now();
-        syncTimerFromState(timerState, responseReceivedAt - requestStartedAt);
+        syncTimerFromState(timerState);
         applyPhaseTransitionAlert(timerState);
 
         if (state) {
@@ -353,13 +346,13 @@ namespace RiotAutoLogin.Services
             bannedChampionIds: timerState.bannedChampionIds || state.bannedChampionIds,
             availableSpellIds: timerState.availableSpellIds || state.availableSpellIds
           });
-          updateStatusOnly();
         } else {
           state = timerState;
-          updateStatusOnly();
         }
+
+        updateStatusOnly();
       } catch {
-        // Do not blank the full UI on a single missed lightweight timer poll.
+        // Keep the local monotonic timer running if one lightweight poll fails.
       }
     }
 
@@ -377,44 +370,42 @@ namespace RiotAutoLogin.Services
       turnEl.textContent = 'Offline';
       turnEl.className = 'turn-pill waiting';
       timerBaseTimeLeftMs = null;
+      lastVisibleTimerSecond = null;
       updateTimerDisplay();
       leaveButtonEl.disabled = true;
     }
 
     function getTimerPhaseKey(nextState) {
-      return [nextState.phase || '', nextState.champSelectPhase || '', nextState.phaseLabel || '', nextState.totalTimeInPhaseMs ?? ''].join('|');
+      return [nextState.phase || '', nextState.champSelectPhase || ''].join('|');
     }
 
-    function syncTimerFromState(nextState, roundTripMs) {
+    function syncTimerFromState(nextState) {
       const nextPhaseKey = getTimerPhaseKey(nextState);
+      const phaseChanged = nextPhaseKey !== timerPhaseKey;
       timerIsInfinite = Boolean(nextState.isTimerInfinite);
 
       if (typeof nextState.timeLeftInPhaseMs !== 'number' || nextState.timeLeftInPhaseMs < 0) {
         timerBaseTimeLeftMs = null;
         timerBasePerfMs = performance.now();
         timerPhaseKey = nextPhaseKey;
+        lastVisibleTimerSecond = null;
         return;
       }
 
-      const estimatedNetworkDelayMs = Math.max(0, roundTripMs) / 2;
-      const syncedTimeLeftMs = Math.max(0, nextState.timeLeftInPhaseMs - estimatedNetworkDelayMs);
+      const syncedTimeLeftMs = Math.max(0, nextState.timeLeftInPhaseMs);
       const currentTimerMs = getCurrentTimerMs();
-      const phaseChanged = nextPhaseKey !== timerPhaseKey;
 
       if (phaseChanged || currentTimerMs === null || currentTimerMs === Infinity) {
         timerBaseTimeLeftMs = syncedTimeLeftMs;
         timerBasePerfMs = performance.now();
         timerPhaseKey = nextPhaseKey;
+        lastVisibleTimerSecond = null;
         return;
       }
 
-      const driftMs = syncedTimeLeftMs - currentTimerMs;
-      const localTimerIsBehindClient = driftMs < -250;
-      const clientTimerJumpedForward = driftMs > 1800;
-
-      // Never keep correcting small upward drift; it causes the visible timer to bounce between two numbers.
-      // Correct downward drift quickly, because that means our page is showing too much time left.
-      if (localTimerIsBehindClient || clientTimerJumpedForward) {
+      // Monotonic rule: during the same phase, never move the timer upward.
+      // Server/LCU values can jitter. Upward corrections caused the 17-18-17-18 bouncing.
+      if (syncedTimeLeftMs < currentTimerMs - 250) {
         timerBaseTimeLeftMs = syncedTimeLeftMs;
         timerBasePerfMs = performance.now();
       }
@@ -432,11 +423,23 @@ namespace RiotAutoLogin.Services
       const currentMs = getCurrentTimerMs();
       if (currentMs === Infinity) {
         timerEl.textContent = '∞';
-      } else if (currentMs === null) {
-        timerEl.textContent = '--';
-      } else {
-        timerEl.textContent = String(Math.ceil(currentMs / 1000));
+        lastVisibleTimerSecond = null;
+        return;
       }
+
+      if (currentMs === null) {
+        timerEl.textContent = '--';
+        lastVisibleTimerSecond = null;
+        return;
+      }
+
+      const rawSecond = Math.max(0, Math.ceil(currentMs / 1000));
+      const visibleSecond = lastVisibleTimerSecond === null
+        ? rawSecond
+        : Math.min(lastVisibleTimerSecond, rawSecond);
+
+      lastVisibleTimerSecond = visibleSecond;
+      timerEl.textContent = String(visibleSecond);
     }
 
     function updateStatusOnly() {
