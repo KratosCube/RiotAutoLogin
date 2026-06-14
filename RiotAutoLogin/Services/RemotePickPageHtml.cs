@@ -321,7 +321,7 @@ namespace RiotAutoLogin.Services
       const serverMs = Math.max(0, nextState.timeLeftInPhaseMs);
       const currentMs = currentTimerMs();
 
-      if (keyChanged || currentMs === null || currentMs === Infinity) {
+      if (currentMs === null || currentMs === Infinity) {
         timerBaseMs = serverMs;
         timerBasePerf = performance.now();
         timerKey = nextKey;
@@ -330,10 +330,25 @@ namespace RiotAutoLogin.Services
       }
 
       const diff = serverMs - currentMs;
-      if (diff > 2500 || diff < -250) {
+      const clearNewPhase = serverMs > currentMs + 1500;
+      const serverIsLower = serverMs < currentMs - 250;
+      const phaseRestartAfterZero = currentMs < 700 && serverMs > 2000;
+
+      if (keyChanged) {
+        timerKey = nextKey;
+        if (clearNewPhase || serverIsLower) {
+          timerBaseMs = serverMs;
+          timerBasePerf = performance.now();
+          if (clearNewPhase) lastVisibleSecond = null;
+        }
+        return;
+      }
+
+      // Same phase/action: never allow small upward corrections. They are LCU jitter and caused 17 -> 18 -> 17 bouncing.
+      if (serverIsLower || phaseRestartAfterZero) {
         timerBaseMs = serverMs;
         timerBasePerf = performance.now();
-        if (diff > 2500) lastVisibleSecond = null;
+        if (phaseRestartAfterZero) lastVisibleSecond = null;
       }
     }
 
@@ -534,7 +549,7 @@ namespace RiotAutoLogin.Services
       await loadTimer();
     }
 
-    function escapeHtml(text) { return String(text || '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char])); }
+    function escapeHtml(text) { return String(text || '').replace(/[&<>'\"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '\"': '&quot;' }[char])); }
     function escapeAttr(text) { return escapeHtml(text).replace(/`/g, '&#096;'); }
 
     loadState();
