@@ -162,6 +162,11 @@ namespace RiotAutoLogin.Services
                 {
                     await WriteHtmlResponseAsync(stream, RemotePickPageHtml.Get(), cancellationToken);
                 }
+                else if (method == "GET" && path.StartsWith("/api/timer", StringComparison.OrdinalIgnoreCase))
+                {
+                    RemotePickState timerState = await GetTimerStateAsync();
+                    await WriteJsonResponseAsync(stream, 200, "OK", timerState, cancellationToken);
+                }
                 else if (method == "GET" && path.StartsWith("/api/state", StringComparison.OrdinalIgnoreCase))
                 {
                     RemotePickState state = await GetStateAsync();
@@ -222,13 +227,43 @@ namespace RiotAutoLogin.Services
 
         public async Task<RemotePickState> GetStateAsync()
         {
+            var state = await GetTimerStateAsync();
+            var bannedChampionIds = new HashSet<int>(state.BannedChampionIds);
+            var pickedChampionIds = new HashSet<int>();
+
+            if (!LCUService.CheckIfLeagueClientIsOpen())
+            {
+                await AddChampionSpellAndRuneListsAsync(state, bannedChampionIds, pickedChampionIds);
+                return state;
+            }
+
+            if (!state.IsInChampSelect)
+            {
+                await AddChampionSpellAndRuneListsAsync(state, bannedChampionIds, pickedChampionIds);
+                return state;
+            }
+
+            string[] sessionResult = LCUService.ClientRequest("GET", "lol-champ-select/v1/session");
+            if (sessionResult[0] == "200")
+            {
+                using JsonDocument doc = JsonDocument.Parse(sessionResult[1]);
+                JsonElement root = doc.RootElement;
+                ParsePicks(root, pickedChampionIds);
+                state.PickedChampionIds = pickedChampionIds.OrderBy(id => id).ToList();
+            }
+
+            await AddChampionSpellAndRuneListsAsync(state, bannedChampionIds, pickedChampionIds);
+            return state;
+        }
+
+        public async Task<RemotePickState> GetTimerStateAsync()
+        {
             var state = new RemotePickState();
 
             if (!LCUService.CheckIfLeagueClientIsOpen())
             {
                 state.PhaseLabel = "League Closed";
                 state.Message = "League Client is not running.";
-                await AddChampionSpellAndRuneListsAsync(state, new HashSet<int>(), new HashSet<int>());
                 return state;
             }
 
@@ -236,42 +271,34 @@ namespace RiotAutoLogin.Services
             state.IsInChampSelect = state.Phase == "ChampSelect";
             state.CanLeave = state.Phase is "Lobby" or "Matchmaking" or "ReadyCheck" or "ChampSelect";
 
-            var bannedChampionIds = new HashSet<int>();
-            var pickedChampionIds = new HashSet<int>();
-
             if (!state.IsInChampSelect)
             {
                 state.PhaseLabel = GetGameflowPhaseLabel(state.Phase);
                 state.Message = state.Phase == "None"
                     ? "Waiting for League Client state..."
                     : $"Current phase: {state.Phase}. Waiting for champion select.";
-
-                await AddChampionSpellAndRuneListsAsync(state, bannedChampionIds, pickedChampionIds);
                 return state;
             }
 
+            var bannedChampionIds = new HashSet<int>();
             string[] sessionResult = LCUService.ClientRequest("GET", "lol-champ-select/v1/session");
             if (sessionResult[0] != "200")
             {
                 state.PhaseLabel = "Champ Select";
                 state.Message = $"Could not read champion select session. Status: {sessionResult[0]}";
-                await AddChampionSpellAndRuneListsAsync(state, bannedChampionIds, pickedChampionIds);
                 return state;
             }
 
             using JsonDocument doc = JsonDocument.Parse(sessionResult[1]);
             JsonElement root = doc.RootElement;
-
             ParseBans(root, bannedChampionIds);
-            ParsePicks(root, pickedChampionIds);
             ParseLocalPlayerSelection(root, state);
             ParseAvailableSpellIds(root, state);
             ParseTimer(root, state);
             ParseActions(root, state);
-            state.PhaseLabel = GetChampSelectPhaseLabel(state, bannedChampionIds);
 
             state.BannedChampionIds = bannedChampionIds.OrderBy(id => id).ToList();
-            state.PickedChampionIds = pickedChampionIds.OrderBy(id => id).ToList();
+            state.PhaseLabel = GetChampSelectPhaseLabel(state, bannedChampionIds);
             state.Message = state.IsMyTurn
                 ? state.ActionType == "pick"
                     ? "It is your pick. Lock in or hover a champion."
@@ -280,7 +307,6 @@ namespace RiotAutoLogin.Services
                         : $"It is your {state.ActionType} turn."
                 : "You can hover an intended pick while waiting for your turn.";
 
-            await AddChampionSpellAndRuneListsAsync(state, bannedChampionIds, pickedChampionIds);
             return state;
         }
 
@@ -290,7 +316,7 @@ namespace RiotAutoLogin.Services
             if (request == null)
                 return new RemotePickActionResult { Success = false, Message = "Invalid champion." };
 
-            RemotePickState state = await GetStateAsync();
+            RemotePickState state = await GetTimerStateAsync();
             if (!state.IsInChampSelect)
                 return new RemotePickActionResult { Success = false, Message = "You are not in champion select." };
 
@@ -299,9 +325,6 @@ namespace RiotAutoLogin.Services
 
             if (state.BannedChampionIds.Contains(request.ChampionId))
                 return new RemotePickActionResult { Success = false, Message = "This champion is banned." };
-
-            if (state.PickedChampionIds.Contains(request.ChampionId))
-                return new RemotePickActionResult { Success = false, Message = "This champion is already picked." };
 
             bool success = LCUService.SelectChampion(request.ChampionId, state.ActionId, complete: true);
             return new RemotePickActionResult
@@ -317,7 +340,7 @@ namespace RiotAutoLogin.Services
             if (request == null)
                 return new RemotePickActionResult { Success = false, Message = "Invalid champion." };
 
-            RemotePickState state = await GetStateAsync();
+            RemotePickState state = await GetTimerStateAsync();
             if (!state.IsInChampSelect)
                 return new RemotePickActionResult { Success = false, Message = "You are not in champion select." };
 
@@ -326,9 +349,6 @@ namespace RiotAutoLogin.Services
 
             if (state.BannedChampionIds.Contains(request.ChampionId))
                 return new RemotePickActionResult { Success = false, Message = "This champion is already banned." };
-
-            if (state.PickedChampionIds.Contains(request.ChampionId))
-                return new RemotePickActionResult { Success = false, Message = "This champion is already picked." };
 
             bool success = LCUService.SelectChampion(request.ChampionId, state.ActionId, complete: true);
             return new RemotePickActionResult
@@ -344,15 +364,12 @@ namespace RiotAutoLogin.Services
             if (request == null)
                 return new RemotePickActionResult { Success = false, Message = "Invalid champion." };
 
-            RemotePickState state = await GetStateAsync();
+            RemotePickState state = await GetTimerStateAsync();
             if (!state.IsInChampSelect)
                 return new RemotePickActionResult { Success = false, Message = "You are not in champion select." };
 
             if (state.BannedChampionIds.Contains(request.ChampionId))
                 return new RemotePickActionResult { Success = false, Message = "This champion is banned." };
-
-            if (state.PickedChampionIds.Contains(request.ChampionId))
-                return new RemotePickActionResult { Success = false, Message = "This champion is already picked." };
 
             bool success = false;
 
@@ -393,7 +410,7 @@ namespace RiotAutoLogin.Services
             if (!LCUService.CheckIfLeagueClientIsOpen())
                 return new RemotePickActionResult { Success = false, Message = "League Client is not running." };
 
-            RemotePickState state = await GetStateAsync();
+            RemotePickState state = await GetTimerStateAsync();
             if (state.AvailableSpellIds.Count > 0 &&
                 !state.AvailableSpellIds.Contains(request.SpellId) &&
                 request.SpellId != state.Spell1Id &&
@@ -410,7 +427,7 @@ namespace RiotAutoLogin.Services
             };
         }
 
-        public async Task<RemotePickActionResult> SelectRunePageAsync(string body)
+        public Task<RemotePickActionResult> SelectRunePageAsync(string body)
         {
             RemoteRunePageRequest? request;
             try
@@ -419,18 +436,18 @@ namespace RiotAutoLogin.Services
             }
             catch
             {
-                return new RemotePickActionResult { Success = false, Message = "Invalid rune page request." };
+                return Task.FromResult(new RemotePickActionResult { Success = false, Message = "Invalid rune page request." });
             }
 
             if (request == null || request.PageId <= 0)
-                return new RemotePickActionResult { Success = false, Message = "Invalid rune page." };
+                return Task.FromResult(new RemotePickActionResult { Success = false, Message = "Invalid rune page." });
 
             if (!LCUService.CheckIfLeagueClientIsOpen())
-                return new RemotePickActionResult { Success = false, Message = "League Client is not running." };
+                return Task.FromResult(new RemotePickActionResult { Success = false, Message = "League Client is not running." });
 
             string[] pagesResult = LCUService.ClientRequest("GET", "lol-perks/v1/pages");
             if (pagesResult[0] != "200")
-                return new RemotePickActionResult { Success = false, Message = $"Could not load rune pages. Status: {pagesResult[0]}" };
+                return Task.FromResult(new RemotePickActionResult { Success = false, Message = $"Could not load rune pages. Status: {pagesResult[0]}" });
 
             string? selectedPageJson = null;
             try
@@ -456,7 +473,7 @@ namespace RiotAutoLogin.Services
             }
 
             if (string.IsNullOrWhiteSpace(selectedPageJson))
-                return new RemotePickActionResult { Success = false, Message = "Rune page was not found." };
+                return Task.FromResult(new RemotePickActionResult { Success = false, Message = "Rune page was not found." });
 
             string[] result = LCUService.ClientRequest("POST", $"lol-perks/v1/pages/{request.PageId}/current");
             if (!result[0].StartsWith("2"))
@@ -466,11 +483,11 @@ namespace RiotAutoLogin.Services
                 result = LCUService.ClientRequest("PATCH", "lol-perks/v1/currentpage", selectedPageJson);
 
             bool success = result[0].StartsWith("2");
-            return new RemotePickActionResult
+            return Task.FromResult(new RemotePickActionResult
             {
                 Success = success,
                 Message = success ? "Rune page selected." : $"League Client rejected rune page change. Status: {result[0]}"
-            };
+            });
         }
 
         public async Task<RemotePickActionResult> LeaveLobbyAsync()
@@ -626,9 +643,7 @@ namespace RiotAutoLogin.Services
                         ? nameElement.GetString() ?? $"Rune Page {pageId}"
                         : $"Rune Page {pageId}";
 
-                    bool isCurrent = currentPageId == pageId ||
-                                     GetBoolProperty(page, "current") ||
-                                     GetBoolProperty(page, "isCurrent");
+                    bool isCurrent = currentPageId == pageId || GetBoolProperty(page, "current") || GetBoolProperty(page, "isCurrent");
 
                     var dto = new RemoteRunePageDto
                     {
@@ -657,13 +672,8 @@ namespace RiotAutoLogin.Services
 
             _championCache ??= await DataDragonService.GetAllChampionsAsync();
 
-            var champions = _championCache
-                .Where(champion => champion.Id > 0)
-                .OrderBy(champion => champion.Name)
-                .ToList();
-
             var remoteChampions = new List<RemoteChampionDto>();
-            foreach (ChampionModel champion in champions)
+            foreach (ChampionModel champion in _championCache.Where(champion => champion.Id > 0).OrderBy(champion => champion.Name))
             {
                 string imageUrl = string.Empty;
                 try
@@ -675,12 +685,7 @@ namespace RiotAutoLogin.Services
                     Debug.WriteLine($"Could not get champion image URL for {champion.Name}: {ex.Message}");
                 }
 
-                remoteChampions.Add(new RemoteChampionDto
-                {
-                    Id = champion.Id,
-                    Name = champion.Name,
-                    ImageUrl = imageUrl
-                });
+                remoteChampions.Add(new RemoteChampionDto { Id = champion.Id, Name = champion.Name, ImageUrl = imageUrl });
             }
 
             _remoteChampionCache = remoteChampions;
@@ -761,35 +766,22 @@ namespace RiotAutoLogin.Services
 
         private static void ParseLocalPlayerSelection(JsonElement root, RemotePickState state)
         {
-            if (!root.TryGetProperty("localPlayerCellId", out JsonElement localCellElement) ||
-                !TryGetInt(localCellElement, out int localPlayerCellId))
-            {
+            if (!root.TryGetProperty("localPlayerCellId", out JsonElement localCellElement) || !TryGetInt(localCellElement, out int localPlayerCellId))
                 return;
-            }
 
             if (!root.TryGetProperty("myTeam", out JsonElement myTeamElement) || myTeamElement.ValueKind != JsonValueKind.Array)
                 return;
 
             foreach (JsonElement player in myTeamElement.EnumerateArray())
             {
-                if (!player.TryGetProperty("cellId", out JsonElement cellElement) ||
-                    !TryGetInt(cellElement, out int cellId) ||
-                    cellId != localPlayerCellId)
-                {
+                if (!player.TryGetProperty("cellId", out JsonElement cellElement) || !TryGetInt(cellElement, out int cellId) || cellId != localPlayerCellId)
                     continue;
-                }
 
-                if (player.TryGetProperty("championId", out JsonElement championIdElement) &&
-                    TryGetInt(championIdElement, out int championId))
-                {
+                if (player.TryGetProperty("championId", out JsonElement championIdElement) && TryGetInt(championIdElement, out int championId))
                     state.SelectedChampionId = championId;
-                }
 
-                if (player.TryGetProperty("championPickIntent", out JsonElement intentElement) &&
-                    TryGetInt(intentElement, out int intentChampionId))
-                {
+                if (player.TryGetProperty("championPickIntent", out JsonElement intentElement) && TryGetInt(intentElement, out int intentChampionId))
                     state.PickIntentChampionId = intentChampionId;
-                }
 
                 if (player.TryGetProperty("spell1Id", out JsonElement spell1Element) && TryGetInt(spell1Element, out int spell1Id))
                     state.Spell1Id = spell1Id;
@@ -816,7 +808,9 @@ namespace RiotAutoLogin.Services
             if (timerElement.TryGetProperty("phase", out JsonElement phaseElement))
                 state.ChampSelectPhase = phaseElement.GetString() ?? string.Empty;
 
-            if (timerElement.TryGetProperty("adjustedTimeLeftInPhase", out JsonElement leftElement) && TryGetInt(leftElement, out int timeLeftMs))
+            if (timerElement.TryGetProperty("adjustedTimeLeftInPhase", out JsonElement adjustedLeftElement) && TryGetInt(adjustedLeftElement, out int adjustedLeftMs))
+                state.TimeLeftInPhaseMs = Math.Max(0, adjustedLeftMs);
+            else if (timerElement.TryGetProperty("timeLeftInPhase", out JsonElement leftElement) && TryGetInt(leftElement, out int timeLeftMs))
                 state.TimeLeftInPhaseMs = Math.Max(0, timeLeftMs);
 
             if (timerElement.TryGetProperty("totalTimeInPhase", out JsonElement totalElement) && TryGetInt(totalElement, out int totalMs))
@@ -870,11 +864,7 @@ namespace RiotAutoLogin.Services
             {
                 foreach (JsonProperty property in element.EnumerateObject())
                 {
-                    bool looksLikeAvailableSpellList =
-                        property.NameEquals("allowableSpellIds") ||
-                        property.NameEquals("availableSpellIds") ||
-                        property.NameEquals("allowedSpellIds");
-
+                    bool looksLikeAvailableSpellList = property.NameEquals("allowableSpellIds") || property.NameEquals("availableSpellIds") || property.NameEquals("allowedSpellIds");
                     if (looksLikeAvailableSpellList && property.Value.ValueKind == JsonValueKind.Array)
                     {
                         foreach (JsonElement idElement in property.Value.EnumerateArray())
@@ -903,12 +893,8 @@ namespace RiotAutoLogin.Services
 
             foreach (JsonElement player in teamElement.EnumerateArray())
             {
-                if (player.TryGetProperty("championId", out JsonElement championIdElement) &&
-                    TryGetInt(championIdElement, out int championId) &&
-                    championId > 0)
-                {
+                if (player.TryGetProperty("championId", out JsonElement championIdElement) && TryGetInt(championIdElement, out int championId) && championId > 0)
                     championIds.Add(championId);
-                }
             }
         }
 
@@ -926,11 +912,8 @@ namespace RiotAutoLogin.Services
 
         private static void ParseActions(JsonElement root, RemotePickState state)
         {
-            if (!root.TryGetProperty("localPlayerCellId", out JsonElement localCellElement) ||
-                !TryGetInt(localCellElement, out int localPlayerCellId))
-            {
+            if (!root.TryGetProperty("localPlayerCellId", out JsonElement localCellElement) || !TryGetInt(localCellElement, out int localPlayerCellId))
                 return;
-            }
 
             if (!root.TryGetProperty("actions", out JsonElement actionsElement) || actionsElement.ValueKind != JsonValueKind.Array)
                 return;
@@ -942,12 +925,8 @@ namespace RiotAutoLogin.Services
 
                 foreach (JsonElement action in actionGroup.EnumerateArray())
                 {
-                    if (!action.TryGetProperty("actorCellId", out JsonElement actorCellElement) ||
-                        !TryGetInt(actorCellElement, out int actorCellId) ||
-                        actorCellId != localPlayerCellId)
-                    {
+                    if (!action.TryGetProperty("actorCellId", out JsonElement actorCellElement) || !TryGetInt(actorCellElement, out int actorCellId) || actorCellId != localPlayerCellId)
                         continue;
-                    }
 
                     string actionType = action.TryGetProperty("type", out JsonElement typeElement)
                         ? (typeElement.GetString() ?? string.Empty).ToLowerInvariant()
@@ -960,8 +939,7 @@ namespace RiotAutoLogin.Services
                     if (actionType == "pick" && string.IsNullOrWhiteSpace(state.PickActionId))
                         state.PickActionId = actionId;
 
-                    bool isInProgress = action.TryGetProperty("isInProgress", out JsonElement inProgressElement) &&
-                                        inProgressElement.GetBoolean();
+                    bool isInProgress = action.TryGetProperty("isInProgress", out JsonElement inProgressElement) && inProgressElement.GetBoolean();
                     if (!isInProgress)
                         continue;
 
@@ -974,9 +952,7 @@ namespace RiotAutoLogin.Services
 
         private static bool GetBoolProperty(JsonElement element, string propertyName)
         {
-            return element.TryGetProperty(propertyName, out JsonElement valueElement) &&
-                   valueElement.ValueKind is JsonValueKind.True or JsonValueKind.False &&
-                   valueElement.GetBoolean();
+            return element.TryGetProperty(propertyName, out JsonElement valueElement) && valueElement.ValueKind is JsonValueKind.True or JsonValueKind.False && valueElement.GetBoolean();
         }
 
         private static bool TryGetInt(JsonElement element, out int value)
@@ -1084,9 +1060,7 @@ namespace RiotAutoLogin.Services
         private static bool IsPrivateIPv4Address(IPAddress address)
         {
             byte[] bytes = address.GetAddressBytes();
-            return bytes[0] == 10 ||
-                   bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31 ||
-                   bytes[0] == 192 && bytes[1] == 168;
+            return bytes[0] == 10 || bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31 || bytes[0] == 192 && bytes[1] == 168;
         }
 
         public void Dispose()
