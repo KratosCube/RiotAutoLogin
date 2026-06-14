@@ -523,20 +523,33 @@ namespace RiotAutoLogin.Services
             if (championId <= 0 || !LCUService.CheckIfLeagueClientIsOpen())
                 return;
 
+            var candidates = new List<RemoteRecommendedRunePageDto>();
             string position = NormalizePosition(state.AssignedPosition);
+
+            string[] sessionResult = LCUService.ClientRequest("GET", "lol-champ-select/v1/session");
+            if (sessionResult[0] == "200")
+                candidates.AddRange(ParseRecommendedRunePages(sessionResult[1]));
+
             foreach (string endpoint in GetRecommendedRuneEndpoints(championId, position, state.MapId))
             {
                 string[] result = LCUService.ClientRequest("GET", endpoint);
                 if (result[0] != "200")
                     continue;
 
-                List<RemoteRecommendedRunePageDto> pages = ParseRecommendedRunePages(result[1]);
-                if (pages.Count == 0)
-                    continue;
-
-                state.RecommendedRunePages = pages.Take(3).ToList();
-                return;
+                candidates.AddRange(ParseRecommendedRunePages(result[1]));
             }
+
+            state.RecommendedRunePages = candidates
+                .Where(page => page.CanApply)
+                .GroupBy(page => string.Join(',', page.SelectedPerkIds))
+                .Select(group => group.First())
+                .Take(3)
+                .Select((page, index) =>
+                {
+                    page.Index = index;
+                    return page;
+                })
+                .ToList();
         }
 
         private static IEnumerable<string> GetRecommendedRuneEndpoints(int championId, string position, int mapId)
@@ -544,10 +557,12 @@ namespace RiotAutoLogin.Services
             string safePosition = string.IsNullOrWhiteSpace(position) ? "UNKNOWN" : position;
             int safeMapId = mapId > 0 ? mapId : 11;
 
+            yield return $"lol-perks/v1/recommended-pages?championId={championId}&position={safePosition}&mapId={safeMapId}";
             yield return $"lol-perks/v1/recommended-pages/champion/{championId}/position/{safePosition}/map/{safeMapId}";
             yield return $"lol-perks/v1/recommended-pages/champion/{championId}/position/{safePosition}";
             yield return $"lol-perks/v1/recommended-pages/champion/{championId}/map/{safeMapId}";
             yield return $"lol-perks/v1/recommended-pages/champion/{championId}";
+            yield return "lol-perks/v1/recommended-pages";
         }
 
         private static List<RemoteRecommendedRunePageDto> ParseRecommendedRunePages(string json)
@@ -556,22 +571,7 @@ namespace RiotAutoLogin.Services
             try
             {
                 using JsonDocument doc = JsonDocument.Parse(json);
-                JsonElement root = doc.RootElement;
-                if (root.ValueKind == JsonValueKind.Array)
-                {
-                    AddRecommendedPagesFromArray(root, pages);
-                }
-                else if (root.ValueKind == JsonValueKind.Object)
-                {
-                    foreach (string arrayName in new[] { "recommendedPages", "pages", "recommendations", "runePages" })
-                    {
-                        if (root.TryGetProperty(arrayName, out JsonElement arrayElement) && arrayElement.ValueKind == JsonValueKind.Array)
-                            AddRecommendedPagesFromArray(arrayElement, pages);
-                    }
-
-                    if (pages.Count == 0)
-                        TryAddRecommendedPage(root, pages);
-                }
+                CollectRecommendedPages(doc.RootElement, pages);
             }
             catch (Exception ex)
             {
@@ -584,12 +584,21 @@ namespace RiotAutoLogin.Services
             return pages.Where(page => page.CanApply).Take(3).ToList();
         }
 
-        private static void AddRecommendedPagesFromArray(JsonElement arrayElement, List<RemoteRecommendedRunePageDto> pages)
+        private static void CollectRecommendedPages(JsonElement element, List<RemoteRecommendedRunePageDto> pages)
         {
-            foreach (JsonElement item in arrayElement.EnumerateArray())
+            if (element.ValueKind == JsonValueKind.Object)
             {
-                if (item.ValueKind == JsonValueKind.Object)
-                    TryAddRecommendedPage(item, pages);
+                TryAddRecommendedPage(element, pages);
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    if (property.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+                        CollectRecommendedPages(property.Value, pages);
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement item in element.EnumerateArray())
+                    CollectRecommendedPages(item, pages);
             }
         }
 
@@ -606,7 +615,7 @@ namespace RiotAutoLogin.Services
                 Name = GetStringProperty(source, "name", "title", "pageName", "displayName") ?? GetStringProperty(pageElement, "name", "title", "pageName", "displayName") ?? "Recommended",
                 Subtitle = GetStringProperty(pageElement, "subtitle", "description", "position") ?? string.Empty,
                 PrimaryStyleId = GetIntProperty(source, "primaryStyleId", "primaryStyle", "primaryPath", "primaryTreeId"),
-                SubStyleId = GetIntProperty(source, "subStyleId", "secondaryStyleId", "subStyle", "secondaryPath", "secondaryTreeId"),
+                SubStyleId = GetIntProperty(source, "subStyleId", "secondaryStyleId", "secondaryStyle", "subStyle", "secondaryPath", "secondaryTreeId"),
                 SelectedPerkIds = GetPerkIds(source)
             };
 
@@ -616,7 +625,7 @@ namespace RiotAutoLogin.Services
 
         private static List<int> GetPerkIds(JsonElement pageElement)
         {
-            foreach (string arrayName in new[] { "selectedPerkIds", "selectedPerks", "perks", "perkIds" })
+            foreach (string arrayName in new[] { "selectedPerkIds", "selectedPerks", "perks", "perkIds", "runes", "runeIds" })
             {
                 if (pageElement.TryGetProperty(arrayName, out JsonElement arrayElement) && arrayElement.ValueKind == JsonValueKind.Array)
                     return ReadIntArray(arrayElement);
@@ -633,8 +642,7 @@ namespace RiotAutoLogin.Services
             {
                 foreach (JsonProperty property in element.EnumerateObject())
                 {
-                    if ((property.Name.Contains("perk", StringComparison.OrdinalIgnoreCase) || property.Name.Contains("rune", StringComparison.OrdinalIgnoreCase)) &&
-                        property.Value.ValueKind == JsonValueKind.Array)
+                    if ((property.Name.Contains("perk", StringComparison.OrdinalIgnoreCase) || property.Name.Contains("rune", StringComparison.OrdinalIgnoreCase)) && property.Value.ValueKind == JsonValueKind.Array)
                     {
                         ids.AddRange(ReadIntArray(property.Value));
                     }
@@ -658,8 +666,17 @@ namespace RiotAutoLogin.Services
             {
                 if (TryGetInt(item, out int id) && id > 0)
                     ids.Add(id);
-                else if (item.ValueKind == JsonValueKind.Object && TryGetPropertyInt(item, "id", out int objectId) && objectId > 0)
-                    ids.Add(objectId);
+                else if (item.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (string propertyName in new[] { "id", "perkId", "runeId", "perk" })
+                    {
+                        if (TryGetPropertyInt(item, propertyName, out int objectId) && objectId > 0)
+                        {
+                            ids.Add(objectId);
+                            break;
+                        }
+                    }
+                }
             }
             return ids;
         }
@@ -707,17 +724,28 @@ namespace RiotAutoLogin.Services
 
             List<SummonerSpellModel> spells = await LCUService.GetSummonerSpellsAsync();
             MergeDefaultSummonerSpells(spells);
-            _remoteSpellCache = spells
-                .Where(spell => spell.Id > 0)
-                .OrderBy(spell => spell.Name)
-                .Select(spell => new RemoteSummonerSpellDto
+
+            var remoteSpells = new List<RemoteSummonerSpellDto>();
+            foreach (SummonerSpellModel spell in spells.Where(spell => spell.Id > 0).OrderBy(spell => spell.Name))
+            {
+                string name = spell.Name ?? $"Spell {spell.Id}";
+                string imageUrl = spell.ImageUrl ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(imageUrl))
+                {
+                    try { imageUrl = await DataDragonService.GetSummonerSpellImageUrlAsync(name); }
+                    catch (Exception ex) { Debug.WriteLine($"Could not get summoner spell image URL for {name}: {ex.Message}"); }
+                }
+
+                remoteSpells.Add(new RemoteSummonerSpellDto
                 {
                     Id = spell.Id,
-                    Name = spell.Name ?? $"Spell {spell.Id}",
+                    Name = name,
                     Description = spell.Description ?? string.Empty,
-                    ImageUrl = spell.ImageUrl ?? string.Empty
-                })
-                .ToList();
+                    ImageUrl = imageUrl
+                });
+            }
+
+            _remoteSpellCache = remoteSpells;
         }
 
         private static void MergeDefaultSummonerSpells(List<SummonerSpellModel> spells)
