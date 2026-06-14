@@ -18,6 +18,9 @@ namespace RiotAutoLogin.Models
         public string ActionId { get; set; } = string.Empty;
         public string ActionType { get; set; } = string.Empty;
         public string PickActionId { get; set; } = string.Empty;
+        public string AssignedPosition { get; set; } = string.Empty;
+        public int MapId { get; set; }
+        public int QueueId { get; set; }
         public string Message { get; set; } = string.Empty;
         public int SelectedChampionId { get; set; }
         public int PickIntentChampionId { get; set; }
@@ -29,6 +32,7 @@ namespace RiotAutoLogin.Models
         public List<RemoteChampionDto> Champions { get; set; } = new();
         public List<RemoteSummonerSpellDto> SummonerSpells { get; set; } = new();
         public List<RemoteRunePageDto> RunePages { get; set; } = new();
+        public List<RemoteRecommendedRunePageDto> RecommendedRunePages { get; set; } = new();
         public RemoteRunePageDto? CurrentRunePage { get; set; }
     }
 
@@ -64,6 +68,17 @@ namespace RiotAutoLogin.Models
         public bool IsDeletable { get; set; }
     }
 
+    public class RemoteRecommendedRunePageDto
+    {
+        public int Index { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Subtitle { get; set; } = string.Empty;
+        public int PrimaryStyleId { get; set; }
+        public int SubStyleId { get; set; }
+        public List<int> SelectedPerkIds { get; set; } = new();
+        public bool CanApply => PrimaryStyleId > 0 && SubStyleId > 0 && SelectedPerkIds.Count > 0;
+    }
+
     public class RemotePickRequest
     {
         public int ChampionId { get; set; }
@@ -78,6 +93,11 @@ namespace RiotAutoLogin.Models
     public class RemoteRunePageRequest
     {
         public long PageId { get; set; }
+    }
+
+    public class RemoteRecommendedRunePageRequest
+    {
+        public int Index { get; set; }
     }
 
     public class RemotePickActionResult
