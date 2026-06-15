@@ -213,7 +213,8 @@ namespace RiotAutoLogin.Services
                 }
             }
 
-            await AddChampionSpellAndRuneListsAsync(state, new HashSet<int>(state.BannedChampionIds), pickedChampionIds);
+            if (state.IsInChampSelect)
+                await AddChampionSpellAndRuneListsAsync(state, new HashSet<int>(state.BannedChampionIds), pickedChampionIds);
             return state;
         }
 
@@ -232,11 +233,35 @@ namespace RiotAutoLogin.Services
             state.IsInChampSelect = state.Phase == "ChampSelect";
             state.CanLeave = state.Phase == "Lobby" || state.Phase == "Matchmaking" || state.Phase == "ReadyCheck" || state.Phase == "ChampSelect";
             TryLoadQueueFromGameflowOrLobby(state);
+            TryReadLiveGameState(state);
 
             if (!state.IsInChampSelect)
             {
-                state.PhaseLabel = GetGameflowPhaseLabel(state.Phase);
                 string queueSuffix = string.IsNullOrWhiteSpace(state.QueueName) ? string.Empty : $" ({state.QueueName})";
+                if (state.Phase == "GameStart" || state.Phase == "InProgress")
+                {
+                    if (state.IsGameLoaded)
+                    {
+                        state.PhaseLabel = "In Game";
+                        state.GameStatus = "InGame";
+                        state.Message = $"In game{queueSuffix}. Game time: {FormatGameTime(state.GameTimeSeconds)}.";
+                    }
+                    else if (state.IsGameClientRunning)
+                    {
+                        state.PhaseLabel = "Loading Screen";
+                        state.GameStatus = "Loading";
+                        state.Message = $"Loading screen{queueSuffix}. Waiting for Live Client Data API...";
+                    }
+                    else
+                    {
+                        state.PhaseLabel = "Starting Game";
+                        state.GameStatus = "Starting";
+                        state.Message = $"Starting game{queueSuffix}. Waiting for League of Legends.exe...";
+                    }
+                    return state;
+                }
+
+                state.PhaseLabel = GetGameflowPhaseLabel(state.Phase);
                 state.Message = state.Phase == "None" ? "Waiting for League Client state..." : $"Current phase: {state.Phase}{queueSuffix}. Waiting for champion select.";
                 return state;
             }
@@ -320,6 +345,10 @@ namespace RiotAutoLogin.Services
                 champSelectMode = state.ChampSelectMode,
                 isRandomChampionMode = state.IsRandomChampionMode,
                 availableChampionIds = state.AvailableChampionIds,
+                isGameClientRunning = state.IsGameClientRunning,
+                isGameLoaded = state.IsGameLoaded,
+                gameTimeSeconds = state.GameTimeSeconds,
+                gameStatus = state.GameStatus,
                 endpoints = endpointResults
             };
         }
@@ -827,10 +856,8 @@ namespace RiotAutoLogin.Services
 
         private static void ParseLocalPlayerSelection(JsonElement root, RemotePickState state)
         {
-            if (TryGetPropertyInt(root, "mapId", out int mapId))
-                state.MapId = mapId;
-            if (TryGetPropertyInt(root, "queueId", out int queueId))
-                state.QueueId = queueId;
+            if (TryGetPropertyInt(root, "mapId", out int mapId)) state.MapId = mapId;
+            if (TryGetPropertyInt(root, "queueId", out int queueId)) state.QueueId = queueId;
 
             if (!TryGetPropertyInt(root, "localPlayerCellId", out int localPlayerCellId))
                 return;
@@ -883,13 +910,9 @@ namespace RiotAutoLogin.Services
                         (name.Contains("champion") && (name.Contains("available") || name.Contains("allowable") || name.Contains("pickable") || name.Contains("bench") || name.Contains("unlocked") || name.Contains("subset")));
 
                     if (looksLikeAvailableChampions && property.Value.ValueKind == JsonValueKind.Array)
-                    {
                         AddChampionIdsFromFlexibleArray(property.Value, championIds);
-                    }
                     else if (property.Value.ValueKind == JsonValueKind.Object || property.Value.ValueKind == JsonValueKind.Array)
-                    {
                         CollectAvailableChampionIds(property.Value, championIds);
-                    }
                 }
             }
             else if (element.ValueKind == JsonValueKind.Array)
@@ -975,8 +998,7 @@ namespace RiotAutoLogin.Services
                     if (inProgress)
                     {
                         activeIds.Add(actionId);
-                        if (string.IsNullOrWhiteSpace(activeType))
-                            activeType = actionType;
+                        if (string.IsNullOrWhiteSpace(activeType)) activeType = actionType;
                     }
 
                     if (!TryGetPropertyInt(action, "actorCellId", out int actorCellId) || actorCellId != localPlayerCellId)
@@ -1016,8 +1038,7 @@ namespace RiotAutoLogin.Services
                     {
                         foreach (JsonElement idElement in property.Value.EnumerateArray())
                         {
-                            if (TryGetInt(idElement, out int spellId) && spellId > 0)
-                                spellIds.Add(spellId);
+                            if (TryGetInt(idElement, out int spellId) && spellId > 0) spellIds.Add(spellId);
                         }
                     }
                     else if (property.Value.ValueKind == JsonValueKind.Object || property.Value.ValueKind == JsonValueKind.Array)
@@ -1039,8 +1060,7 @@ namespace RiotAutoLogin.Services
                 return;
             foreach (JsonElement player in teamElement.EnumerateArray())
             {
-                if (TryGetPropertyInt(player, "championId", out int championId) && championId > 0)
-                    championIds.Add(championId);
+                if (TryGetPropertyInt(player, "championId", out int championId) && championId > 0) championIds.Add(championId);
             }
         }
 
@@ -1050,34 +1070,92 @@ namespace RiotAutoLogin.Services
                 return;
             foreach (JsonElement idElement in idsElement.EnumerateArray())
             {
-                if (TryGetInt(idElement, out int championId) && championId > 0)
-                    championIds.Add(championId);
+                if (TryGetInt(idElement, out int championId) && championId > 0) championIds.Add(championId);
             }
+        }
+
+        private static void TryReadLiveGameState(RemotePickState state)
+        {
+            state.IsGameClientRunning = IsLeagueGameClientRunning();
+            state.IsGameLoaded = false;
+            state.GameTimeSeconds = -1;
+            state.GameStatus = state.IsGameClientRunning ? "Loading" : "Waiting";
+
+            try
+            {
+#pragma warning disable SYSLIB0014
+                HttpWebRequest request = WebRequest.CreateHttp("http://127.0.0.1:2999/liveclientdata/gamestats");
+#pragma warning restore SYSLIB0014
+                request.Method = "GET";
+                request.Timeout = 250;
+                request.ReadWriteTimeout = 250;
+
+                using HttpWebResponse response = (HttpWebResponse)request.GetResponse();
+                if ((int)response.StatusCode < 200 || (int)response.StatusCode >= 300)
+                    return;
+
+                using Stream? responseStream = response.GetResponseStream();
+                if (responseStream == null)
+                    return;
+
+                using StreamReader reader = new(responseStream, Encoding.UTF8);
+                string json = reader.ReadToEnd();
+                if (string.IsNullOrWhiteSpace(json))
+                    return;
+
+                using JsonDocument doc = JsonDocument.Parse(json);
+                state.IsGameClientRunning = true;
+                state.IsGameLoaded = true;
+                state.GameStatus = "InGame";
+                if (TryGetPropertyDouble(doc.RootElement, "gameTime", out double gameTime))
+                    state.GameTimeSeconds = Math.Max(0, gameTime);
+            }
+            catch
+            {
+                state.GameStatus = state.IsGameClientRunning ? "Loading" : "Waiting";
+            }
+        }
+
+        private static bool IsLeagueGameClientRunning()
+        {
+            try
+            {
+                return Process.GetProcessesByName("League of Legends").Any() || Process.GetProcessesByName("League of Legends.exe").Any();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string FormatGameTime(double seconds)
+        {
+            if (seconds < 0) return "--:--";
+            int totalSeconds = (int)Math.Floor(seconds);
+            int minutes = totalSeconds / 60;
+            int remainderSeconds = totalSeconds % 60;
+            return $"{minutes}:{remainderSeconds:00}";
         }
 
         private static void TryLoadQueueFromGameflowOrLobby(RemotePickState state)
         {
             TryLoadQueueFromEndpoint("lol-gameflow/v1/session", state);
-            if (state.QueueId <= 0)
-                TryLoadQueueFromEndpoint("lol-lobby/v2/lobby", state);
+            if (state.QueueId <= 0) TryLoadQueueFromEndpoint("lol-lobby/v2/lobby", state);
             UpdateModeLabels(state);
         }
 
         private static void TryLoadQueueFromEndpoint(string endpoint, RemotePickState state)
         {
             string[] result = LCUService.ClientRequest("GET", endpoint);
-            if (result[0] != "200")
-                return;
+            if (result[0] != "200") return;
 
             try
             {
                 using JsonDocument doc = JsonDocument.Parse(result[1]);
                 JsonElement root = doc.RootElement;
 
-                if (TryGetPropertyInt(root, "queueId", out int queueId) && queueId > 0)
-                    state.QueueId = queueId;
-                if (TryGetPropertyInt(root, "mapId", out int mapId) && mapId > 0)
-                    state.MapId = mapId;
+                if (TryGetPropertyInt(root, "queueId", out int queueId) && queueId > 0) state.QueueId = queueId;
+                if (TryGetPropertyInt(root, "mapId", out int mapId) && mapId > 0) state.MapId = mapId;
 
                 if (root.TryGetProperty("gameData", out JsonElement gameData) && gameData.ValueKind == JsonValueKind.Object)
                 {
@@ -1092,8 +1170,7 @@ namespace RiotAutoLogin.Services
                     if (TryGetPropertyInt(gameConfig, "mapId", out int gcMapId) && gcMapId > 0) state.MapId = gcMapId;
                 }
 
-                if (root.TryGetProperty("queue", out JsonElement queueRoot))
-                    ParseQueueObject(queueRoot, state);
+                if (root.TryGetProperty("queue", out JsonElement queueRoot)) ParseQueueObject(queueRoot, state);
             }
             catch (Exception ex)
             {
@@ -1103,24 +1180,19 @@ namespace RiotAutoLogin.Services
 
         private static void ParseQueueObject(JsonElement queue, RemotePickState state)
         {
-            if (queue.ValueKind != JsonValueKind.Object)
-                return;
+            if (queue.ValueKind != JsonValueKind.Object) return;
             if (TryGetPropertyInt(queue, "id", out int queueId) && queueId > 0) state.QueueId = queueId;
             if (TryGetPropertyInt(queue, "queueId", out int directQueueId) && directQueueId > 0) state.QueueId = directQueueId;
         }
 
         private static void UpdateModeLabels(RemotePickState state)
         {
-            if (state.QueueId > 0 && IsKnownRandomChampionQueue(state.QueueId))
-                state.IsRandomChampionMode = true;
+            if (state.QueueId > 0 && IsKnownRandomChampionQueue(state.QueueId)) state.IsRandomChampionMode = true;
 
             state.QueueName = GetQueueName(state.QueueId, state.IsRandomChampionMode);
-            if (state.IsRandomChampionMode)
-                state.ChampSelectMode = "Random / ARAM";
-            else if (state.QueueId == 400 || state.QueueId == 420 || state.QueueId == 440)
-                state.ChampSelectMode = "Draft";
-            else
-                state.ChampSelectMode = string.IsNullOrWhiteSpace(state.QueueName) ? string.Empty : state.QueueName;
+            if (state.IsRandomChampionMode) state.ChampSelectMode = "Random / ARAM";
+            else if (state.QueueId == 400 || state.QueueId == 420 || state.QueueId == 440) state.ChampSelectMode = "Draft";
+            else state.ChampSelectMode = string.IsNullOrWhiteSpace(state.QueueName) ? string.Empty : state.QueueName;
         }
 
         private static bool IsKnownRandomChampionQueue(int queueId)
@@ -1159,6 +1231,7 @@ namespace RiotAutoLogin.Services
             "Matchmaking" => "In Queue",
             "ReadyCheck" => "Match Found",
             "ChampSelect" => "Champ Select",
+            "GameStart" => "Loading Screen",
             "InProgress" => "In Game",
             "WaitingForStats" => "Post Game",
             "PreEndOfGame" => "Post Game",
@@ -1213,24 +1286,32 @@ namespace RiotAutoLogin.Services
         {
             foreach (string propertyName in propertyNames)
             {
-                if (TryGetPropertyInt(element, propertyName, out int value))
-                    return value;
+                if (TryGetPropertyInt(element, propertyName, out int value)) return value;
             }
             return 0;
         }
 
         private static bool TryGetPropertyInt(JsonElement element, string propertyName, out int value)
         {
-            if (element.TryGetProperty(propertyName, out JsonElement valueElement))
-                return TryGetInt(valueElement, out value);
+            if (element.TryGetProperty(propertyName, out JsonElement valueElement)) return TryGetInt(valueElement, out value);
             value = 0;
             return false;
         }
 
         private static bool TryGetPropertyLong(JsonElement element, string propertyName, out long value)
         {
+            if (element.TryGetProperty(propertyName, out JsonElement valueElement)) return TryGetLong(valueElement, out value);
+            value = 0;
+            return false;
+        }
+
+        private static bool TryGetPropertyDouble(JsonElement element, string propertyName, out double value)
+        {
             if (element.TryGetProperty(propertyName, out JsonElement valueElement))
-                return TryGetLong(valueElement, out value);
+            {
+                if (valueElement.ValueKind == JsonValueKind.Number) return valueElement.TryGetDouble(out value);
+                if (valueElement.ValueKind == JsonValueKind.String) return double.TryParse(valueElement.GetString(), out value);
+            }
             value = 0;
             return false;
         }
@@ -1316,9 +1397,7 @@ namespace RiotAutoLogin.Services
 
         private static string PreviewResponse(string body)
         {
-            if (string.IsNullOrWhiteSpace(body))
-                return string.Empty;
-
+            if (string.IsNullOrWhiteSpace(body)) return string.Empty;
             string compact = body.Replace("\r", " ").Replace("\n", " ").Trim();
             return compact.Length <= 2200 ? compact : compact[..2200] + "...";
         }
@@ -1329,8 +1408,7 @@ namespace RiotAutoLogin.Services
             foreach (IPAddress address in GetLocalIPv4Addresses())
             {
                 string url = $"http://{address}:{port}/";
-                if (!urls.Contains(url, StringComparer.OrdinalIgnoreCase))
-                    urls.Add(url);
+                if (!urls.Contains(url, StringComparer.OrdinalIgnoreCase)) urls.Add(url);
             }
             return urls;
         }
