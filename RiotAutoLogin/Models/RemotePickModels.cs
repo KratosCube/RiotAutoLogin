@@ -26,6 +26,10 @@ namespace RiotAutoLogin.Models
         public string QueueName { get; set; } = string.Empty;
         public string ChampSelectMode { get; set; } = string.Empty;
         public bool IsRandomChampionMode { get; set; }
+        public bool IsGameClientRunning { get; set; }
+        public bool IsGameLoaded { get; set; }
+        public double GameTimeSeconds { get; set; } = -1;
+        public string GameStatus { get; set; } = "Waiting";
         public string Message { get; set; } = string.Empty;
         public int SelectedChampionId { get; set; }
         public int PickIntentChampionId { get; set; }
