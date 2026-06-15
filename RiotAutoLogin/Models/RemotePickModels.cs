@@ -23,6 +23,9 @@ namespace RiotAutoLogin.Models
         public string AssignedPosition { get; set; } = string.Empty;
         public int MapId { get; set; }
         public int QueueId { get; set; }
+        public string QueueName { get; set; } = string.Empty;
+        public string ChampSelectMode { get; set; } = string.Empty;
+        public bool IsRandomChampionMode { get; set; }
         public string Message { get; set; } = string.Empty;
         public int SelectedChampionId { get; set; }
         public int PickIntentChampionId { get; set; }
@@ -31,6 +34,7 @@ namespace RiotAutoLogin.Models
         public List<int> BannedChampionIds { get; set; } = new();
         public List<int> PickedChampionIds { get; set; } = new();
         public List<int> AvailableSpellIds { get; set; } = new();
+        public List<int> AvailableChampionIds { get; set; } = new();
         public List<RemoteChampionDto> Champions { get; set; } = new();
         public List<RemoteSummonerSpellDto> SummonerSpells { get; set; } = new();
         public List<RemoteRunePageDto> RunePages { get; set; } = new();
@@ -47,7 +51,8 @@ namespace RiotAutoLogin.Models
         public bool IsPicked { get; set; }
         public bool IsSelected { get; set; }
         public bool IsIntent { get; set; }
-        public bool IsDisabled => IsBanned || IsPicked;
+        public bool IsAvailableInCurrentMode { get; set; } = true;
+        public bool IsDisabled => IsBanned || IsPicked || !IsAvailableInCurrentMode;
     }
 
     public class RemoteSummonerSpellDto
