@@ -18,6 +18,8 @@ namespace RiotAutoLogin.Models
         public string ActionId { get; set; } = string.Empty;
         public string ActionType { get; set; } = string.Empty;
         public string PickActionId { get; set; } = string.Empty;
+        public int ActionGroupIndex { get; set; } = -1;
+        public string TimerActionKey { get; set; } = string.Empty;
         public string AssignedPosition { get; set; } = string.Empty;
         public int MapId { get; set; }
         public int QueueId { get; set; }
