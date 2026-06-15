@@ -231,11 +231,13 @@ namespace RiotAutoLogin.Services
             state.Phase = await LCUService.GetCurrentGamePhaseAsync();
             state.IsInChampSelect = state.Phase == "ChampSelect";
             state.CanLeave = state.Phase == "Lobby" || state.Phase == "Matchmaking" || state.Phase == "ReadyCheck" || state.Phase == "ChampSelect";
+            TryLoadQueueFromGameflowOrLobby(state);
 
             if (!state.IsInChampSelect)
             {
                 state.PhaseLabel = GetGameflowPhaseLabel(state.Phase);
-                state.Message = state.Phase == "None" ? "Waiting for League Client state..." : $"Current phase: {state.Phase}. Waiting for champion select.";
+                string queueSuffix = string.IsNullOrWhiteSpace(state.QueueName) ? string.Empty : $" ({state.QueueName})";
+                state.Message = state.Phase == "None" ? "Waiting for League Client state..." : $"Current phase: {state.Phase}{queueSuffix}. Waiting for champion select.";
                 return state;
             }
 
@@ -252,16 +254,21 @@ namespace RiotAutoLogin.Services
             var bannedChampionIds = new HashSet<int>();
             ParseBans(root, bannedChampionIds);
             ParseLocalPlayerSelection(root, state);
+            ParseQueueAndMode(root, state);
+            ParseAvailableChampionIds(root, state);
             ParseAvailableSpellIds(root, state);
             ParseTimer(root, state);
             ParseActions(root, state);
             state.BannedChampionIds = bannedChampionIds.OrderBy(id => id).ToList();
             state.PhaseLabel = GetChampSelectPhaseLabel(state, bannedChampionIds);
+            string modePrefix = string.IsNullOrWhiteSpace(state.QueueName) ? string.Empty : $"{state.QueueName}: ";
             state.Message = state.IsMyTurn
-                ? state.ActionType == "pick" ? "It is your pick. Lock in or hover a champion."
-                    : state.ActionType == "ban" ? "It is your ban. Choose a champion to ban."
-                    : $"It is your {state.ActionType} turn."
-                : "You can hover an intended pick while waiting for your turn.";
+                ? state.ActionType == "pick" ? $"{modePrefix}It is your pick. Lock in or hover a champion."
+                    : state.ActionType == "ban" ? $"{modePrefix}It is your ban. Choose a champion to ban."
+                    : $"{modePrefix}It is your {state.ActionType} turn."
+                : state.IsRandomChampionMode && state.AvailableChampionIds.Count > 0
+                    ? $"{modePrefix}Showing your available ARAM/random champions."
+                    : $"{modePrefix}You can hover an intended pick while waiting for your turn.";
 
             return state;
         }
@@ -309,6 +316,10 @@ namespace RiotAutoLogin.Services
                 mapId = state.MapId,
                 effectiveMapId = mapId,
                 queueId = state.QueueId,
+                queueName = state.QueueName,
+                champSelectMode = state.ChampSelectMode,
+                isRandomChampionMode = state.IsRandomChampionMode,
+                availableChampionIds = state.AvailableChampionIds,
                 endpoints = endpointResults
             };
         }
@@ -326,6 +337,8 @@ namespace RiotAutoLogin.Services
                 return Failure("It is not your pick turn.");
             if (state.BannedChampionIds.Contains(request.ChampionId))
                 return Failure("This champion is banned.");
+            if (state.IsRandomChampionMode && state.AvailableChampionIds.Count > 0 && !state.AvailableChampionIds.Contains(request.ChampionId))
+                return Failure("This champion is not available in the current ARAM/random selection.");
 
             bool success = LCUService.SelectChampion(request.ChampionId, state.ActionId, complete: true);
             return new RemotePickActionResult { Success = success, Message = success ? "Champion locked in." : "League Client rejected the pick request." };
@@ -360,6 +373,8 @@ namespace RiotAutoLogin.Services
                 return Failure("You are not in champion select.");
             if (state.BannedChampionIds.Contains(request.ChampionId))
                 return Failure("This champion is banned.");
+            if (state.IsRandomChampionMode && state.AvailableChampionIds.Count > 0 && !state.AvailableChampionIds.Contains(request.ChampionId))
+                return Failure("This champion is not available in the current ARAM/random selection.");
 
             bool success = false;
             if (!string.IsNullOrWhiteSpace(state.PickActionId))
@@ -474,7 +489,11 @@ namespace RiotAutoLogin.Services
             await EnsureRemoteChampionCacheAsync();
             await EnsureRemoteSpellCacheAsync();
 
+            var availableChampionIds = new HashSet<int>(state.AvailableChampionIds);
+            bool shouldFilterRandomChampions = state.IsRandomChampionMode && availableChampionIds.Count > 0;
+
             state.Champions = (_remoteChampionCache ?? new List<RemoteChampionDto>())
+                .Where(champion => !shouldFilterRandomChampions || availableChampionIds.Contains(champion.Id) || state.SelectedChampionId == champion.Id || state.PickIntentChampionId == champion.Id || pickedChampionIds.Contains(champion.Id))
                 .Select(champion => new RemoteChampionDto
                 {
                     Id = champion.Id,
@@ -483,7 +502,8 @@ namespace RiotAutoLogin.Services
                     IsBanned = bannedChampionIds.Contains(champion.Id),
                     IsPicked = pickedChampionIds.Contains(champion.Id),
                     IsSelected = state.SelectedChampionId == champion.Id,
-                    IsIntent = state.PickIntentChampionId == champion.Id
+                    IsIntent = state.PickIntentChampionId == champion.Id,
+                    IsAvailableInCurrentMode = !shouldFilterRandomChampions || availableChampionIds.Contains(champion.Id) || state.SelectedChampionId == champion.Id || state.PickIntentChampionId == champion.Id
                 })
                 .ToList();
 
@@ -831,6 +851,81 @@ namespace RiotAutoLogin.Services
             }
         }
 
+        private static void ParseQueueAndMode(JsonElement root, RemotePickState state)
+        {
+            if (TryGetPropertyInt(root, "mapId", out int mapId)) state.MapId = mapId;
+            if (TryGetPropertyInt(root, "queueId", out int queueId)) state.QueueId = queueId;
+
+            bool randomSignals = GetBoolProperty(root, "benchEnabled") || GetBoolProperty(root, "allowRerolling") || GetBoolProperty(root, "allowSubsetChampionPicks");
+            state.IsRandomChampionMode = randomSignals || IsKnownRandomChampionQueue(state.QueueId);
+            UpdateModeLabels(state);
+        }
+
+        private static void ParseAvailableChampionIds(JsonElement root, RemotePickState state)
+        {
+            var championIds = new HashSet<int>();
+            CollectAvailableChampionIds(root, championIds);
+
+            if (state.SelectedChampionId > 0) championIds.Add(state.SelectedChampionId);
+            if (state.PickIntentChampionId > 0) championIds.Add(state.PickIntentChampionId);
+
+            state.AvailableChampionIds = championIds.Where(id => id > 0).OrderBy(id => id).ToList();
+        }
+
+        private static void CollectAvailableChampionIds(JsonElement element, HashSet<int> championIds)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    string name = property.Name.ToLowerInvariant();
+                    bool looksLikeAvailableChampions = name == "benchchampions" ||
+                        (name.Contains("champion") && (name.Contains("available") || name.Contains("allowable") || name.Contains("pickable") || name.Contains("bench") || name.Contains("unlocked") || name.Contains("subset")));
+
+                    if (looksLikeAvailableChampions && property.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        AddChampionIdsFromFlexibleArray(property.Value, championIds);
+                    }
+                    else if (property.Value.ValueKind == JsonValueKind.Object || property.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        CollectAvailableChampionIds(property.Value, championIds);
+                    }
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement child in element.EnumerateArray())
+                    CollectAvailableChampionIds(child, championIds);
+            }
+        }
+
+        private static void AddChampionIdsFromFlexibleArray(JsonElement arrayElement, HashSet<int> championIds)
+        {
+            if (arrayElement.ValueKind != JsonValueKind.Array)
+                return;
+
+            foreach (JsonElement item in arrayElement.EnumerateArray())
+            {
+                if (TryGetInt(item, out int id) && id > 0)
+                {
+                    championIds.Add(id);
+                    continue;
+                }
+
+                if (item.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                foreach (string propertyName in new[] { "championId", "id", "champion" })
+                {
+                    if (TryGetPropertyInt(item, propertyName, out int objectId) && objectId > 0)
+                    {
+                        championIds.Add(objectId);
+                        break;
+                    }
+                }
+            }
+        }
+
         private static void ParseAvailableSpellIds(JsonElement root, RemotePickState state)
         {
             var spellIds = new HashSet<int>();
@@ -958,6 +1053,104 @@ namespace RiotAutoLogin.Services
                 if (TryGetInt(idElement, out int championId) && championId > 0)
                     championIds.Add(championId);
             }
+        }
+
+        private static void TryLoadQueueFromGameflowOrLobby(RemotePickState state)
+        {
+            TryLoadQueueFromEndpoint("lol-gameflow/v1/session", state);
+            if (state.QueueId <= 0)
+                TryLoadQueueFromEndpoint("lol-lobby/v2/lobby", state);
+            UpdateModeLabels(state);
+        }
+
+        private static void TryLoadQueueFromEndpoint(string endpoint, RemotePickState state)
+        {
+            string[] result = LCUService.ClientRequest("GET", endpoint);
+            if (result[0] != "200")
+                return;
+
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(result[1]);
+                JsonElement root = doc.RootElement;
+
+                if (TryGetPropertyInt(root, "queueId", out int queueId) && queueId > 0)
+                    state.QueueId = queueId;
+                if (TryGetPropertyInt(root, "mapId", out int mapId) && mapId > 0)
+                    state.MapId = mapId;
+
+                if (root.TryGetProperty("gameData", out JsonElement gameData) && gameData.ValueKind == JsonValueKind.Object)
+                {
+                    if (TryGetPropertyInt(gameData, "queueId", out int gdQueueId) && gdQueueId > 0) state.QueueId = gdQueueId;
+                    if (TryGetPropertyInt(gameData, "mapId", out int gdMapId) && gdMapId > 0) state.MapId = gdMapId;
+                    if (gameData.TryGetProperty("queue", out JsonElement queue)) ParseQueueObject(queue, state);
+                }
+
+                if (root.TryGetProperty("gameConfig", out JsonElement gameConfig) && gameConfig.ValueKind == JsonValueKind.Object)
+                {
+                    if (TryGetPropertyInt(gameConfig, "queueId", out int gcQueueId) && gcQueueId > 0) state.QueueId = gcQueueId;
+                    if (TryGetPropertyInt(gameConfig, "mapId", out int gcMapId) && gcMapId > 0) state.MapId = gcMapId;
+                }
+
+                if (root.TryGetProperty("queue", out JsonElement queueRoot))
+                    ParseQueueObject(queueRoot, state);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not parse queue info from {endpoint}: {ex.Message}");
+            }
+        }
+
+        private static void ParseQueueObject(JsonElement queue, RemotePickState state)
+        {
+            if (queue.ValueKind != JsonValueKind.Object)
+                return;
+            if (TryGetPropertyInt(queue, "id", out int queueId) && queueId > 0) state.QueueId = queueId;
+            if (TryGetPropertyInt(queue, "queueId", out int directQueueId) && directQueueId > 0) state.QueueId = directQueueId;
+        }
+
+        private static void UpdateModeLabels(RemotePickState state)
+        {
+            if (state.QueueId > 0 && IsKnownRandomChampionQueue(state.QueueId))
+                state.IsRandomChampionMode = true;
+
+            state.QueueName = GetQueueName(state.QueueId, state.IsRandomChampionMode);
+            if (state.IsRandomChampionMode)
+                state.ChampSelectMode = "Random / ARAM";
+            else if (state.QueueId == 400 || state.QueueId == 420 || state.QueueId == 440)
+                state.ChampSelectMode = "Draft";
+            else
+                state.ChampSelectMode = string.IsNullOrWhiteSpace(state.QueueName) ? string.Empty : state.QueueName;
+        }
+
+        private static bool IsKnownRandomChampionQueue(int queueId)
+        {
+            return queueId == 450 || queueId == 720 || queueId == 900 || queueId == 1020 || queueId == 1300 || queueId == 1400 || queueId == 1700 || queueId == 1710 || queueId == 1900 || queueId == 3210 || queueId == 3270;
+        }
+
+        private static string GetQueueName(int queueId, bool randomMode)
+        {
+            return queueId switch
+            {
+                400 => "Normal Draft",
+                420 => "Ranked Solo/Duo",
+                430 => "Blind Pick",
+                440 => "Ranked Flex",
+                450 => "ARAM",
+                700 => "Clash",
+                720 => "ARAM Clash",
+                900 => "ARURF",
+                1020 => "One for All",
+                1300 => "Nexus Blitz",
+                1400 => "Ultimate Spellbook",
+                1700 => "Arena",
+                1710 => "Arena",
+                1900 => "URF",
+                3210 => "ARAM / Random",
+                3270 => "ARAM / Random",
+                0 => randomMode ? "Random Champion Mode" : string.Empty,
+                _ => randomMode ? $"Random Mode ({queueId})" : $"Queue {queueId}"
+            };
         }
 
         private static string GetGameflowPhaseLabel(string phase) => phase switch
