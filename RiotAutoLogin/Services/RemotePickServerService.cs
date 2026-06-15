@@ -108,7 +108,7 @@ namespace RiotAutoLogin.Services
         private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
         {
             await using NetworkStream stream = client.GetStream();
-            using StreamReader reader = new(stream, Encoding.UTF8, leaveOpen: true);
+            using StreamReader reader = new(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
 
             try
             {
@@ -146,6 +146,8 @@ namespace RiotAutoLogin.Services
                     await WriteHtmlResponseAsync(stream, RemotePickPageHtml.Get(), cancellationToken);
                 else if (method == "GET" && path.StartsWith("/api/timer", StringComparison.OrdinalIgnoreCase))
                     await WriteJsonResponseAsync(stream, 200, "OK", await GetTimerStateAsync(), cancellationToken);
+                else if (method == "GET" && path.StartsWith("/api/rune-debug", StringComparison.OrdinalIgnoreCase))
+                    await WriteJsonResponseAsync(stream, 200, "OK", await GetRuneDebugAsync(), cancellationToken);
                 else if (method == "GET" && path.StartsWith("/api/state", StringComparison.OrdinalIgnoreCase))
                     await WriteJsonResponseAsync(stream, 200, "OK", await GetStateAsync(), cancellationToken);
                 else if (method == "POST" && path.StartsWith("/api/pick", StringComparison.OrdinalIgnoreCase))
@@ -168,14 +170,8 @@ namespace RiotAutoLogin.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"Remote Pick request error: {ex.Message}");
-                try
-                {
-                    await WriteTextResponseAsync(stream, 500, "Internal Server Error", "Internal server error", cancellationToken);
-                }
-                catch
-                {
-                    // Ignore response failures caused by disconnected clients.
-                }
+                try { await WriteTextResponseAsync(stream, 500, "Internal Server Error", "Internal server error", cancellationToken); }
+                catch { }
             }
             finally
             {
@@ -234,14 +230,12 @@ namespace RiotAutoLogin.Services
 
             state.Phase = await LCUService.GetCurrentGamePhaseAsync();
             state.IsInChampSelect = state.Phase == "ChampSelect";
-            state.CanLeave = state.Phase is "Lobby" or "Matchmaking" or "ReadyCheck" or "ChampSelect";
+            state.CanLeave = state.Phase == "Lobby" || state.Phase == "Matchmaking" || state.Phase == "ReadyCheck" || state.Phase == "ChampSelect";
 
             if (!state.IsInChampSelect)
             {
                 state.PhaseLabel = GetGameflowPhaseLabel(state.Phase);
-                state.Message = state.Phase == "None"
-                    ? "Waiting for League Client state..."
-                    : $"Current phase: {state.Phase}. Waiting for champion select.";
+                state.Message = state.Phase == "None" ? "Waiting for League Client state..." : $"Current phase: {state.Phase}. Waiting for champion select.";
                 return state;
             }
 
@@ -264,14 +258,59 @@ namespace RiotAutoLogin.Services
             state.BannedChampionIds = bannedChampionIds.OrderBy(id => id).ToList();
             state.PhaseLabel = GetChampSelectPhaseLabel(state, bannedChampionIds);
             state.Message = state.IsMyTurn
-                ? state.ActionType == "pick"
-                    ? "It is your pick. Lock in or hover a champion."
-                    : state.ActionType == "ban"
-                        ? "It is your ban. Choose a champion to ban."
-                        : $"It is your {state.ActionType} turn."
+                ? state.ActionType == "pick" ? "It is your pick. Lock in or hover a champion."
+                    : state.ActionType == "ban" ? "It is your ban. Choose a champion to ban."
+                    : $"It is your {state.ActionType} turn."
                 : "You can hover an intended pick while waiting for your turn.";
 
             return state;
+        }
+
+        public async Task<object> GetRuneDebugAsync()
+        {
+            RemotePickState state = await GetTimerStateAsync();
+            int championId = state.SelectedChampionId > 0 ? state.SelectedChampionId : state.PickIntentChampionId;
+            string position = NormalizePosition(state.AssignedPosition);
+            int mapId = state.MapId > 0 ? state.MapId : 11;
+            var endpointResults = new List<object>();
+
+            void Probe(string endpoint)
+            {
+                string[] result = LCUService.ClientRequest("GET", endpoint);
+                string body = result.Length > 1 ? result[1] : string.Empty;
+                endpointResults.Add(new { endpoint, status = result[0], preview = PreviewResponse(body), parsedCount = result[0] == "200" ? ParseRecommendedRunePages(body).Count : 0 });
+            }
+
+            if (LCUService.CheckIfLeagueClientIsOpen())
+            {
+                Probe("lol-champ-select/v1/session");
+                Probe("lol-perks/v1/currentpage");
+                Probe("lol-perks/v1/pages");
+                Probe("lol-perks/v1/styles");
+                Probe("lol-perks/v1/inventory");
+                Probe("lol-perks/v1/recommended-pages");
+
+                if (championId > 0)
+                {
+                    foreach (string endpoint in GetRecommendedRuneEndpoints(championId, position, mapId))
+                        Probe(endpoint);
+                }
+            }
+
+            return new
+            {
+                phase = state.Phase,
+                champSelectPhase = state.ChampSelectPhase,
+                championId,
+                selectedChampionId = state.SelectedChampionId,
+                pickIntentChampionId = state.PickIntentChampionId,
+                assignedPosition = state.AssignedPosition,
+                normalizedPosition = position,
+                mapId = state.MapId,
+                effectiveMapId = mapId,
+                queueId = state.QueueId,
+                endpoints = endpointResults
+            };
         }
 
         public async Task<RemotePickActionResult> PickChampionAsync(string body)
@@ -341,16 +380,13 @@ namespace RiotAutoLogin.Services
             try { request = JsonSerializer.Deserialize<RemoteSpellRequest>(body, _jsonOptions); }
             catch { return Failure("Invalid spell request."); }
 
-            if (request == null || request.SpellId <= 0 || request.Slot is not (1 or 2))
+            if (request == null || request.SpellId <= 0 || (request.Slot != 1 && request.Slot != 2))
                 return Failure("Invalid summoner spell.");
             if (!LCUService.CheckIfLeagueClientIsOpen())
                 return Failure("League Client is not running.");
 
             RemotePickState state = await GetTimerStateAsync();
-            if (state.AvailableSpellIds.Count > 0 &&
-                !state.AvailableSpellIds.Contains(request.SpellId) &&
-                request.SpellId != state.Spell1Id &&
-                request.SpellId != state.Spell2Id)
+            if (state.AvailableSpellIds.Count > 0 && !state.AvailableSpellIds.Contains(request.SpellId) && request.SpellId != state.Spell1Id && request.SpellId != state.Spell2Id)
                 return Failure("This summoner spell is not available in the current queue.");
 
             bool success = LCUService.SelectSummonerSpell(request.SpellId, request.Slot);
@@ -370,11 +406,7 @@ namespace RiotAutoLogin.Services
 
             string[] result = LCUService.ClientRequest("POST", $"lol-perks/v1/pages/{request.PageId}/current");
             bool success = result[0].StartsWith("2");
-            return Task.FromResult(new RemotePickActionResult
-            {
-                Success = success,
-                Message = success ? "Rune page selected." : $"League Client rejected rune page change. Status: {result[0]}"
-            });
+            return Task.FromResult(new RemotePickActionResult { Success = success, Message = success ? "Rune page selected." : $"League Client rejected rune page change. Status: {result[0]}" });
         }
 
         public async Task<RemotePickActionResult> SelectRecommendedRunePageAsync(string body)
@@ -411,11 +443,7 @@ namespace RiotAutoLogin.Services
                 result = LCUService.ClientRequest("POST", "lol-perks/v1/pages", payloadJson);
 
             bool success = result[0].StartsWith("2");
-            return new RemotePickActionResult
-            {
-                Success = success,
-                Message = success ? "Recommended rune page applied." : $"League Client rejected recommended runes. Status: {result[0]}"
-            };
+            return new RemotePickActionResult { Success = success, Message = success ? "Recommended rune page applied." : $"League Client rejected recommended runes. Status: {result[0]}" };
         }
 
         public async Task<RemotePickActionResult> LeaveLobbyAsync()
@@ -525,18 +553,17 @@ namespace RiotAutoLogin.Services
 
             var candidates = new List<RemoteRecommendedRunePageDto>();
             string position = NormalizePosition(state.AssignedPosition);
+            int mapId = state.MapId > 0 ? state.MapId : 11;
 
             string[] sessionResult = LCUService.ClientRequest("GET", "lol-champ-select/v1/session");
             if (sessionResult[0] == "200")
                 candidates.AddRange(ParseRecommendedRunePages(sessionResult[1]));
 
-            foreach (string endpoint in GetRecommendedRuneEndpoints(championId, position, state.MapId))
+            foreach (string endpoint in GetRecommendedRuneEndpoints(championId, position, mapId))
             {
                 string[] result = LCUService.ClientRequest("GET", endpoint);
-                if (result[0] != "200")
-                    continue;
-
-                candidates.AddRange(ParseRecommendedRunePages(result[1]));
+                if (result[0] == "200")
+                    candidates.AddRange(ParseRecommendedRunePages(result[1]));
             }
 
             state.RecommendedRunePages = candidates
@@ -544,11 +571,7 @@ namespace RiotAutoLogin.Services
                 .GroupBy(page => string.Join(',', page.SelectedPerkIds))
                 .Select(group => group.First())
                 .Take(3)
-                .Select((page, index) =>
-                {
-                    page.Index = index;
-                    return page;
-                })
+                .Select((page, index) => { page.Index = index; return page; })
                 .ToList();
         }
 
@@ -562,6 +585,8 @@ namespace RiotAutoLogin.Services
             yield return $"lol-perks/v1/recommended-pages/champion/{championId}/position/{safePosition}";
             yield return $"lol-perks/v1/recommended-pages/champion/{championId}/map/{safeMapId}";
             yield return $"lol-perks/v1/recommended-pages/champion/{championId}";
+            yield return $"lol-perks/v1/recommended-pages/{championId}/{safePosition}/{safeMapId}";
+            yield return $"lol-perks/v1/recommended-pages/{championId}";
             yield return "lol-perks/v1/recommended-pages";
         }
 
@@ -591,7 +616,7 @@ namespace RiotAutoLogin.Services
                 TryAddRecommendedPage(element, pages);
                 foreach (JsonProperty property in element.EnumerateObject())
                 {
-                    if (property.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+                    if (property.Value.ValueKind == JsonValueKind.Object || property.Value.ValueKind == JsonValueKind.Array)
                         CollectRecommendedPages(property.Value, pages);
                 }
             }
@@ -612,10 +637,10 @@ namespace RiotAutoLogin.Services
 
             var dto = new RemoteRecommendedRunePageDto
             {
-                Name = GetStringProperty(source, "name", "title", "pageName", "displayName") ?? GetStringProperty(pageElement, "name", "title", "pageName", "displayName") ?? "Recommended",
-                Subtitle = GetStringProperty(pageElement, "subtitle", "description", "position") ?? string.Empty,
-                PrimaryStyleId = GetIntProperty(source, "primaryStyleId", "primaryStyle", "primaryPath", "primaryTreeId"),
-                SubStyleId = GetIntProperty(source, "subStyleId", "secondaryStyleId", "secondaryStyle", "subStyle", "secondaryPath", "secondaryTreeId"),
+                Name = GetStringProperty(source, "name", "title", "pageName", "displayName", "recommendationId") ?? GetStringProperty(pageElement, "name", "title", "pageName", "displayName", "recommendationId") ?? "Recommended",
+                Subtitle = GetStringProperty(source, "position") ?? GetStringProperty(pageElement, "subtitle", "description", "position") ?? string.Empty,
+                PrimaryStyleId = GetIntProperty(source, "primaryStyleId", "primaryStyle", "primaryPath", "primaryTreeId", "primaryPerkStyleId"),
+                SubStyleId = GetIntProperty(source, "subStyleId", "secondaryStyleId", "secondaryStyle", "subStyle", "secondaryPath", "secondaryTreeId", "secondaryPerkStyleId"),
                 SelectedPerkIds = GetPerkIds(source)
             };
 
@@ -625,7 +650,7 @@ namespace RiotAutoLogin.Services
 
         private static List<int> GetPerkIds(JsonElement pageElement)
         {
-            foreach (string arrayName in new[] { "selectedPerkIds", "selectedPerks", "perks", "perkIds", "runes", "runeIds" })
+            foreach (string arrayName in new[] { "selectedPerkIds", "selectedPerks", "perkIds", "perks", "runes", "runeIds" })
             {
                 if (pageElement.TryGetProperty(arrayName, out JsonElement arrayElement) && arrayElement.ValueKind == JsonValueKind.Array)
                     return ReadIntArray(arrayElement);
@@ -646,7 +671,7 @@ namespace RiotAutoLogin.Services
                     {
                         ids.AddRange(ReadIntArray(property.Value));
                     }
-                    else if (property.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+                    else if (property.Value.ValueKind == JsonValueKind.Object || property.Value.ValueKind == JsonValueKind.Array)
                     {
                         CollectPerkIdsFromNamedArrays(property.Value, ids);
                     }
@@ -736,13 +761,7 @@ namespace RiotAutoLogin.Services
                     catch (Exception ex) { Debug.WriteLine($"Could not get summoner spell image URL for {name}: {ex.Message}"); }
                 }
 
-                remoteSpells.Add(new RemoteSummonerSpellDto
-                {
-                    Id = spell.Id,
-                    Name = name,
-                    Description = spell.Description ?? string.Empty,
-                    ImageUrl = imageUrl
-                });
+                remoteSpells.Add(new RemoteSummonerSpellDto { Id = spell.Id, Name = name, Description = spell.Description ?? string.Empty, ImageUrl = imageUrl });
             }
 
             _remoteSpellCache = remoteSpells;
@@ -841,27 +860,54 @@ namespace RiotAutoLogin.Services
             if (!root.TryGetProperty("actions", out JsonElement actionsElement) || actionsElement.ValueKind != JsonValueKind.Array)
                 return;
 
+            int groupIndex = 0;
             foreach (JsonElement actionGroup in actionsElement.EnumerateArray())
             {
                 if (actionGroup.ValueKind != JsonValueKind.Array)
+                {
+                    groupIndex++;
                     continue;
+                }
+
+                var activeIds = new List<string>();
+                string activeType = string.Empty;
+
                 foreach (JsonElement action in actionGroup.EnumerateArray())
                 {
-                    if (!TryGetPropertyInt(action, "actorCellId", out int actorCellId) || actorCellId != localPlayerCellId)
-                        continue;
-
                     string actionType = GetStringProperty(action, "type")?.ToLowerInvariant() ?? string.Empty;
                     string actionId = action.TryGetProperty("id", out JsonElement idElement) ? GetJsonValueAsString(idElement) : string.Empty;
+                    bool inProgress = GetBoolProperty(action, "isInProgress");
+                    if (inProgress)
+                    {
+                        activeIds.Add(actionId);
+                        if (string.IsNullOrWhiteSpace(activeType))
+                            activeType = actionType;
+                    }
+
+                    if (!TryGetPropertyInt(action, "actorCellId", out int actorCellId) || actorCellId != localPlayerCellId)
+                        continue;
                     if (actionType == "pick" && string.IsNullOrWhiteSpace(state.PickActionId))
                         state.PickActionId = actionId;
-                    if (!GetBoolProperty(action, "isInProgress"))
+                    if (!inProgress)
                         continue;
 
                     state.IsMyTurn = true;
                     state.ActionId = actionId;
                     state.ActionType = actionType;
+                    state.ActionGroupIndex = groupIndex;
                 }
+
+                if (activeIds.Count > 0 && string.IsNullOrWhiteSpace(state.TimerActionKey))
+                {
+                    state.ActionGroupIndex = groupIndex;
+                    state.TimerActionKey = $"group:{groupIndex}|type:{activeType}|ids:{string.Join(',', activeIds)}";
+                }
+
+                groupIndex++;
             }
+
+            if (string.IsNullOrWhiteSpace(state.TimerActionKey))
+                state.TimerActionKey = $"phase:{state.ChampSelectPhase}|action:{state.ActionType}|id:{state.ActionId}";
         }
 
         private static void CollectAvailableSpellIds(JsonElement element, HashSet<int> spellIds)
@@ -879,7 +925,7 @@ namespace RiotAutoLogin.Services
                                 spellIds.Add(spellId);
                         }
                     }
-                    else if (property.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+                    else if (property.Value.ValueKind == JsonValueKind.Object || property.Value.ValueKind == JsonValueKind.Array)
                     {
                         CollectAvailableSpellIds(property.Value, spellIds);
                     }
@@ -921,7 +967,9 @@ namespace RiotAutoLogin.Services
             "ReadyCheck" => "Match Found",
             "ChampSelect" => "Champ Select",
             "InProgress" => "In Game",
-            "WaitingForStats" or "PreEndOfGame" or "EndOfGame" => "Post Game",
+            "WaitingForStats" => "Post Game",
+            "PreEndOfGame" => "Post Game",
+            "EndOfGame" => "Post Game",
             _ => "Waiting"
         };
 
@@ -943,9 +991,12 @@ namespace RiotAutoLogin.Services
             string normalized = position.Trim().ToUpperInvariant();
             return normalized switch
             {
-                "UTILITY" or "SUPPORT" => "UTILITY",
-                "BOTTOM" or "ADC" => "BOTTOM",
-                "MIDDLE" or "MID" => "MIDDLE",
+                "UTILITY" => "UTILITY",
+                "SUPPORT" => "UTILITY",
+                "BOTTOM" => "BOTTOM",
+                "ADC" => "BOTTOM",
+                "MIDDLE" => "MIDDLE",
+                "MID" => "MIDDLE",
                 "JUNGLE" => "JUNGLE",
                 "TOP" => "TOP",
                 _ => normalized
@@ -953,7 +1004,7 @@ namespace RiotAutoLogin.Services
         }
 
         private static bool GetBoolProperty(JsonElement element, string propertyName)
-            => element.TryGetProperty(propertyName, out JsonElement valueElement) && valueElement.ValueKind is JsonValueKind.True or JsonValueKind.False && valueElement.GetBoolean();
+            => element.TryGetProperty(propertyName, out JsonElement valueElement) && (valueElement.ValueKind == JsonValueKind.True || valueElement.ValueKind == JsonValueKind.False) && valueElement.GetBoolean();
 
         private static string? GetStringProperty(JsonElement element, params string[] propertyNames)
         {
@@ -1036,16 +1087,11 @@ namespace RiotAutoLogin.Services
                 RemotePickRequest? request = JsonSerializer.Deserialize<RemotePickRequest>(body, _jsonOptions);
                 return request == null || request.ChampionId <= 0 ? null : request;
             }
-            catch
-            {
-                return null;
-            }
+            catch { return null; }
         }
 
         private async Task WriteActionResponseAsync(NetworkStream stream, RemotePickActionResult result, CancellationToken cancellationToken)
-        {
-            await WriteJsonResponseAsync(stream, result.Success ? 200 : 400, result.Success ? "OK" : "Bad Request", result, cancellationToken);
-        }
+            => await WriteJsonResponseAsync(stream, result.Success ? 200 : 400, result.Success ? "OK" : "Bad Request", result, cancellationToken);
 
         private async Task WriteJsonResponseAsync(NetworkStream stream, int statusCode, string statusText, object payload, CancellationToken cancellationToken)
         {
@@ -1054,14 +1100,10 @@ namespace RiotAutoLogin.Services
         }
 
         private async Task WriteHtmlResponseAsync(NetworkStream stream, string html, CancellationToken cancellationToken)
-        {
-            await WriteResponseAsync(stream, 200, "OK", "text/html; charset=utf-8", html, cancellationToken);
-        }
+            => await WriteResponseAsync(stream, 200, "OK", "text/html; charset=utf-8", html, cancellationToken);
 
         private async Task WriteTextResponseAsync(NetworkStream stream, int statusCode, string statusText, string text, CancellationToken cancellationToken)
-        {
-            await WriteResponseAsync(stream, statusCode, statusText, "text/plain; charset=utf-8", text, cancellationToken);
-        }
+            => await WriteResponseAsync(stream, statusCode, statusText, "text/plain; charset=utf-8", text, cancellationToken);
 
         private static async Task WriteResponseAsync(NetworkStream stream, int statusCode, string statusText, string contentType, string content, CancellationToken cancellationToken)
         {
@@ -1077,6 +1119,15 @@ namespace RiotAutoLogin.Services
             byte[] headerBytes = Encoding.ASCII.GetBytes(headers);
             await stream.WriteAsync(headerBytes, cancellationToken);
             await stream.WriteAsync(bodyBytes, cancellationToken);
+        }
+
+        private static string PreviewResponse(string body)
+        {
+            if (string.IsNullOrWhiteSpace(body))
+                return string.Empty;
+
+            string compact = body.Replace("\r", " ").Replace("\n", " ").Trim();
+            return compact.Length <= 2200 ? compact : compact[..2200] + "...";
         }
 
         private static IReadOnlyList<string> GetLocalUrls(int port)
@@ -1116,7 +1167,7 @@ namespace RiotAutoLogin.Services
         private static bool IsPrivateIPv4Address(IPAddress address)
         {
             byte[] bytes = address.GetAddressBytes();
-            return bytes[0] == 10 || bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31 || bytes[0] == 192 && bytes[1] == 168;
+            return bytes[0] == 10 || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) || (bytes[0] == 192 && bytes[1] == 168);
         }
 
         public void Dispose()
