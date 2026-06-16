@@ -56,7 +56,7 @@ namespace RiotAutoLogin.Models
         public bool IsSelected { get; set; }
         public bool IsIntent { get; set; }
         public bool IsAvailableInCurrentMode { get; set; } = true;
-        public bool IsDisabled => IsBanned || IsPicked || !IsAvailableInCurrentMode;
+        public bool IsDisabled => IsBanned || IsPicked || !IsAvailableInCurrentMode || !RiotAutoLogin.Services.RemoteChampionAvailabilityService.CanUseChampion(Id);
     }
 
     public class RemoteSummonerSpellDto
