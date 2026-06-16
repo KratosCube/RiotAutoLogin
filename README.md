@@ -36,5 +36,5 @@ A modern, feature-rich application for automating Riot Client logins with secure
 - **Local Storage:** All data stays on your machine
 - **Secure Memory:** Protected credential handling
 
-### 🎯 **Champion Select Automation** 
+### 🎯 **Champion Select Automation**
 - **Auto-Pick:** Automatically select your preferred champions
