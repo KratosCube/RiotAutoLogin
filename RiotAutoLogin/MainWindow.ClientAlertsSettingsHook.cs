@@ -79,15 +79,18 @@ namespace RiotAutoLogin
                 UpdateStaticClientAlertSettingsUi();
             };
 
-            repeatCountTextBox?.LostFocus += (_, _) => SaveStaticGameStartAlertRepeatCount(repeatCountTextBox);
-            repeatCountTextBox?.KeyDown += (_, e) =>
+            if (repeatCountTextBox != null)
             {
-                if (e.Key != Key.Enter)
-                    return;
+                repeatCountTextBox.LostFocus += (_, _) => SaveStaticGameStartAlertRepeatCount(repeatCountTextBox);
+                repeatCountTextBox.KeyDown += (_, e) =>
+                {
+                    if (e.Key != Key.Enter)
+                        return;
 
-                SaveStaticGameStartAlertRepeatCount(repeatCountTextBox);
-                e.Handled = true;
-            };
+                    SaveStaticGameStartAlertRepeatCount(repeatCountTextBox);
+                    e.Handled = true;
+                };
+            }
 
             flashWarningToggle.Checked += (_, _) =>
             {
