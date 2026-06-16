@@ -1,0 +1,41 @@
+name: Patch Remote Pick mobile refresh once
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Slow full state refresh
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('RiotAutoLogin/Services/RemotePickPageHtml.cs')
+          text = path.read_text(encoding='utf-8-sig')
+          text = text.replace('setInterval(loadState,3000);', 'setInterval(loadState,12000);')
+          path.write_text(text, encoding='utf-8')
+          Path('.github/workflows/patch-mobile-refresh-once.yml').unlink(missing_ok=True)
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git status --short
+          if git diff --quiet && git diff --cached --quiet; then echo "No changes to commit."; exit 0; fi
+          git add RiotAutoLogin/Services/RemotePickPageHtml.cs .github/workflows/patch-mobile-refresh-once.yml
+          git commit -m "Reduce Remote Pick full state refresh frequency"
+          git pull --rebase origin master
+          git push origin HEAD:master
