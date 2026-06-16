@@ -28,7 +28,7 @@
                     <TextBlock Text="Enable game start alert"
                                FontSize="14"
                                Foreground="{StaticResource TextColorBrush}"/>
-                    <TextBlock Text="Plays a repeated warning sound and shows a top-most dialog when the game starts."
+                    <TextBlock Text="Plays a repeated warning sound when in-game timer reaches about 0:01."
                                Margin="0,4,10,0"
                                FontSize="12"
                                TextWrapping="Wrap"
@@ -42,6 +42,33 @@
                               Width="100"
                               Content="OFF"
                               Style="{StaticResource ModernToggleButton}"/>
+            </Grid>
+
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Game start sound repeats"
+                               FontSize="14"
+                               Foreground="{StaticResource TextColorBrush}"/>
+                    <TextBlock Text="How many times the warning sound should repeat when the game starts. Allowed range: 1-30."
+                               Margin="0,4,10,0"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextColorBrush}"
+                               Opacity="0.68"/>
+                </StackPanel>
+
+                <TextBox x:Name="txtGameStartAlertRepeatCount"
+                         x:FieldModifier="public"
+                         Grid.Column="1"
+                         Width="100"
+                         Text="14"
+                         HorizontalContentAlignment="Center"
+                         Style="{StaticResource ModernTextBox}"/>
             </Grid>
 
             <Grid Margin="0,0,0,12">
