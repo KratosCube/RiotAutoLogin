@@ -63,16 +63,8 @@ namespace RiotAutoLogin.Services
                 using JsonDocument doc = JsonDocument.Parse(result[1]);
                 JsonElement root = doc.RootElement;
 
-                if (root.TryGetProperty("timer", out JsonElement timer) && timer.ValueKind == JsonValueKind.Object)
-                {
-                    string phase = GetStringProperty(timer, "phase") ?? string.Empty;
-                    if (phase.Contains("BAN", StringComparison.OrdinalIgnoreCase))
-                    {
-                        _isBanPhase = true;
-                        return;
-                    }
-                }
-
+                // The LCU timer phase is often BAN_PICK for both ban and pick steps.
+                // Treat it as the real ban phase only when an active action is a ban.
                 if (!root.TryGetProperty("actions", out JsonElement actions) || actions.ValueKind != JsonValueKind.Array)
                     return;
 
