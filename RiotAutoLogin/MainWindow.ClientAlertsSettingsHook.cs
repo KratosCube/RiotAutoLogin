@@ -9,20 +9,29 @@ namespace RiotAutoLogin
         {
             base.OnInitialized(e);
 
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                if (SettingsTab == null)
-                    return;
+            Dispatcher.BeginInvoke(new Action(StartClientAlertsSettingsRetryTimer), DispatcherPriority.Loaded);
+        }
 
-                SettingsTab.Selected += (_, _) =>
-                {
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        EnsureClientAlertSettingsCard();
-                        UpdateClientAlertSettingsUi();
-                    }), DispatcherPriority.Loaded);
-                };
-            }), DispatcherPriority.Loaded);
+        private void StartClientAlertsSettingsRetryTimer()
+        {
+            int attempts = 0;
+            var timer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(500)
+            };
+
+            timer.Tick += (_, _) =>
+            {
+                attempts++;
+
+                EnsureClientAlertSettingsCard();
+                UpdateClientAlertSettingsUi();
+
+                if (attempts >= 30)
+                    timer.Stop();
+            };
+
+            timer.Start();
         }
     }
 }
