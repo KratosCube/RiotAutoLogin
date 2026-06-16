@@ -293,7 +293,10 @@ namespace RiotAutoLogin
                 return;
 
             bool gameStarted = phase is "GameStart" or "InProgress";
-            if (gameStarted && !_gameStartAlertShownForCurrentGame)
+            bool wasGameStarted = _lastClientAlertPhase is "GameStart" or "InProgress";
+            bool hadKnownPreviousPhase = !string.IsNullOrWhiteSpace(_lastClientAlertPhase);
+
+            if (gameStarted && hadKnownPreviousPhase && !wasGameStarted && !_gameStartAlertShownForCurrentGame)
             {
                 _gameStartAlertShownForCurrentGame = true;
                 await ShowGameStartAlertAsync();
