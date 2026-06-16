@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
@@ -215,6 +216,7 @@ namespace RiotAutoLogin.Services
 
             if (state.IsInChampSelect)
                 await AddChampionSpellAndRuneListsAsync(state, new HashSet<int>(state.BannedChampionIds), pickedChampionIds);
+
             return state;
         }
 
@@ -262,7 +264,9 @@ namespace RiotAutoLogin.Services
                 }
 
                 state.PhaseLabel = GetGameflowPhaseLabel(state.Phase);
-                state.Message = state.Phase == "None" ? "Waiting for League Client state..." : $"Current phase: {state.Phase}{queueSuffix}. Waiting for champion select.";
+                state.Message = state.Phase == "None"
+                    ? "Waiting for League Client state..."
+                    : $"Current phase: {state.Phase}{queueSuffix}. Waiting for champion select.";
                 return state;
             }
 
@@ -453,41 +457,18 @@ namespace RiotAutoLogin.Services
             return Task.FromResult(new RemotePickActionResult { Success = success, Message = success ? "Rune page selected." : $"League Client rejected rune page change. Status: {result[0]}" });
         }
 
-        public async Task<RemotePickActionResult> SelectRecommendedRunePageAsync(string body)
+        public Task<RemotePickActionResult> SelectRecommendedRunePageAsync(string body)
         {
-            RemoteRecommendedRunePageRequest? request;
-            try { request = JsonSerializer.Deserialize<RemoteRecommendedRunePageRequest>(body, _jsonOptions); }
-            catch { return Failure("Invalid recommended rune page request."); }
-
-            if (request == null || request.Index < 0)
-                return Failure("Invalid recommended rune page.");
             if (!LCUService.CheckIfLeagueClientIsOpen())
-                return Failure("League Client is not running.");
+                return Task.FromResult(Failure("League Client is not running."));
 
-            RemotePickState state = await GetStateAsync();
-            RemoteRecommendedRunePageDto? recommendedPage = state.RecommendedRunePages.FirstOrDefault(page => page.Index == request.Index);
-            if (recommendedPage == null)
-                return Failure("Recommended rune page was not found for this champion.");
-            if (!recommendedPage.CanApply)
-                return Failure("This recommended rune page does not include enough rune data to apply it.");
-
-            string payloadJson = JsonSerializer.Serialize(new
-            {
-                name = string.IsNullOrWhiteSpace(recommendedPage.Name) ? "Recommended Runes" : recommendedPage.Name,
-                primaryStyleId = recommendedPage.PrimaryStyleId,
-                subStyleId = recommendedPage.SubStyleId,
-                selectedPerkIds = recommendedPage.SelectedPerkIds,
-                current = true
-            }, _jsonOptions);
-
-            string[] result = LCUService.ClientRequest("PUT", "lol-perks/v1/currentpage", payloadJson);
-            if (!result[0].StartsWith("2"))
-                result = LCUService.ClientRequest("PATCH", "lol-perks/v1/currentpage", payloadJson);
-            if (!result[0].StartsWith("2"))
-                result = LCUService.ClientRequest("POST", "lol-perks/v1/pages", payloadJson);
-
+            string[] result = LCUService.ClientRequest("POST", "lol-perks/v1/rune-recommender-auto-select");
             bool success = result[0].StartsWith("2");
-            return new RemotePickActionResult { Success = success, Message = success ? "Recommended rune page applied." : $"League Client rejected recommended runes. Status: {result[0]}" };
+            return Task.FromResult(new RemotePickActionResult
+            {
+                Success = success,
+                Message = success ? "Riot recommended rune page applied." : $"League Client rejected Riot recommended runes. Status: {result[0]}"
+            });
         }
 
         public async Task<RemotePickActionResult> LeaveLobbyAsync()
@@ -717,13 +698,9 @@ namespace RiotAutoLogin.Services
                 foreach (JsonProperty property in element.EnumerateObject())
                 {
                     if ((property.Name.Contains("perk", StringComparison.OrdinalIgnoreCase) || property.Name.Contains("rune", StringComparison.OrdinalIgnoreCase)) && property.Value.ValueKind == JsonValueKind.Array)
-                    {
                         ids.AddRange(ReadIntArray(property.Value));
-                    }
                     else if (property.Value.ValueKind == JsonValueKind.Object || property.Value.ValueKind == JsonValueKind.Array)
-                    {
                         CollectPerkIdsFromNamedArrays(property.Value, ids);
-                    }
                 }
             }
             else if (element.ValueKind == JsonValueKind.Array)
@@ -1033,7 +1010,9 @@ namespace RiotAutoLogin.Services
             {
                 foreach (JsonProperty property in element.EnumerateObject())
                 {
-                    bool looksLikeSpellList = property.NameEquals("allowableSpellIds") || property.NameEquals("availableSpellIds") || property.NameEquals("allowedSpellIds");
+                    bool looksLikeSpellList = property.Name.Equals("allowableSpellIds", StringComparison.OrdinalIgnoreCase) ||
+                                             property.Name.Equals("availableSpellIds", StringComparison.OrdinalIgnoreCase) ||
+                                             property.Name.Equals("allowedSpellIds", StringComparison.OrdinalIgnoreCase);
                     if (looksLikeSpellList && property.Value.ValueKind == JsonValueKind.Array)
                     {
                         foreach (JsonElement idElement in property.Value.EnumerateArray())
@@ -1081,27 +1060,24 @@ namespace RiotAutoLogin.Services
             state.GameTimeSeconds = -1;
             state.GameStatus = state.IsGameClientRunning ? "Loading" : "Waiting";
 
+            if (TryReadLiveGameStats("https://127.0.0.1:2999/liveclientdata/gamestats", state))
+                return;
+
+            TryReadLiveGameStats("http://127.0.0.1:2999/liveclientdata/gamestats", state);
+        }
+
+        private static bool TryReadLiveGameStats(string url, RemotePickState state)
+        {
             try
             {
-#pragma warning disable SYSLIB0014
-                HttpWebRequest request = WebRequest.CreateHttp("http://127.0.0.1:2999/liveclientdata/gamestats");
-#pragma warning restore SYSLIB0014
-                request.Method = "GET";
-                request.Timeout = 250;
-                request.ReadWriteTimeout = 250;
-
-                using HttpWebResponse response = (HttpWebResponse)request.GetResponse();
-                if ((int)response.StatusCode < 200 || (int)response.StatusCode >= 300)
-                    return;
-
-                using Stream? responseStream = response.GetResponseStream();
-                if (responseStream == null)
-                    return;
-
-                using StreamReader reader = new(responseStream, Encoding.UTF8);
-                string json = reader.ReadToEnd();
+                using var handler = new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+                };
+                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(350) };
+                string json = client.GetStringAsync(url).Result;
                 if (string.IsNullOrWhiteSpace(json))
-                    return;
+                    return false;
 
                 using JsonDocument doc = JsonDocument.Parse(json);
                 state.IsGameClientRunning = true;
@@ -1109,10 +1085,12 @@ namespace RiotAutoLogin.Services
                 state.GameStatus = "InGame";
                 if (TryGetPropertyDouble(doc.RootElement, "gameTime", out double gameTime))
                     state.GameTimeSeconds = Math.Max(0, gameTime);
+                return true;
             }
             catch
             {
                 state.GameStatus = state.IsGameClientRunning ? "Loading" : "Waiting";
+                return false;
             }
         }
 
@@ -1120,7 +1098,7 @@ namespace RiotAutoLogin.Services
         {
             try
             {
-                return Process.GetProcessesByName("League of Legends").Any() || Process.GetProcessesByName("League of Legends.exe").Any();
+                return Process.GetProcessesByName("League of Legends").Any();
             }
             catch
             {
