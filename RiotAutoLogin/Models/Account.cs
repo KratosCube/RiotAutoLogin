@@ -1,5 +1,4 @@
-﻿using System;
-
+using System;
 
 namespace RiotAutoLogin.Models
 {
@@ -14,6 +13,8 @@ namespace RiotAutoLogin.Models
         public int LeaguePoints { get; set; }
         public int Wins { get; set; }
         public int Losses { get; set; }
+        public int Greyscreens { get; set; }
+        public string GreyscreensLastUpdatedUtc { get; set; } = string.Empty;
         public string AvatarPath { get; set; } = string.Empty;
     }
 
