@@ -15,7 +15,7 @@ namespace RiotAutoLogin.Models
         public bool IsTimerInfinite { get; set; }
         public bool IsInChampSelect { get; set; }
         public bool IsMyTurn { get; set; }
-        public bool CanPick => IsMyTurn && ActionType == "pick";
+        public bool CanPick => (IsMyTurn && ActionType == "pick") || (IsInChampSelect && IsRandomChampionMode);
         public bool CanBan => IsMyTurn && ActionType == "ban";
         public bool CanLeave { get; set; }
         public string ActionId { get; set; } = string.Empty;
