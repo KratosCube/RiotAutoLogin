@@ -1,0 +1,533 @@
+name: Patch greyscreens stat once
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Add greyscreens stat support
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8-sig')
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8')
+          def replace(path, old, new, count=1):
+              text = read(path)
+              if old not in text:
+                  raise SystemExit(f'Pattern not found in {path}: {old[:160]!r}')
+              write(path, text.replace(old, new, count))
+
+          # Account model: persist greyscreens per saved account.
+          replace(
+              'RiotAutoLogin/Models/Account.cs',
+              '        public int Losses { get; set; }\n        public string AvatarPath { get; set; } = string.Empty;',
+              '        public int Losses { get; set; }\n        public int Greyscreens { get; set; }\n        public string GreyscreensLastUpdatedUtc { get; set; } = string.Empty;\n        public string AvatarPath { get; set; } = string.Empty;'
+          )
+
+          # Account totals: include greyscreens.
+          replace(
+              'RiotAutoLogin/Services/AccountService.cs',
+              '        public static (int totalGames, int totalWins, int totalLosses, double winRate) CalculateStats(List<Account> accounts)\n        {\n            int totalGames = accounts.Sum(a => a.Wins + a.Losses);\n            int totalWins = accounts.Sum(a => a.Wins);\n            int totalLosses = accounts.Sum(a => a.Losses);\n            double winRate = totalGames > 0 ? (double)totalWins / totalGames * 100 : 0;\n\n            return (totalGames, totalWins, totalLosses, winRate);\n        }',
+              '        public static (int totalGames, int totalWins, int totalLosses, double winRate, int totalGreyscreens) CalculateStats(List<Account> accounts)\n        {\n            int totalGames = accounts.Sum(a => a.Wins + a.Losses);\n            int totalWins = accounts.Sum(a => a.Wins);\n            int totalLosses = accounts.Sum(a => a.Losses);\n            int totalGreyscreens = accounts.Sum(a => a.Greyscreens);\n            double winRate = totalGames > 0 ? (double)totalWins / totalGames * 100 : 0;\n\n            return (totalGames, totalWins, totalLosses, winRate, totalGreyscreens);\n        }'
+          )
+
+          # New LCU greyscreen/deaths service.
+          write('RiotAutoLogin/Services/LcuGreyscreenStatsService.cs', '''using System;
+using System.Diagnostics;
+using System.Linq;
+using System.Text.Json;
+using System.Threading.Tasks;
+
+namespace RiotAutoLogin.Services
+{
+    public sealed class LcuGreyscreenStatsResult
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string GameName { get; set; } = string.Empty;
+        public string TagLine { get; set; } = string.Empty;
+        public string Puuid { get; set; } = string.Empty;
+        public int Greyscreens { get; set; }
+        public string Source { get; set; } = string.Empty;
+    }
+
+    public static class LcuGreyscreenStatsService
+    {
+        public static async Task<LcuGreyscreenStatsResult> GetCurrentAccountGreyscreensAsync()
+        {
+            await Task.Yield();
+
+            if (!LCUService.CheckIfLeagueClientIsOpen())
+            {
+                return Error("League Client is not running or LCU is not available.");
+            }
+
+            var summoner = ReadCurrentSummoner();
+            if (!summoner.success)
+                return Error(summoner.message);
+
+            if (string.IsNullOrWhiteSpace(summoner.puuid))
+                return Error("LCU did not return a PUUID for the current summoner.");
+
+            if (TryReadCareerDeaths(summoner.puuid, out int careerDeaths, out string careerSource))
+            {
+                return Success(summoner.gameName, summoner.tagLine, summoner.puuid, careerDeaths, careerSource);
+            }
+
+            if (TryReadMatchHistoryDeaths(summoner.puuid, out int matchDeaths, out string matchSource))
+            {
+                return Success(summoner.gameName, summoner.tagLine, summoner.puuid, matchDeaths, matchSource);
+            }
+
+            return Error("Could not find deaths/greyscreens in LCU career stats or match history for the current account.", summoner.gameName, summoner.tagLine, summoner.puuid);
+        }
+
+        private static LcuGreyscreenStatsResult Success(string gameName, string tagLine, string puuid, int greyscreens, string source)
+        {
+            return new LcuGreyscreenStatsResult
+            {
+                Success = true,
+                GameName = gameName,
+                TagLine = tagLine,
+                Puuid = puuid,
+                Greyscreens = greyscreens,
+                Source = source,
+                Message = $"Synced {greyscreens} greyscreens from {source}."
+            };
+        }
+
+        private static LcuGreyscreenStatsResult Error(string message, string gameName = "", string tagLine = "", string puuid = "")
+        {
+            return new LcuGreyscreenStatsResult
+            {
+                Success = false,
+                Message = message,
+                GameName = gameName,
+                TagLine = tagLine,
+                Puuid = puuid
+            };
+        }
+
+        private static (bool success, string message, string gameName, string tagLine, string puuid) ReadCurrentSummoner()
+        {
+            string[] result = LCUService.ClientRequest("GET", "lol-summoner/v1/current-summoner");
+            if (result[0] != "200")
+                return (false, $"Could not read current summoner from LCU. Status: {result[0]}", string.Empty, string.Empty, string.Empty);
+
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(result[1]);
+                JsonElement root = doc.RootElement;
+
+                string gameName = GetString(root, "gameName", "riotIdGameName", "displayName", "name");
+                string tagLine = GetString(root, "tagLine", "riotIdTagline", "riotIdTagLine");
+                string puuid = GetString(root, "puuid", "puuId");
+
+                if (gameName.Contains('#') && string.IsNullOrWhiteSpace(tagLine))
+                {
+                    string[] parts = gameName.Split('#', 2);
+                    gameName = parts[0];
+                    tagLine = parts.Length > 1 ? parts[1] : string.Empty;
+                }
+
+                return (true, string.Empty, gameName, tagLine, puuid);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not parse current summoner for greyscreens: {ex.Message}");
+                return (false, "Could not parse current summoner response from LCU.", string.Empty, string.Empty, string.Empty);
+            }
+        }
+
+        private static bool TryReadCareerDeaths(string puuid, out int deaths, out string source)
+        {
+            string[] endpoints =
+            {
+                $"lol-career-stats/v1/summoner-stats/{puuid}",
+                $"lol-career-stats/v1/summoner-games/{puuid}",
+                $"lol-career-stats/v1/champion-stats/{puuid}"
+            };
+
+            foreach (string endpoint in endpoints)
+            {
+                string[] result = LCUService.ClientRequest("GET", endpoint);
+                if (!result[0].StartsWith("2") || string.IsNullOrWhiteSpace(result[1]))
+                    continue;
+
+                try
+                {
+                    using JsonDocument doc = JsonDocument.Parse(result[1]);
+                    int total = SumDeathLikeProperties(doc.RootElement);
+                    if (total > 0)
+                    {
+                        deaths = total;
+                        source = endpoint;
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Could not parse career stats endpoint {endpoint}: {ex.Message}");
+                }
+            }
+
+            deaths = 0;
+            source = string.Empty;
+            return false;
+        }
+
+        private static bool TryReadMatchHistoryDeaths(string puuid, out int deaths, out string source)
+        {
+            string endpoint = $"lol-match-history/v1/products/lol/{puuid}/matches?begIndex=0&endIndex=100";
+            string[] result = LCUService.ClientRequest("GET", endpoint);
+            if (!result[0].StartsWith("2") || string.IsNullOrWhiteSpace(result[1]))
+            {
+                deaths = 0;
+                source = string.Empty;
+                return false;
+            }
+
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(result[1]);
+                deaths = SumDeathsForPuuid(doc.RootElement, puuid);
+                source = endpoint;
+                return deaths > 0;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not parse match history deaths: {ex.Message}");
+                deaths = 0;
+                source = string.Empty;
+                return false;
+            }
+        }
+
+        private static int SumDeathLikeProperties(JsonElement element)
+        {
+            int total = 0;
+
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    string name = property.Name.ToLowerInvariant();
+                    if (IsDeathPropertyName(name) && TryGetInt(property.Value, out int value))
+                    {
+                        total += Math.Max(0, value);
+                    }
+                    else
+                    {
+                        total += SumDeathLikeProperties(property.Value);
+                    }
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement item in element.EnumerateArray())
+                    total += SumDeathLikeProperties(item);
+            }
+
+            return total;
+        }
+
+        private static bool IsDeathPropertyName(string name)
+        {
+            return name == "deaths" || name == "numdeaths" || name == "totaldeaths" || name == "championdeaths" || name == "totalchampiondeaths";
+        }
+
+        private static int SumDeathsForPuuid(JsonElement root, string puuid)
+        {
+            int total = 0;
+            if (!TryFindProperty(root, "games", out JsonElement games) || games.ValueKind != JsonValueKind.Array)
+                return 0;
+
+            foreach (JsonElement game in games.EnumerateArray())
+            {
+                if (!TryFindParticipantIdForPuuid(game, puuid, out int participantId))
+                    continue;
+
+                if (TryFindParticipantStats(game, participantId, out JsonElement stats) && TryReadDeaths(stats, out int deaths))
+                    total += deaths;
+            }
+
+            return total;
+        }
+
+        private static bool TryFindParticipantIdForPuuid(JsonElement game, string puuid, out int participantId)
+        {
+            participantId = 0;
+            if (!TryFindProperty(game, "participantIdentities", out JsonElement identities) || identities.ValueKind != JsonValueKind.Array)
+                return false;
+
+            foreach (JsonElement identity in identities.EnumerateArray())
+            {
+                JsonElement player = identity;
+                if (identity.TryGetProperty("player", out JsonElement nestedPlayer))
+                    player = nestedPlayer;
+
+                string playerPuuid = GetString(player, "puuid", "puuId");
+                if (!playerPuuid.Equals(puuid, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (TryFindProperty(identity, "participantId", out JsonElement idElement) && TryGetInt(idElement, out participantId))
+                    return participantId > 0;
+            }
+
+            return false;
+        }
+
+        private static bool TryFindParticipantStats(JsonElement game, int participantId, out JsonElement stats)
+        {
+            stats = default;
+            if (!TryFindProperty(game, "participants", out JsonElement participants) || participants.ValueKind != JsonValueKind.Array)
+                return false;
+
+            foreach (JsonElement participant in participants.EnumerateArray())
+            {
+                if (!TryFindProperty(participant, "participantId", out JsonElement idElement) || !TryGetInt(idElement, out int id) || id != participantId)
+                    continue;
+
+                if (TryFindProperty(participant, "stats", out stats))
+                    return true;
+
+                stats = participant;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryReadDeaths(JsonElement stats, out int deaths)
+        {
+            deaths = 0;
+            foreach (string propertyName in new[] { "deaths", "numDeaths", "totalDeaths" })
+            {
+                if (TryFindProperty(stats, propertyName, out JsonElement value) && TryGetInt(value, out deaths))
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool TryFindProperty(JsonElement element, string propertyName, out JsonElement value)
+        {
+            value = default;
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    if (property.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = property.Value;
+                        return true;
+                    }
+
+                    if (TryFindProperty(property.Value, propertyName, out value))
+                        return true;
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement item in element.EnumerateArray())
+                {
+                    if (TryFindProperty(item, propertyName, out value))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryGetInt(JsonElement element, out int value)
+        {
+            if (element.ValueKind == JsonValueKind.Number)
+                return element.TryGetInt32(out value);
+            if (element.ValueKind == JsonValueKind.String)
+                return int.TryParse(element.GetString(), out value);
+
+            value = 0;
+            return false;
+        }
+
+        private static string GetString(JsonElement element, params string[] propertyNames)
+        {
+            foreach (string propertyName in propertyNames)
+            {
+                if (element.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.String)
+                    return value.GetString() ?? string.Empty;
+            }
+
+            return string.Empty;
+        }
+    }
+}
+''')
+
+          # UIService: render total greyscreens into the new stat box.
+          replace(
+              'RiotAutoLogin/Services/UIService.cs',
+              '            var (totalGames, totalWins, totalLosses, winRate) = AccountService.CalculateStats(accounts);',
+              '            var (totalGames, totalWins, totalLosses, winRate, totalGreyscreens) = AccountService.CalculateStats(accounts);'
+          )
+          replace(
+              'RiotAutoLogin/Services/UIService.cs',
+              '            var txtStatsWinRateValue = window.FindName("txtStatsWinRateValue") as TextBlock;\n            var txtTotalGames = window.FindName("txtTotalGames") as TextBlock;',
+              '            var txtStatsWinRateValue = window.FindName("txtStatsWinRateValue") as TextBlock;\n            var txtStatsGreyscreensValue = window.FindName("txtStatsGreyscreensValue") as TextBlock;\n            var txtTotalGames = window.FindName("txtTotalGames") as TextBlock;'
+          )
+          replace(
+              'RiotAutoLogin/Services/UIService.cs',
+              '            if (txtStatsWinRateValue != null)\n                txtStatsWinRateValue.Text = $"{winRate:F1}%";\n\n            if (txtTotalGames != null)\n                txtTotalGames.Text = $"Total Games: {totalGames} | Wins: {totalWins} | Losses: {totalLosses} | Win Rate: {winRate:F1}%";',
+              '            if (txtStatsWinRateValue != null)\n                txtStatsWinRateValue.Text = $"{winRate:F1}%";\n\n            if (txtStatsGreyscreensValue != null)\n                txtStatsGreyscreensValue.Text = totalGreyscreens.ToString();\n\n            if (txtTotalGames != null)\n                txtTotalGames.Text = $"Total Games: {totalGames} | Wins: {totalWins} | Losses: {totalLosses} | Win Rate: {winRate:F1}% | Greyscreens: {totalGreyscreens}";'
+          )
+
+          # Quick Login stats panel: add Greyscreens total and a sync button.
+          xaml_path = Path('RiotAutoLogin/MainWindow.xaml')
+          xaml = xaml_path.read_text(encoding='utf-8-sig')
+          xaml = xaml.replace('''                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>''', '''                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>''', 1)
+          xaml = xaml.replace('''                                        <Button Grid.Column="4"
+                x:Name="btnRefreshQuickStats"''', '''                                        <Border Grid.Column="4"
+                Background="#141B24"
+                CornerRadius="14"
+                Padding="14"
+                Margin="0,0,10,0">
+                                            <StackPanel>
+                                                <TextBlock Text="Greyscreens"
+                           FontSize="11"
+                           Opacity="0.65"
+                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock x:Name="txtStatsGreyscreensValue"
+                           Text="0"
+                           Margin="0,4,0,0"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           Foreground="#B66DFF"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Button Grid.Column="5"
+                x:Name="btnRefreshQuickStats"''', 1)
+          xaml = xaml.replace('''                                        </Button>
+                                    </Grid>''', '''                                        </Button>
+
+                                        <Button Grid.Column="6"
+                x:Name="btnRefreshGreyscreens"
+                Style="{StaticResource GhostIconButton}"
+                Click="btnRefreshGreyscreens_Click"
+                ToolTip="Sync greyscreens from the currently logged League account"
+                VerticalAlignment="Stretch"
+                Margin="8,0,0,0">
+                                            <TextBlock Text="☠"
+                   FontSize="16"
+                   Foreground="#C9B6FF"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"/>
+                                        </Button>
+                                    </Grid>''', 1)
+          xaml_path.write_text(xaml, encoding='utf-8')
+
+          # MainWindow: sync current LCU account greyscreens and save them to the matching saved account.
+          cs_path = Path('RiotAutoLogin/MainWindow.xaml.cs')
+          cs = cs_path.read_text(encoding='utf-8-sig')
+          cs = cs.replace('''        private void UpdateQuickLoginViewport()
+        {''', '''        private async void btnRefreshGreyscreens_Click(object sender, RoutedEventArgs e)
+        {
+            btnRefreshGreyscreens.IsEnabled = false;
+
+            try
+            {
+                LcuGreyscreenStatsResult result = await LcuGreyscreenStatsService.GetCurrentAccountGreyscreensAsync();
+                if (!result.Success)
+                {
+                    System.Windows.MessageBox.Show(result.Message, "Greyscreen Sync", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                Account? account = FindSavedAccountForGreyscreenSync(result);
+                if (account == null)
+                {
+                    string riotId = string.IsNullOrWhiteSpace(result.TagLine) ? result.GameName : $"{result.GameName}#{result.TagLine}";
+                    System.Windows.MessageBox.Show($"Synced {result.Greyscreens} greyscreens for {riotId}, but no matching saved account was found.", "Greyscreen Sync", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                account.Greyscreens = result.Greyscreens;
+                account.GreyscreensLastUpdatedUtc = DateTime.UtcNow.ToString("O");
+
+                RefreshAccountLists();
+                UpdateQuickLoginViewport();
+                UpdateTotalGameStats();
+                SaveAccounts();
+
+                string savedRiotId = string.IsNullOrWhiteSpace(account.TagLine) ? account.GameName : $"{account.GameName}#{account.TagLine}";
+                System.Windows.MessageBox.Show($"Saved {result.Greyscreens} greyscreens for {savedRiotId}.\\nSource: {result.Source}", "Greyscreen Sync", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            finally
+            {
+                btnRefreshGreyscreens.IsEnabled = true;
+            }
+        }
+
+        private Account? FindSavedAccountForGreyscreenSync(LcuGreyscreenStatsResult result)
+        {
+            string gameName = NormalizeRiotIdPart(result.GameName);
+            string tagLine = NormalizeRiotIdPart(result.TagLine);
+
+            Account? exact = _accounts.FirstOrDefault(account =>
+                NormalizeRiotIdPart(account.GameName) == gameName &&
+                (string.IsNullOrEmpty(tagLine) || NormalizeRiotIdPart(account.TagLine) == tagLine));
+
+            if (exact != null)
+                return exact;
+
+            return _accounts.FirstOrDefault(account => NormalizeRiotIdPart(account.GameName) == gameName);
+        }
+
+        private static string NormalizeRiotIdPart(string value)
+        {
+            return (value ?? string.Empty).Trim().ToLowerInvariant();
+        }
+
+        private void UpdateQuickLoginViewport()
+        {''', 1)
+          cs_path.write_text(cs, encoding='utf-8')
+
+          Path('.github/workflows/patch-greyscreens-stat-once.yml').unlink(missing_ok=True)
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git status --short
+          if git diff --quiet && git diff --cached --quiet; then echo "No changes to commit."; exit 0; fi
+          git add RiotAutoLogin/Models/Account.cs RiotAutoLogin/Services/AccountService.cs RiotAutoLogin/Services/LcuGreyscreenStatsService.cs RiotAutoLogin/Services/UIService.cs RiotAutoLogin/MainWindow.xaml RiotAutoLogin/MainWindow.xaml.cs .github/workflows/patch-greyscreens-stat-once.yml
+          git commit -m "Add LCU greyscreen total stat"
+          git pull --rebase origin master
+          git push origin HEAD:master
