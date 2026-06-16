@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace RiotAutoLogin
 {
@@ -102,6 +103,16 @@ namespace RiotAutoLogin
                 UpdateClientAlertSettingsUi();
             };
 
+            card.txtGameStartAlertRepeatCount.LostFocus += (_, _) => SaveGameStartAlertRepeatCount(card.txtGameStartAlertRepeatCount);
+            card.txtGameStartAlertRepeatCount.KeyDown += (_, e) =>
+            {
+                if (e.Key != Key.Enter)
+                    return;
+
+                SaveGameStartAlertRepeatCount(card.txtGameStartAlertRepeatCount);
+                e.Handled = true;
+            };
+
             card.tglFlashSlotWarning.Checked += (_, _) =>
             {
                 if (_suppressClientAlertSettingEvents)
@@ -143,6 +154,21 @@ namespace RiotAutoLogin
             };
         }
 
+        private void SaveGameStartAlertRepeatCount(TextBox repeatCountTextBox)
+        {
+            if (_suppressClientAlertSettingEvents)
+                return;
+
+            int parsedValue = int.TryParse(repeatCountTextBox.Text, out int value)
+                ? value
+                : _hotkeySettings.GameStartAlertRepeatCount;
+
+            _hotkeySettings.GameStartAlertRepeatCount = ClampGameStartAlertRepeatCount(parsedValue);
+            SaveHotkeySettings();
+            UpdateClientAlertSettingsUi();
+            UpdateStaticClientAlertSettingsUi();
+        }
+
         private void UpdateClientAlertSettingsUi()
         {
             if (_clientAlertsSettingsCard == null)
@@ -151,11 +177,14 @@ namespace RiotAutoLogin
             if (_hotkeySettings.PreferredFlashSlot != 1 && _hotkeySettings.PreferredFlashSlot != 2)
                 _hotkeySettings.PreferredFlashSlot = 2;
 
+            _hotkeySettings.GameStartAlertRepeatCount = ClampGameStartAlertRepeatCount(_hotkeySettings.GameStartAlertRepeatCount);
+
             _suppressClientAlertSettingEvents = true;
             try
             {
                 _clientAlertsSettingsCard.tglGameStartAlert.IsChecked = _hotkeySettings.GameStartAlertEnabled;
                 _clientAlertsSettingsCard.tglGameStartAlert.Content = _hotkeySettings.GameStartAlertEnabled ? "ON" : "OFF";
+                _clientAlertsSettingsCard.txtGameStartAlertRepeatCount.Text = _hotkeySettings.GameStartAlertRepeatCount.ToString();
 
                 _clientAlertsSettingsCard.tglFlashSlotWarning.IsChecked = _hotkeySettings.FlashSlotWarningEnabled;
                 _clientAlertsSettingsCard.tglFlashSlotWarning.Content = _hotkeySettings.FlashSlotWarningEnabled ? "ON" : "OFF";
@@ -293,9 +322,11 @@ namespace RiotAutoLogin
 
         private Task ShowGameStartAlertAsync()
         {
+            int repeatCount = ClampGameStartAlertRepeatCount(_hotkeySettings.GameStartAlertRepeatCount);
+
             return Task.Run(async () =>
             {
-                for (int i = 0; i < 14; i++)
+                for (int i = 0; i < repeatCount; i++)
                 {
                     try
                     {
