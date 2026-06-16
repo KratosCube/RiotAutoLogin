@@ -23,12 +23,11 @@ namespace RiotAutoLogin.Services
             window.Resources["SecondaryBackgroundBrush"] = secondaryBg;
             window.Resources["TextColorBrush"] = textColor;
 
-            window.Background = isDarkMode ? 
-                new SolidColorBrush(Color.FromRgb(10, 10, 16)) : 
+            window.Background = isDarkMode ?
+                new SolidColorBrush(Color.FromRgb(10, 10, 16)) :
                 new SolidColorBrush(Color.FromRgb(245, 245, 250));
 
-            var statsPanel = window.FindName("statsPanel") as Border;
-            if (statsPanel != null)
+            if (window.FindName("statsPanel") is Border statsPanel)
                 statsPanel.Background = statsBg;
 
             var mainContentBorder = VisualTreeHelperExtensions.FindVisualChildren<Border>(window)
@@ -40,8 +39,8 @@ namespace RiotAutoLogin.Services
             UpdateCardBackgrounds(window, cardBg, cardBorder, textColor, winColor, lossColor);
         }
 
-        private static (SolidColorBrush main, SolidColorBrush card, SolidColorBrush secondary, 
-                       SolidColorBrush text, SolidColorBrush stats, SolidColorBrush win, 
+        private static (SolidColorBrush main, SolidColorBrush card, SolidColorBrush secondary,
+                       SolidColorBrush text, SolidColorBrush stats, SolidColorBrush win,
                        SolidColorBrush loss, SolidColorBrush border) GetThemeColors(bool isDarkMode)
         {
             if (isDarkMode)
@@ -57,19 +56,17 @@ namespace RiotAutoLogin.Services
                     new SolidColorBrush(Color.FromRgb(40, 40, 50))
                 );
             }
-            else
-            {
-                return (
-                    new SolidColorBrush(Colors.White),
-                    new SolidColorBrush(Color.FromRgb(235, 235, 240)),
-                    new SolidColorBrush(Color.FromRgb(220, 220, 230)),
-                    new SolidColorBrush(Colors.Black),
-                    new SolidColorBrush(Color.FromRgb(225, 225, 225)),
-                    new SolidColorBrush(Color.FromRgb(0, 128, 128)),
-                    new SolidColorBrush(Color.FromRgb(180, 0, 0)),
-                    new SolidColorBrush(Color.FromRgb(200, 200, 210))
-                );
-            }
+
+            return (
+                new SolidColorBrush(Colors.White),
+                new SolidColorBrush(Color.FromRgb(235, 235, 240)),
+                new SolidColorBrush(Color.FromRgb(220, 220, 230)),
+                new SolidColorBrush(Colors.Black),
+                new SolidColorBrush(Color.FromRgb(225, 225, 225)),
+                new SolidColorBrush(Color.FromRgb(0, 128, 128)),
+                new SolidColorBrush(Color.FromRgb(180, 0, 0)),
+                new SolidColorBrush(Color.FromRgb(200, 200, 210))
+            );
         }
 
         private static void UpdateTabHeaders(Window window, bool isDarkMode)
@@ -86,20 +83,20 @@ namespace RiotAutoLogin.Services
             {
                 var tabHeader = VisualTreeHelperExtensions.FindVisualChildren<Border>(tabItem)
                     .FirstOrDefault(b => b.Padding.Top == 10 && b.CornerRadius.TopLeft == 10);
-                
-                if (tabHeader != null)
+
+                if (tabHeader == null)
+                    continue;
+
+                if (tabItem.IsSelected)
                 {
-                    if (tabItem.IsSelected)
-                    {
-                        tabHeader.Background = selectedTabBrush;
-                        tabHeader.BorderThickness = new Thickness(0, 0, 0, 2);
-                        tabHeader.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 82, 82));
-                    }
-                    else
-                    {
-                        tabHeader.Background = normalTabBrush;
-                        tabHeader.BorderThickness = new Thickness(0);
-                    }
+                    tabHeader.Background = selectedTabBrush;
+                    tabHeader.BorderThickness = new Thickness(0, 0, 0, 2);
+                    tabHeader.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 82, 82));
+                }
+                else
+                {
+                    tabHeader.Background = normalTabBrush;
+                    tabHeader.BorderThickness = new Thickness(0);
                 }
             }
         }
@@ -108,22 +105,22 @@ namespace RiotAutoLogin.Services
             SolidColorBrush textColor, SolidColorBrush winColor, SolidColorBrush lossColor)
         {
             var icAccounts = window.FindName("icAccounts") as ItemsControl;
-            if (icAccounts == null) return;
+            if (icAccounts == null)
+                return;
 
             foreach (var border in VisualTreeHelperExtensions.FindVisualChildren<Border>(icAccounts))
             {
-                if (border.Tag is Models.Account)
-                {
-                    border.Background = cardBg;
-                    border.BorderThickness = new Thickness(1);
-                    border.BorderBrush = cardBorder;
+                if (border.Tag is not Models.Account)
+                    continue;
 
-                    UpdateTextBlockColors(border, textColor, winColor, lossColor);
-                }
+                border.Background = cardBg;
+                border.BorderThickness = new Thickness(1);
+                border.BorderBrush = cardBorder;
+                UpdateTextBlockColors(border, textColor, winColor, lossColor);
             }
         }
 
-        private static void UpdateTextBlockColors(Border border, SolidColorBrush textColor, 
+        private static void UpdateTextBlockColors(Border border, SolidColorBrush textColor,
             SolidColorBrush winColor, SolidColorBrush lossColor)
         {
             foreach (var textBlock in VisualTreeHelperExtensions.FindVisualChildren<TextBlock>(border))
@@ -131,24 +128,23 @@ namespace RiotAutoLogin.Services
                 if (textBlock.Inlines.Count == 0)
                 {
                     textBlock.Foreground = textColor;
+                    continue;
                 }
-                else
+
+                foreach (var inline in textBlock.Inlines.OfType<Run>())
                 {
-                    foreach (var inline in textBlock.Inlines.OfType<Run>())
+                    if (inline.Text.Contains("W/") || inline.Text.Contains("L") || inline.Text.Contains("LP"))
                     {
-                        if (inline.Text.Contains("W/") || inline.Text.Contains("L") || inline.Text.Contains("LP"))
+                        inline.Foreground = textColor;
+                    }
+                    else if (inline.PreviousInline is Run prev)
+                    {
+                        inline.Foreground = prev.Text switch
                         {
-                            inline.Foreground = textColor;
-                        }
-                        else if (inline.PreviousInline is Run prev)
-                        {
-                            inline.Foreground = prev.Text switch
-                            {
-                                " LP, " => winColor,
-                                "W/" => lossColor,
-                                _ => textColor
-                            };
-                        }
+                            " LP, " => winColor,
+                            "W/" => lossColor,
+                            _ => textColor
+                        };
                     }
                 }
             }
@@ -157,7 +153,7 @@ namespace RiotAutoLogin.Services
         public static void RefreshAccountLists(Window window, System.Collections.Generic.List<Models.Account> accounts)
         {
             Console.WriteLine($"🔧 UIService.RefreshAccountLists called with {accounts?.Count ?? 0} accounts");
-            
+
             var lbAccounts = window.FindName("lbAccounts") as ListBox;
             var lbLoginAccounts = window.FindName("lbLoginAccounts") as ListBox;
             var icLoginAccounts = window.FindName("icLoginAccounts") as ItemsControl;
@@ -166,28 +162,20 @@ namespace RiotAutoLogin.Services
             {
                 lbAccounts.ItemsSource = null;
                 lbAccounts.ItemsSource = accounts;
-                Console.WriteLine($"Updated lbAccounts with {accounts?.Count ?? 0} accounts");
             }
 
             if (lbLoginAccounts != null)
             {
                 lbLoginAccounts.ItemsSource = null;
                 lbLoginAccounts.ItemsSource = accounts;
-                Console.WriteLine($"Updated lbLoginAccounts with {accounts?.Count ?? 0} accounts");
             }
-            
+
             if (icLoginAccounts != null)
             {
-                Console.WriteLine($"🎯 Updating icLoginAccounts directly...");
                 icLoginAccounts.ItemsSource = null;
                 icLoginAccounts.ItemsSource = accounts;
                 icLoginAccounts.UpdateLayout();
                 icLoginAccounts.InvalidateVisual();
-                Console.WriteLine($"✅ Updated icLoginAccounts with {accounts?.Count ?? 0} accounts");
-            }
-            else
-            {
-                Console.WriteLine("⚠️ icLoginAccounts not found!");
             }
         }
 
@@ -201,7 +189,7 @@ namespace RiotAutoLogin.Services
             var txtStatsWinsValue = window.FindName("txtStatsWinsValue") as TextBlock;
             var txtStatsLossesValue = window.FindName("txtStatsLossesValue") as TextBlock;
             var txtStatsWinRateValue = window.FindName("txtStatsWinRateValue") as TextBlock;
-            var txtStatsGreyscreensValue = FindTaggedTextBlock(window, GreyscreenValueTag);
+            var txtStatsGreyscreensValue = FindTaggedTextBlock(window, GreyscreenValueTag) ?? window.FindName("txtStatsGreyscreenTimeValue") as TextBlock;
             var txtTotalGames = window.FindName("txtTotalGames") as TextBlock;
 
             if (txtStatsGamesValue != null)
@@ -225,30 +213,29 @@ namespace RiotAutoLogin.Services
 
         private static void EnsureGreyscreenStatsUi(Window window, System.Collections.Generic.List<Models.Account> accounts)
         {
-            if (FindTaggedTextBlock(window, GreyscreenValueTag) != null)
+            if (FindTaggedTextBlock(window, GreyscreenValueTag) != null || window.FindName("txtStatsGreyscreenTimeValue") is TextBlock)
                 return;
 
-            if (window.FindName("statsPanel") is not Border statsPanel || statsPanel.Child is not Grid grid)
+            if (window.FindName("statsPanel") is not Border statsPanel || statsPanel.Child is not UIElement originalStatsContent)
                 return;
 
-            const int insertColumn = 4;
-            if (grid.ColumnDefinitions.Count > insertColumn)
-            {
-                grid.ColumnDefinitions.Insert(insertColumn, new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                foreach (UIElement child in grid.Children)
-                {
-                    int column = Grid.GetColumn(child);
-                    if (column >= insertColumn)
-                        Grid.SetColumn(child, column + 1);
-                }
-            }
+            statsPanel.Child = null;
 
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var wrapper = new Grid();
+            wrapper.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            wrapper.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            Grid.SetRow(originalStatsContent, 0);
+            wrapper.Children.Add(originalStatsContent);
+
+            var row = new Grid { Margin = new Thickness(0, 10, 0, 0) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             var greyscreenValue = new TextBlock
             {
                 Tag = GreyscreenValueTag,
-                Text = "0",
+                Text = "0 min",
                 Margin = new Thickness(0, 4, 0, 0),
                 FontSize = 20,
                 FontWeight = FontWeights.SemiBold,
@@ -276,8 +263,8 @@ namespace RiotAutoLogin.Services
                     }
                 }
             };
-            Grid.SetColumn(card, insertColumn);
-            grid.Children.Add(card);
+            Grid.SetColumn(card, 0);
+            row.Children.Add(card);
 
             var syncButton = new Button
             {
@@ -290,14 +277,19 @@ namespace RiotAutoLogin.Services
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
                 },
-                ToolTip = "Sync greyscreens from the currently logged League account",
+                ToolTip = "Sync greyscreen time from the currently logged League account",
                 VerticalAlignment = VerticalAlignment.Stretch,
+                MinWidth = 46,
                 Margin = new Thickness(8, 0, 0, 0),
                 Style = window.TryFindResource("GhostIconButton") as Style
             };
             syncButton.Click += async (_, _) => await SyncGreyscreensAsync(window, accounts, syncButton);
-            Grid.SetColumn(syncButton, Math.Max(0, grid.ColumnDefinitions.Count - 1));
-            grid.Children.Add(syncButton);
+            Grid.SetColumn(syncButton, 1);
+            row.Children.Add(syncButton);
+
+            Grid.SetRow(row, 1);
+            wrapper.Children.Add(row);
+            statsPanel.Child = wrapper;
         }
 
         private static async System.Threading.Tasks.Task SyncGreyscreensAsync(Window window, System.Collections.Generic.List<Models.Account> accounts, Button button)
@@ -316,7 +308,7 @@ namespace RiotAutoLogin.Services
                 if (account == null)
                 {
                     string riotId = string.IsNullOrWhiteSpace(result.TagLine) ? result.GameName : $"{result.GameName}#{result.TagLine}";
-                    MessageBox.Show($"Synced {result.Greyscreens} greyscreens for {riotId}, but no matching saved account was found.", "Greyscreen Sync", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show($"Synced greyscreen data for {riotId}, but no matching saved account was found.", "Greyscreen Sync", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
