@@ -3,8 +3,10 @@ using RiotAutoLogin.Services;
 using RiotAutoLogin.Utilities;
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Media;
+using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -227,18 +229,66 @@ namespace RiotAutoLogin
                 return;
 
             bool gameStarted = phase is "GameStart" or "InProgress";
-            bool wasGameStarted = _lastClientAlertPhase is "GameStart" or "InProgress";
-            bool hadKnownPreviousPhase = !string.IsNullOrWhiteSpace(_lastClientAlertPhase);
+            if (!gameStarted)
+            {
+                if (phase is "Lobby" or "None" or "EndOfGame" or "PreEndOfGame" or "WaitingForStats")
+                    _gameStartAlertShownForCurrentGame = false;
+                return;
+            }
 
-            if (gameStarted && hadKnownPreviousPhase && !wasGameStarted && !_gameStartAlertShownForCurrentGame)
+            if (_gameStartAlertShownForCurrentGame)
+                return;
+
+            if (!TryReadLiveGameTimeSeconds(out double gameTimeSeconds))
+                return;
+
+            if (gameTimeSeconds >= 1.0 && gameTimeSeconds <= 20.0)
             {
                 _gameStartAlertShownForCurrentGame = true;
                 await ShowGameStartAlertAsync();
             }
-            else if (!gameStarted && phase is "Lobby" or "None" or "EndOfGame" or "PreEndOfGame" or "WaitingForStats")
+            else if (gameTimeSeconds > 20.0)
             {
-                _gameStartAlertShownForCurrentGame = false;
+                // App was probably opened after the game had already started. Avoid late surprise sounds.
+                _gameStartAlertShownForCurrentGame = true;
             }
+        }
+
+        private static bool TryReadLiveGameTimeSeconds(out double seconds)
+        {
+            seconds = 0;
+
+            try
+            {
+                using var handler = new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (_, _, _, _) => true
+                };
+                using var client = new HttpClient(handler)
+                {
+                    Timeout = TimeSpan.FromMilliseconds(900)
+                };
+
+                string json = client.GetStringAsync("https://127.0.0.1:2999/liveclientdata/gamestats")
+                    .GetAwaiter()
+                    .GetResult();
+
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("gameTime", out JsonElement gameTimeElement))
+                    return false;
+
+                if (gameTimeElement.ValueKind == JsonValueKind.Number && gameTimeElement.TryGetDouble(out seconds))
+                    return true;
+
+                if (gameTimeElement.ValueKind == JsonValueKind.String)
+                    return double.TryParse(gameTimeElement.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out seconds);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Live Client API game time is not available yet: {ex.Message}");
+            }
+
+            return false;
         }
 
         private Task ShowGameStartAlertAsync()
