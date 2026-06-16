@@ -1,6 +1,7 @@
 using System;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace RiotAutoLogin
@@ -55,6 +56,7 @@ namespace RiotAutoLogin
                 return;
             }
 
+            TextBox? repeatCountTextBox = FindName("txtGameStartAlertRepeatCount") as TextBox;
             _staticClientAlertControlsHooked = true;
 
             gameStartToggle.Checked += (_, _) =>
@@ -75,6 +77,16 @@ namespace RiotAutoLogin
                 _hotkeySettings.GameStartAlertEnabled = false;
                 SaveHotkeySettings();
                 UpdateStaticClientAlertSettingsUi();
+            };
+
+            repeatCountTextBox?.LostFocus += (_, _) => SaveStaticGameStartAlertRepeatCount(repeatCountTextBox);
+            repeatCountTextBox?.KeyDown += (_, e) =>
+            {
+                if (e.Key != Key.Enter)
+                    return;
+
+                SaveStaticGameStartAlertRepeatCount(repeatCountTextBox);
+                e.Handled = true;
             };
 
             flashWarningToggle.Checked += (_, _) =>
@@ -118,6 +130,21 @@ namespace RiotAutoLogin
             };
         }
 
+        private void SaveStaticGameStartAlertRepeatCount(TextBox repeatCountTextBox)
+        {
+            if (_suppressStaticClientAlertEvents)
+                return;
+
+            int parsedValue = int.TryParse(repeatCountTextBox.Text, out int value)
+                ? value
+                : _hotkeySettings.GameStartAlertRepeatCount;
+
+            _hotkeySettings.GameStartAlertRepeatCount = ClampGameStartAlertRepeatCount(parsedValue);
+            SaveHotkeySettings();
+            UpdateStaticClientAlertSettingsUi();
+            UpdateClientAlertSettingsUi();
+        }
+
         private void UpdateStaticClientAlertSettingsUi()
         {
             if (FindName("tglGameStartAlert") is not ToggleButton gameStartToggle ||
@@ -128,14 +155,21 @@ namespace RiotAutoLogin
                 return;
             }
 
+            TextBox? repeatCountTextBox = FindName("txtGameStartAlertRepeatCount") as TextBox;
+
             if (_hotkeySettings.PreferredFlashSlot != 1 && _hotkeySettings.PreferredFlashSlot != 2)
                 _hotkeySettings.PreferredFlashSlot = 2;
+
+            _hotkeySettings.GameStartAlertRepeatCount = ClampGameStartAlertRepeatCount(_hotkeySettings.GameStartAlertRepeatCount);
 
             _suppressStaticClientAlertEvents = true;
             try
             {
                 gameStartToggle.IsChecked = _hotkeySettings.GameStartAlertEnabled;
                 gameStartToggle.Content = _hotkeySettings.GameStartAlertEnabled ? "ON" : "OFF";
+
+                if (repeatCountTextBox != null)
+                    repeatCountTextBox.Text = _hotkeySettings.GameStartAlertRepeatCount.ToString();
 
                 flashWarningToggle.IsChecked = _hotkeySettings.FlashSlotWarningEnabled;
                 flashWarningToggle.Content = _hotkeySettings.FlashSlotWarningEnabled ? "ON" : "OFF";
@@ -147,6 +181,11 @@ namespace RiotAutoLogin
             {
                 _suppressStaticClientAlertEvents = false;
             }
+        }
+
+        private static int ClampGameStartAlertRepeatCount(int value)
+        {
+            return Math.Clamp(value, 1, 30);
         }
     }
 }
