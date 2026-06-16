@@ -1,0 +1,155 @@
+name: Patch static client alerts XAML once
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Insert client alerts card into MainWindow.xaml
+        shell: python
+        run: |
+          from pathlib import Path
+
+          xaml_path = Path('RiotAutoLogin/MainWindow.xaml')
+          xaml = xaml_path.read_text(encoding='utf-8-sig')
+
+          block = '''
+                                        <!-- Client Alerts -->
+                                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                                CornerRadius="18"
+                                                Padding="18"
+                                                Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <TextBlock Text="Client Alerts"
+                                                           FontSize="18"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock Text="Intrusive notifications for game start and warnings when Flash is on the opposite summoner spell slot."
+                                                           Margin="0,6,0,14"
+                                                           FontSize="13"
+                                                           TextWrapping="Wrap"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Opacity="0.68"/>
+
+                                                <Grid Margin="0,0,0,12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="Enable game start alert"
+                                                                   FontSize="14"
+                                                                   Foreground="{StaticResource TextColorBrush}"/>
+                                                        <TextBlock Text="Plays a repeated warning sound and shows a top-most dialog when the game starts."
+                                                                   Margin="0,4,10,0"
+                                                                   FontSize="12"
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="{StaticResource TextColorBrush}"
+                                                                   Opacity="0.68"/>
+                                                    </StackPanel>
+
+                                                    <ToggleButton x:Name="tglGameStartAlert"
+                                                                  Grid.Column="1"
+                                                                  Width="100"
+                                                                  Content="OFF"
+                                                                  Style="{StaticResource ModernToggleButton}"/>
+                                                </Grid>
+
+                                                <Grid Margin="0,0,0,12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="Enable Flash side warning"
+                                                                   FontSize="14"
+                                                                   Foreground="{StaticResource TextColorBrush}"/>
+                                                        <TextBlock Text="Shows a warning if Flash is on the other side than your preference during champion select."
+                                                                   Margin="0,4,10,0"
+                                                                   FontSize="12"
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="{StaticResource TextColorBrush}"
+                                                                   Opacity="0.68"/>
+                                                    </StackPanel>
+
+                                                    <ToggleButton x:Name="tglFlashSlotWarning"
+                                                                  Grid.Column="1"
+                                                                  Width="100"
+                                                                  Content="OFF"
+                                                                  Style="{StaticResource ModernToggleButton}"/>
+                                                </Grid>
+
+                                                <Border Background="{StaticResource SecondaryBackgroundBrush}"
+                                                        CornerRadius="12"
+                                                        Padding="14"
+                                                        Margin="0,4,0,0">
+                                                    <StackPanel>
+                                                        <TextBlock Text="Preferred Flash slot"
+                                                                   FontSize="14"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource TextColorBrush}"/>
+                                                        <TextBlock Text="Spell 1 is usually D, Spell 2 is usually F. If Flash is on the other side, the app warns you once per champion select."
+                                                                   Margin="0,4,0,10"
+                                                                   FontSize="12"
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="{StaticResource TextColorBrush}"
+                                                                   Opacity="0.68"/>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <RadioButton x:Name="rbFlashSlot1"
+                                                                         Content="Spell 1 / D"
+                                                                         GroupName="PreferredFlashSlot"
+                                                                         Margin="0,0,18,0"
+                                                                         Foreground="{StaticResource TextColorBrush}"
+                                                                         FontSize="13"
+                                                                         VerticalContentAlignment="Center"/>
+                                                            <RadioButton x:Name="rbFlashSlot2"
+                                                                         Content="Spell 2 / F"
+                                                                         GroupName="PreferredFlashSlot"
+                                                                         Margin="0,0,18,0"
+                                                                         Foreground="{StaticResource TextColorBrush}"
+                                                                         FontSize="13"
+                                                                         VerticalContentAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+                                        </Border>
+
+'''
+
+          if 'x:Name="tglGameStartAlert"' not in xaml:
+              marker = '                                        <!-- Hotkey -->'
+              if marker not in xaml:
+                  raise SystemExit('Hotkey marker not found in MainWindow.xaml')
+              xaml = xaml.replace(marker, block + marker, 1)
+              xaml_path.write_text(xaml, encoding='utf-8')
+
+          Path('.github/workflows/patch-static-client-alerts-xaml-once.yml').unlink(missing_ok=True)
+          Path('.github/static-client-alerts-xaml-run.txt').unlink(missing_ok=True)
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git status --short
+          if git diff --quiet && git diff --cached --quiet; then echo "No changes to commit."; exit 0; fi
+          git add RiotAutoLogin/MainWindow.xaml .github/workflows/patch-static-client-alerts-xaml-once.yml .github/static-client-alerts-xaml-run.txt
+          git commit -m "Add client alerts controls to MainWindow XAML"
+          git pull --rebase origin master
+          git push origin HEAD:master
