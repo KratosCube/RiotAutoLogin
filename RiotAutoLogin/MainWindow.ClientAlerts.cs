@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 
 namespace RiotAutoLogin
@@ -30,7 +31,6 @@ namespace RiotAutoLogin
         protected override void OnContentRendered(EventArgs e)
         {
             base.OnContentRendered(e);
-
             InitializeClientAlertFeatures();
         }
 
