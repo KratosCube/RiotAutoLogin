@@ -1,0 +1,474 @@
+name: Fix Remote Pick owned filter and teams once
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Patch Remote Pick champion filtering and team rails
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8')
+
+          # Remote model: no dynamic LCU calls from JSON serialization; expose ban phase and team side.
+          write('RiotAutoLogin/Models/RemotePickModels.cs', '''using System.Collections.Generic;
+
+namespace RiotAutoLogin.Models
+{
+    public class RemotePickState
+    {
+        public string Phase { get; set; } = "None";
+        public string ChampSelectPhase { get; set; } = string.Empty;
+        public string PhaseLabel { get; set; } = "Waiting";
+        public int TimeLeftInPhaseMs { get; set; } = -1;
+        public int TotalTimeInPhaseMs { get; set; } = -1;
+        public bool IsTimerInfinite { get; set; }
+        public bool IsInChampSelect { get; set; }
+        public bool IsMyTurn { get; set; }
+        public bool CanPick => IsMyTurn && ActionType == "pick";
+        public bool CanBan => IsMyTurn && ActionType == "ban";
+        public bool IsBanPhase { get; set; }
+        public bool CanLeave { get; set; }
+        public string ActionId { get; set; } = string.Empty;
+        public string ActionType { get; set; } = string.Empty;
+        public string PickActionId { get; set; } = string.Empty;
+        public int ActionGroupIndex { get; set; } = -1;
+        public string TimerActionKey { get; set; } = string.Empty;
+        public string AssignedPosition { get; set; } = string.Empty;
+        public int MapId { get; set; }
+        public int QueueId { get; set; }
+        public string QueueName { get; set; } = string.Empty;
+        public string ChampSelectMode { get; set; } = string.Empty;
+        public bool IsRandomChampionMode { get; set; }
+        public bool IsGameClientRunning { get; set; }
+        public bool IsGameLoaded { get; set; }
+        public double GameTimeSeconds { get; set; } = -1;
+        public string GameStatus { get; set; } = "Waiting";
+        public string Message { get; set; } = string.Empty;
+        public int SelectedChampionId { get; set; }
+        public int PickIntentChampionId { get; set; }
+        public int Spell1Id { get; set; }
+        public int Spell2Id { get; set; }
+        public List<int> BannedChampionIds { get; set; } = new();
+        public List<int> PickedChampionIds { get; set; } = new();
+        public List<int> AllyPickedChampionIds { get; set; } = new();
+        public List<int> EnemyPickedChampionIds { get; set; } = new();
+        public List<int> AvailableSpellIds { get; set; } = new();
+        public List<int> AvailableChampionIds { get; set; } = new();
+        public List<RemoteChampionDto> Champions { get; set; } = new();
+        public List<RemoteSummonerSpellDto> SummonerSpells { get; set; } = new();
+        public List<RemoteRunePageDto> RunePages { get; set; } = new();
+        public List<RemoteRecommendedRunePageDto> RecommendedRunePages { get; set; } = new();
+        public RemoteRunePageDto? CurrentRunePage { get; set; }
+    }
+
+    public class RemoteChampionDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string ImageUrl { get; set; } = string.Empty;
+        public bool IsBanned { get; set; }
+        public bool IsPicked { get; set; }
+        public bool IsSelected { get; set; }
+        public bool IsIntent { get; set; }
+        public bool IsAvailableInCurrentMode { get; set; } = true;
+        public string TeamSide { get; set; } = string.Empty;
+        public bool IsDisabled => IsBanned || IsPicked || !IsAvailableInCurrentMode;
+    }
+
+    public class RemoteSummonerSpellDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string ImageUrl { get; set; } = string.Empty;
+        public bool IsSpell1 { get; set; }
+        public bool IsSpell2 { get; set; }
+        public bool IsAvailable { get; set; } = true;
+    }
+
+    public class RemoteRunePageDto
+    {
+        public long Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public bool IsCurrent { get; set; }
+        public bool IsEditable { get; set; }
+        public bool IsDeletable { get; set; }
+    }
+
+    public class RemoteRecommendedRunePageDto
+    {
+        public int Index { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Subtitle { get; set; } = string.Empty;
+        public int PrimaryStyleId { get; set; }
+        public int SubStyleId { get; set; }
+        public List<int> SelectedPerkIds { get; set; } = new();
+        public bool CanApply => PrimaryStyleId > 0 && SubStyleId > 0 && SelectedPerkIds.Count > 0;
+    }
+
+    public class RemotePickRequest
+    {
+        public int ChampionId { get; set; }
+    }
+
+    public class RemoteSpellRequest
+    {
+        public int SpellId { get; set; }
+        public int Slot { get; set; }
+    }
+
+    public class RemoteRunePageRequest
+    {
+        public long PageId { get; set; }
+    }
+
+    public class RemoteRecommendedRunePageRequest
+    {
+        public int Index { get; set; }
+    }
+
+    public class RemotePickActionResult
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+    }
+}
+''')
+
+          # RemoteChampionAvailabilityService: expose owned/free IDs for explicit server-side filtering.
+          path = Path('RiotAutoLogin/Services/RemoteChampionAvailabilityService.cs')
+          text = path.read_text(encoding='utf-8-sig')
+          if 'public static HashSet<int> GetOwnedOrFreeChampionIds()' not in text:
+              text = text.replace('''        public static bool CanUseChampion(int championId)
+        {
+            if (championId <= 0)
+                return false;
+
+            try
+            {
+                RefreshIfNeeded();
+                if (_isBanPhase)
+                    return true;
+
+                // Fail open if LCU does not provide ownership data.
+                return _ownedOrFreeChampionIds.Count == 0 || _ownedOrFreeChampionIds.Contains(championId);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not resolve champion availability: {ex.Message}");
+                return true;
+            }
+        }
+''', '''        public static bool CanUseChampion(int championId)
+        {
+            if (championId <= 0)
+                return false;
+
+            try
+            {
+                RefreshIfNeeded();
+                if (_isBanPhase)
+                    return true;
+
+                // Fail open if LCU does not provide ownership data.
+                return _ownedOrFreeChampionIds.Count == 0 || _ownedOrFreeChampionIds.Contains(championId);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not resolve champion availability: {ex.Message}");
+                return true;
+            }
+        }
+
+        public static HashSet<int> GetOwnedOrFreeChampionIds()
+        {
+            try
+            {
+                RefreshIfNeeded();
+                lock (_lock)
+                {
+                    return new HashSet<int>(_ownedOrFreeChampionIds);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not resolve owned/free champion ids: {ex.Message}");
+                return new HashSet<int>();
+            }
+        }
+''')
+          path.write_text(text, encoding='utf-8')
+
+          # DataDragonService: keep all champions unfiltered; Remote Pick filters dynamically per phase.
+          path = Path('RiotAutoLogin/Services/DataDragonService.cs')
+          text = path.read_text(encoding='utf-8-sig')
+          text = text.replace('''                // Ban phase must allow banning every champion. Outside ban phase, prefer the LCU
+                // owned/free list so Remote Pick does not offer champions the player cannot pick.
+                if (!IsCurrentChampSelectBanPhase())
+                {
+                    var ownedChampions = GetOwnedOrFreeChampionsFromLeagueClient();
+                    if (ownedChampions.Count > 0)
+                    {
+                        Debug.WriteLine($"Loaded {ownedChampions.Count} owned/free champions from LCU");
+                        return ownedChampions;
+                    }
+                }
+
+''', '''                // Keep Data Dragon as an unfiltered champion source.
+                // Remote Pick applies owned/free filtering dynamically by champ-select phase.
+
+''')
+          path.write_text(text, encoding='utf-8')
+
+          # RemotePickServerService: parse team-side picks, detect global ban phase, and filter owned/free outside ban phase.
+          path = Path('RiotAutoLogin/Services/RemotePickServerService.cs')
+          text = path.read_text(encoding='utf-8-sig')
+          text = text.replace('''        public async Task<RemotePickState> GetStateAsync()
+        {
+            RemotePickState state = await GetTimerStateAsync();
+            var pickedChampionIds = new HashSet<int>();
+
+            if (state.IsInChampSelect && LCUService.CheckIfLeagueClientIsOpen())
+            {
+                string[] sessionResult = LCUService.ClientRequest("GET", "lol-champ-select/v1/session");
+                if (sessionResult[0] == "200")
+                {
+                    using JsonDocument doc = JsonDocument.Parse(sessionResult[1]);
+                    ParsePicks(doc.RootElement, pickedChampionIds);
+                    state.PickedChampionIds = pickedChampionIds.OrderBy(id => id).ToList();
+                }
+            }
+
+            if (state.IsInChampSelect)
+                await AddChampionSpellAndRuneListsAsync(state, new HashSet<int>(state.BannedChampionIds), pickedChampionIds);
+
+            return state;
+        }
+''', '''        public async Task<RemotePickState> GetStateAsync()
+        {
+            RemotePickState state = await GetTimerStateAsync();
+            var pickedChampionIds = new HashSet<int>();
+            var allyPickedChampionIds = new HashSet<int>();
+            var enemyPickedChampionIds = new HashSet<int>();
+
+            if (state.IsInChampSelect && LCUService.CheckIfLeagueClientIsOpen())
+            {
+                string[] sessionResult = LCUService.ClientRequest("GET", "lol-champ-select/v1/session");
+                if (sessionResult[0] == "200")
+                {
+                    using JsonDocument doc = JsonDocument.Parse(sessionResult[1]);
+                    ParsePicks(doc.RootElement, pickedChampionIds, allyPickedChampionIds, enemyPickedChampionIds);
+                    state.PickedChampionIds = pickedChampionIds.OrderBy(id => id).ToList();
+                    state.AllyPickedChampionIds = allyPickedChampionIds.OrderBy(id => id).ToList();
+                    state.EnemyPickedChampionIds = enemyPickedChampionIds.OrderBy(id => id).ToList();
+                }
+            }
+
+            if (state.IsInChampSelect)
+                await AddChampionSpellAndRuneListsAsync(state, new HashSet<int>(state.BannedChampionIds), pickedChampionIds, allyPickedChampionIds, enemyPickedChampionIds);
+
+            return state;
+        }
+''')
+
+          old_method = '''        private async Task AddChampionSpellAndRuneListsAsync(RemotePickState state, HashSet<int> bannedChampionIds, HashSet<int> pickedChampionIds)
+        {
+            await EnsureRemoteChampionCacheAsync();
+            await EnsureRemoteSpellCacheAsync();
+
+            var availableChampionIds = new HashSet<int>(state.AvailableChampionIds);
+            bool shouldFilterRandomChampions = state.IsRandomChampionMode && availableChampionIds.Count > 0;
+
+            state.Champions = (_remoteChampionCache ?? new List<RemoteChampionDto>())
+                .Where(champion => !shouldFilterRandomChampions || availableChampionIds.Contains(champion.Id) || state.SelectedChampionId == champion.Id || state.PickIntentChampionId == champion.Id || pickedChampionIds.Contains(champion.Id))
+                .Select(champion => new RemoteChampionDto
+                {
+                    Id = champion.Id,
+                    Name = champion.Name,
+                    ImageUrl = champion.ImageUrl,
+                    IsBanned = bannedChampionIds.Contains(champion.Id),
+                    IsPicked = pickedChampionIds.Contains(champion.Id),
+                    IsSelected = state.SelectedChampionId == champion.Id,
+                    IsIntent = state.PickIntentChampionId == champion.Id,
+                    IsAvailableInCurrentMode = !shouldFilterRandomChampions || availableChampionIds.Contains(champion.Id) || state.SelectedChampionId == champion.Id || state.PickIntentChampionId == champion.Id
+                })
+                .ToList();
+
+            state.SummonerSpells = (_remoteSpellCache ?? new List<RemoteSummonerSpellDto>())
+                .Select(spell => new RemoteSummonerSpellDto
+                {
+                    Id = spell.Id,
+                    Name = spell.Name,
+                    Description = spell.Description,
+                    ImageUrl = spell.ImageUrl,
+                    IsSpell1 = state.Spell1Id == spell.Id,
+                    IsSpell2 = state.Spell2Id == spell.Id,
+                    IsAvailable = state.AvailableSpellIds.Count == 0 || state.AvailableSpellIds.Contains(spell.Id) || state.Spell1Id == spell.Id || state.Spell2Id == spell.Id
+                })
+                .ToList();
+
+            AddRunePages(state);
+            AddRecommendedRunePages(state);
+        }
+'''
+          new_method = '''        private async Task AddChampionSpellAndRuneListsAsync(RemotePickState state, HashSet<int> bannedChampionIds, HashSet<int> pickedChampionIds, HashSet<int> allyPickedChampionIds, HashSet<int> enemyPickedChampionIds)
+        {
+            await EnsureRemoteChampionCacheAsync();
+            await EnsureRemoteSpellCacheAsync();
+
+            var availableChampionIds = new HashSet<int>(state.AvailableChampionIds);
+            HashSet<int> ownedOrFreeChampionIds = RemoteChampionAvailabilityService.GetOwnedOrFreeChampionIds();
+            bool shouldFilterRandomChampions = state.IsRandomChampionMode && availableChampionIds.Count > 0;
+            bool shouldFilterOwnedChampions = !state.IsBanPhase && ownedOrFreeChampionIds.Count > 0;
+
+            bool IsAlwaysVisible(RemoteChampionDto champion) =>
+                state.SelectedChampionId == champion.Id ||
+                state.PickIntentChampionId == champion.Id ||
+                pickedChampionIds.Contains(champion.Id) ||
+                bannedChampionIds.Contains(champion.Id);
+
+            bool IsRandomAvailable(RemoteChampionDto champion) =>
+                !shouldFilterRandomChampions || availableChampionIds.Contains(champion.Id) || IsAlwaysVisible(champion);
+
+            bool IsOwnedAvailable(RemoteChampionDto champion) =>
+                !shouldFilterOwnedChampions || ownedOrFreeChampionIds.Contains(champion.Id) || IsAlwaysVisible(champion);
+
+            state.Champions = (_remoteChampionCache ?? new List<RemoteChampionDto>())
+                .Where(champion => IsRandomAvailable(champion) && IsOwnedAvailable(champion))
+                .Select(champion => new RemoteChampionDto
+                {
+                    Id = champion.Id,
+                    Name = champion.Name,
+                    ImageUrl = champion.ImageUrl,
+                    IsBanned = bannedChampionIds.Contains(champion.Id),
+                    IsPicked = pickedChampionIds.Contains(champion.Id),
+                    IsSelected = state.SelectedChampionId == champion.Id,
+                    IsIntent = state.PickIntentChampionId == champion.Id,
+                    IsAvailableInCurrentMode = IsRandomAvailable(champion),
+                    TeamSide = allyPickedChampionIds.Contains(champion.Id) ? "ally" : enemyPickedChampionIds.Contains(champion.Id) ? "enemy" : string.Empty
+                })
+                .ToList();
+
+            state.SummonerSpells = (_remoteSpellCache ?? new List<RemoteSummonerSpellDto>())
+                .Select(spell => new RemoteSummonerSpellDto
+                {
+                    Id = spell.Id,
+                    Name = spell.Name,
+                    Description = spell.Description,
+                    ImageUrl = spell.ImageUrl,
+                    IsSpell1 = state.Spell1Id == spell.Id,
+                    IsSpell2 = state.Spell2Id == spell.Id,
+                    IsAvailable = state.AvailableSpellIds.Count == 0 || state.AvailableSpellIds.Contains(spell.Id) || state.Spell1Id == spell.Id || state.Spell2Id == spell.Id
+                })
+                .ToList();
+
+            AddRunePages(state);
+            AddRecommendedRunePages(state);
+        }
+'''
+          text = text.replace(old_method, new_method)
+          text = text.replace('''        private static void ParsePicks(JsonElement root, HashSet<int> pickedChampionIds)
+        {
+            AddChampionIdsFromTeam(root, "myTeam", pickedChampionIds);
+            AddChampionIdsFromTeam(root, "theirTeam", pickedChampionIds);
+        }
+''', '''        private static void ParsePicks(JsonElement root, HashSet<int> pickedChampionIds, HashSet<int> allyPickedChampionIds, HashSet<int> enemyPickedChampionIds)
+        {
+            AddChampionIdsFromTeam(root, "myTeam", pickedChampionIds, allyPickedChampionIds);
+            AddChampionIdsFromTeam(root, "theirTeam", pickedChampionIds, enemyPickedChampionIds);
+        }
+''')
+          text = text.replace('''                    if (inProgress)
+                    {
+                        activeIds.Add(actionId);
+                        if (string.IsNullOrWhiteSpace(activeType)) activeType = actionType;
+                    }
+''', '''                    if (inProgress)
+                    {
+                        activeIds.Add(actionId);
+                        if (string.IsNullOrWhiteSpace(activeType)) activeType = actionType;
+                        if (actionType == "ban") state.IsBanPhase = true;
+                    }
+''')
+          text = text.replace('''        private static void AddChampionIdsFromTeam(JsonElement root, string propertyName, HashSet<int> championIds)
+        {
+            if (!root.TryGetProperty(propertyName, out JsonElement teamElement) || teamElement.ValueKind != JsonValueKind.Array)
+                return;
+            foreach (JsonElement player in teamElement.EnumerateArray())
+            {
+                if (TryGetPropertyInt(player, "championId", out int championId) && championId > 0) championIds.Add(championId);
+            }
+        }
+''', '''        private static void AddChampionIdsFromTeam(JsonElement root, string propertyName, HashSet<int> championIds, HashSet<int>? teamChampionIds = null)
+        {
+            if (!root.TryGetProperty(propertyName, out JsonElement teamElement) || teamElement.ValueKind != JsonValueKind.Array)
+                return;
+            foreach (JsonElement player in teamElement.EnumerateArray())
+            {
+                if (TryGetPropertyInt(player, "championId", out int championId) && championId > 0)
+                {
+                    championIds.Add(championId);
+                    teamChampionIds?.Add(championId);
+                }
+            }
+        }
+''')
+          path.write_text(text, encoding='utf-8')
+
+          # Remote Pick HTML: split picked champions into team rails and keep grid focused on actionable champions.
+          path = Path('RiotAutoLogin/Services/RemotePickPageHtml.cs')
+          text = path.read_text(encoding='utf-8-sig')
+          text = text.replace('''.mini-card.banned img { filter:grayscale(1) brightness(.6); border-color:rgba(182,74,85,.8); }''', '''.mini-card.banned img { filter:grayscale(1) brightness(.6); border-color:rgba(182,74,85,.8); }
+    .team-section { padding:9px 10px; border-bottom:1px solid rgba(200,170,110,.14); }
+    .team-section:last-child { border-bottom:0; }
+    .team-title { margin:0 0 8px; color:var(--gold); font:900 10px system-ui,sans-serif; text-transform:uppercase; letter-spacing:.16em; }
+    .team-title.ally { color:#d7fffb; }
+    .team-title.enemy { color:#ffced5; }
+    .rail-list.compact { padding:0; }
+    .rail-empty.compact { padding:4px 0 2px; }
+    .mini-card.ally { border-color:rgba(10,200,185,.28); background:rgba(10,200,185,.055); }
+    .mini-card.ally img { border-color:rgba(10,200,185,.66); }
+    .mini-card.enemy { border-color:rgba(182,74,85,.34); background:rgba(182,74,85,.06); }
+    .mini-card.enemy img { border-color:rgba(182,74,85,.78); }
+    .mini-card.intent { box-shadow:inset 3px 0 0 rgba(10,200,185,.75); }''')
+          text = text.replace('''<aside class="panel side"><h2>Picked</h2><div id="pickedList" class="rail-list"></div></aside>''', '''<aside class="panel side"><h2>Teams</h2><div id="pickedList"></div></aside>''')
+          text = text.replace('''function renderAll(){if(!state)return;updateStatusOnly();renderLoadout(desktopLoadoutEl);renderLoadout(mobileLoadoutEl);renderChampionGrid();renderRail(pickedListEl,(state.champions||[]).filter(c=>c.isPicked),'Picked');renderRail(bannedListEl,(state.champions||[]).filter(c=>c.isBanned),'Banned',true);}''', '''function renderAll(){if(!state)return;updateStatusOnly();renderLoadout(desktopLoadoutEl);renderLoadout(mobileLoadoutEl);renderChampionGrid();renderTeamRail(pickedListEl,state.champions||[]);renderRail(bannedListEl,(state.champions||[]).filter(c=>c.isBanned),'Banned',true);}''')
+          text = text.replace('''function renderRail(el,champions,label,banned=false){el.innerHTML='';if(!champions.length){el.innerHTML=`<div class="rail-empty">No ${label.toLowerCase()} champions yet.</div>`;return;}for(const c of champions.slice(0,10)){const row=document.createElement('div');row.className='mini-card'+(banned?' banned':'');row.innerHTML=`<img src="${escapeAttr(c.imageUrl)}" alt=""><div><div class="name">${escapeHtml(c.name)}</div><div class="sub">${label}</div></div>`;el.appendChild(row);}}''', '''function renderTeamRail(el,champions){el.innerHTML='';const ally=dedupeTeam(champions.filter(c=>c.teamSide==='ally'||c.isSelected||c.isIntent));const enemy=dedupeTeam(champions.filter(c=>c.teamSide==='enemy'));const section=(title,list,cls,empty)=>{const s=document.createElement('div');s.className='team-section';s.innerHTML=`<div class="team-title ${cls}">${title}</div>`;if(!list.length){s.innerHTML+=`<div class="rail-empty compact">${empty}</div>`;}else{const wrap=document.createElement('div');wrap.className='rail-list compact';for(const c of list.slice(0,5)){const row=document.createElement('div');row.className=`mini-card ${cls}${c.isIntent?' intent':''}`;row.innerHTML=`<img src="${escapeAttr(c.imageUrl)}" alt=""><div><div class="name">${escapeHtml(c.name)}</div><div class="sub">${c.isIntent?'Intent':title}</div></div>`;wrap.appendChild(row);}s.appendChild(wrap);}el.appendChild(s);};section('Your team',ally,'ally','No ally picks yet.');section('Enemy team',enemy,'enemy','No enemy picks yet.');}
+function dedupeTeam(list){const seen=new Set();return list.filter(c=>{const key=(c.teamSide||'')+'|'+c.id;if(seen.has(key))return false;seen.add(key);return true;});}
+function renderRail(el,champions,label,banned=false){el.innerHTML='';if(!champions.length){el.innerHTML=`<div class="rail-empty">No ${label.toLowerCase()} champions yet.</div>`;return;}for(const c of champions.slice(0,10)){const row=document.createElement('div');row.className='mini-card'+(banned?' banned':'');row.innerHTML=`<img src="${escapeAttr(c.imageUrl)}" alt=""><div><div class="name">${escapeHtml(c.name)}</div><div class="sub">${label}</div></div>`;el.appendChild(row);}}''')
+          text = text.replace('''function renderChampionGrid(){if(!state)return;const champions=state.champions||[];const filtered=champions.filter(c=>c.name.toLowerCase().includes(query));''', '''function renderChampionGrid(){if(!state)return;const champions=(state.champions||[]).filter(c=>!c.isPicked&&!c.isBanned);const filtered=champions.filter(c=>c.name.toLowerCase().includes(query));''')
+          path.write_text(text, encoding='utf-8')
+
+          Path('.github/workflows/fix-remote-pick-owned-filter-teams-once.yml').unlink(missing_ok=True)
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git status --short
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git add RiotAutoLogin/Models/RemotePickModels.cs RiotAutoLogin/Services/RemoteChampionAvailabilityService.cs RiotAutoLogin/Services/DataDragonService.cs RiotAutoLogin/Services/RemotePickServerService.cs RiotAutoLogin/Services/RemotePickPageHtml.cs .github/workflows/fix-remote-pick-owned-filter-teams-once.yml
+          git commit -m "Fix Remote Pick champion filtering and team rails"
+          git pull --rebase origin master
+          git push origin HEAD:master
