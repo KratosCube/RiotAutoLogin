@@ -3,8 +3,7 @@ name: Fix Remote Pick timer once
 on:
   push:
     branches: [ master ]
-    paths:
-      - '.github/workflows/fix-remote-pick-timer-once.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -22,8 +21,6 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import re
-          import sys
 
           path = Path('RiotAutoLogin/Services/RemotePickServerService.cs')
           workflow_path = Path('.github/workflows/fix-remote-pick-timer-once.yml')
@@ -31,48 +28,26 @@ jobs:
           text = path.read_text(encoding='utf-8-sig')
           original = text
 
-          old_call = '''TryLoadQueueFromGameflowOrLobby(state);
-            TryReadLiveGameState(state);'''
-          new_call = '''TryLoadQueueFromGameflowOrLobby(state);
-            if (state.Phase == "GameStart" || state.Phase == "InProgress")
-                TryReadLiveGameState(state);'''
-          text = text.replace(old_call, new_call, 1)
+          text = text.replace(
+              'TryLoadQueueFromGameflowOrLobby(state);\n            TryReadLiveGameState(state);',
+              'TryLoadQueueFromGameflowOrLobby(state);\n\n            if (state.Phase == "GameStart" || state.Phase == "InProgress")\n                TryReadLiveGameState(state);',
+              1,
+          )
 
-          old_method = '''        private static void TryReadLiveGameState(RemotePickState state)
-        {
-            state.IsGameClientRunning = IsLeagueGameClientRunning();
-            state.IsGameLoaded = false;
-            state.GameTimeSeconds = -1;
-            state.GameStatus = state.IsGameClientRunning ? "Loading" : "Waiting";
+          text = text.replace(
+              '            if (TryReadLiveGameStats("https://127.0.0.1:2999/liveclientdata/gamestats", state))\n                return;\n\n            TryReadLiveGameStats("http://127.0.0.1:2999/liveclientdata/gamestats", state);',
+              '            if (!state.IsGameClientRunning)\n                return;\n\n            TryReadLiveGameStats("https://127.0.0.1:2999/liveclientdata/gamestats", state);',
+              1,
+          )
 
-            if (TryReadLiveGameStats("https://127.0.0.1:2999/liveclientdata/gamestats", state))
-                return;
-
-            TryReadLiveGameStats("http://127.0.0.1:2999/liveclientdata/gamestats", state);
-        }'''
-          new_method = '''        private static void TryReadLiveGameState(RemotePickState state)
-        {
-            state.IsGameClientRunning = IsLeagueGameClientRunning();
-            state.IsGameLoaded = false;
-            state.GameTimeSeconds = -1;
-            state.GameStatus = state.IsGameClientRunning ? "Loading" : "Waiting";
-
-            if (!state.IsGameClientRunning)
-                return;
-
-            TryReadLiveGameStats("https://127.0.0.1:2999/liveclientdata/gamestats", state);
-        }'''
-          text = text.replace(old_method, new_method, 1)
-
-          if text == original:
-              print('RemotePickServerService.cs did not change; expected patterns were not found or already patched.')
-          else:
+          if text != original:
               path.write_text(text, encoding='utf-8')
               print('Patched RemotePickServerService.cs')
+          else:
+              print('RemotePickServerService.cs was already patched or patterns were not found')
 
-          if workflow_path.exists():
-              workflow_path.unlink()
-              print('Removed one-time workflow file')
+          workflow_path.unlink(missing_ok=True)
+          print('Removed one-time workflow file')
 
       - name: Commit patch
         shell: bash
@@ -87,4 +62,5 @@ jobs:
           fi
           git add RiotAutoLogin/Services/RemotePickServerService.cs .github/workflows/fix-remote-pick-timer-once.yml
           git commit -m "Fix Remote Pick timer Live Client polling"
-          git push
+          git pull --rebase origin master
+          git push origin HEAD:master
