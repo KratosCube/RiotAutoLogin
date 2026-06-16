@@ -13,6 +13,7 @@ namespace RiotAutoLogin.Services
         public string TagLine { get; set; } = string.Empty;
         public string Puuid { get; set; } = string.Empty;
         public int Greyscreens { get; set; }
+        public long GreyscreenSeconds { get; set; }
         public string Source { get; set; } = string.Empty;
     }
 
@@ -32,7 +33,7 @@ namespace RiotAutoLogin.Services
             if (string.IsNullOrWhiteSpace(summoner.puuid) && string.IsNullOrWhiteSpace(summoner.accountId) && string.IsNullOrWhiteSpace(summoner.summonerId))
                 return Error("LCU did not return a PUUID, accountId, or summonerId for the current summoner.");
 
-            if (TryReadMatchHistoryDeaths(summoner.puuid, summoner.accountId, summoner.summonerId, out int deaths, out string source))
+            if (TryReadMatchHistoryStats(summoner.puuid, summoner.accountId, summoner.summonerId, out int deaths, out long deadSeconds, out string source))
             {
                 return new LcuGreyscreenStatsResult
                 {
@@ -41,8 +42,9 @@ namespace RiotAutoLogin.Services
                     TagLine = summoner.tagLine,
                     Puuid = summoner.puuid,
                     Greyscreens = deaths,
+                    GreyscreenSeconds = deadSeconds,
                     Source = source,
-                    Message = $"Synced {deaths} greyscreens from LCU match history."
+                    Message = deadSeconds > 0 ? $"Synced {FormatDuration(deadSeconds)} greyscreen time from LCU match history ({deaths} deaths)." : $"Synced {deaths} greyscreens from LCU match history."
                 };
             }
 
@@ -91,7 +93,7 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        private static bool TryReadMatchHistoryDeaths(string puuid, string accountId, string summonerId, out int deaths, out string source)
+        private static bool TryReadMatchHistoryStats(string puuid, string accountId, string summonerId, out int deaths, out long deadSeconds, out string source)
         {
             string lookupId = !string.IsNullOrWhiteSpace(puuid) ? puuid : !string.IsNullOrWhiteSpace(accountId) ? accountId : summonerId;
             source = $"lol-match-history/v1/products/lol/{lookupId}/matches?begIndex=0&endIndex=100";
@@ -99,25 +101,28 @@ namespace RiotAutoLogin.Services
             if (!result[0].StartsWith("2") || string.IsNullOrWhiteSpace(result[1]))
             {
                 deaths = 0;
+                deadSeconds = 0;
                 return false;
             }
 
             try
             {
                 using JsonDocument doc = JsonDocument.Parse(result[1]);
-                return TrySumDeathsForCurrentPlayer(doc.RootElement, puuid, accountId, summonerId, out deaths);
+                return TrySumStatsForCurrentPlayer(doc.RootElement, puuid, accountId, summonerId, out deaths, out deadSeconds);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Could not parse match history deaths: {ex.Message}");
                 deaths = 0;
+                deadSeconds = 0;
                 return false;
             }
         }
 
-        private static bool TrySumDeathsForCurrentPlayer(JsonElement root, string puuid, string accountId, string summonerId, out int totalDeaths)
+        private static bool TrySumStatsForCurrentPlayer(JsonElement root, string puuid, string accountId, string summonerId, out int totalDeaths, out long totalDeadSeconds)
         {
             totalDeaths = 0;
+            totalDeadSeconds = 0;
 
             if (!TryFindGamesArray(root, out JsonElement games))
                 return false;
@@ -128,10 +133,13 @@ namespace RiotAutoLogin.Services
                 if (!TryFindParticipantIdForCurrentPlayer(game, puuid, accountId, summonerId, out int participantId))
                     continue;
 
-                if (TryFindParticipantStats(game, participantId, out JsonElement stats) && TryReadDeaths(stats, out int deaths))
+                if (TryFindParticipantStats(game, participantId, out JsonElement stats))
                 {
                     foundCurrentPlayerInAnyGame = true;
-                    totalDeaths += deaths;
+                    if (TryReadDeaths(stats, out int deaths))
+                        totalDeaths += deaths;
+                    if (TryReadDeadSeconds(stats, out long seconds))
+                        totalDeadSeconds += seconds;
                 }
             }
 
@@ -237,6 +245,35 @@ namespace RiotAutoLogin.Services
             return false;
         }
 
+        private static bool TryReadDeadSeconds(JsonElement stats, out long seconds)
+        {
+            foreach (string propertyName in new[] { "totalTimeSpentDead", "timeSpentDead", "totalTimeDead", "deadTime" })
+            {
+                if (TryFindProperty(stats, propertyName, out JsonElement value) && TryGetLong(value, out seconds))
+                    return true;
+            }
+
+            seconds = 0;
+            return false;
+        }
+
+        private static string FormatDuration(long seconds)
+        {
+            if (seconds < 60)
+                return $"{seconds}s";
+
+            long minutes = seconds / 60;
+            if (minutes < 120)
+                return $"{minutes} min";
+
+            double hours = seconds / 3600.0;
+            if (hours < 48)
+                return $"{hours:F1} h";
+
+            double days = seconds / 86400.0;
+            return $"{days:F1} d";
+        }
+
         private static bool TryFindProperty(JsonElement element, string propertyName, out JsonElement value)
         {
             value = default;
@@ -272,6 +309,17 @@ namespace RiotAutoLogin.Services
                 return element.TryGetInt32(out value);
             if (element.ValueKind == JsonValueKind.String)
                 return int.TryParse(element.GetString(), out value);
+
+            value = 0;
+            return false;
+        }
+
+        private static bool TryGetLong(JsonElement element, out long value)
+        {
+            if (element.ValueKind == JsonValueKind.Number)
+                return element.TryGetInt64(out value);
+            if (element.ValueKind == JsonValueKind.String)
+                return long.TryParse(element.GetString(), out value);
 
             value = 0;
             return false;

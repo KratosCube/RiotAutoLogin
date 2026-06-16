@@ -14,6 +14,7 @@ namespace RiotAutoLogin.Models
         public int Wins { get; set; }
         public int Losses { get; set; }
         public int Greyscreens { get; set; }
+        public long GreyscreenSeconds { get; set; }
         public string GreyscreensLastUpdatedUtc { get; set; } = string.Empty;
         public string AvatarPath { get; set; } = string.Empty;
     }

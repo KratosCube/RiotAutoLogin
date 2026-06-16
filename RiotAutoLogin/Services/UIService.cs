@@ -195,7 +195,7 @@ namespace RiotAutoLogin.Services
         {
             EnsureGreyscreenStatsUi(window, accounts);
 
-            var (totalGames, totalWins, totalLosses, winRate, totalGreyscreens) = AccountService.CalculateStats(accounts);
+            var (totalGames, totalWins, totalLosses, winRate, totalGreyscreens, totalGreyscreenSeconds) = AccountService.CalculateStats(accounts);
 
             var txtStatsGamesValue = window.FindName("txtStatsGamesValue") as TextBlock;
             var txtStatsWinsValue = window.FindName("txtStatsWinsValue") as TextBlock;
@@ -217,10 +217,10 @@ namespace RiotAutoLogin.Services
                 txtStatsWinRateValue.Text = $"{winRate:F1}%";
 
             if (txtStatsGreyscreensValue != null)
-                txtStatsGreyscreensValue.Text = totalGreyscreens.ToString();
+                txtStatsGreyscreensValue.Text = totalGreyscreenSeconds > 0 ? FormatGreyscreenDuration(totalGreyscreenSeconds) : totalGreyscreens.ToString();
 
             if (txtTotalGames != null)
-                txtTotalGames.Text = $"Total Games: {totalGames} | Wins: {totalWins} | Losses: {totalLosses} | Win Rate: {winRate:F1}% | Greyscreens: {totalGreyscreens}";
+                txtTotalGames.Text = $"Total Games: {totalGames} | Wins: {totalWins} | Losses: {totalLosses} | Win Rate: {winRate:F1}% | Greyscreen Time: {FormatGreyscreenDuration(totalGreyscreenSeconds)} | Deaths: {totalGreyscreens}";
         }
 
         private static void EnsureGreyscreenStatsUi(Window window, System.Collections.Generic.List<Models.Account> accounts)
@@ -267,7 +267,7 @@ namespace RiotAutoLogin.Services
                     {
                         new TextBlock
                         {
-                            Text = "Greyscreens",
+                            Text = "Greyscreen Time",
                             FontSize = 11,
                             Opacity = 0.65,
                             Foreground = window.Resources["TextColorBrush"] as Brush ?? Brushes.White
@@ -321,18 +321,40 @@ namespace RiotAutoLogin.Services
                 }
 
                 account.Greyscreens = result.Greyscreens;
+                account.GreyscreenSeconds = result.GreyscreenSeconds;
                 account.GreyscreensLastUpdatedUtc = DateTime.UtcNow.ToString("O");
                 AccountService.SaveAccounts(accounts);
                 RefreshAccountLists(window, accounts);
                 UpdateTotalGameStats(window, accounts);
 
                 string savedRiotId = string.IsNullOrWhiteSpace(account.TagLine) ? account.GameName : $"{account.GameName}#{account.TagLine}";
-                MessageBox.Show($"Saved {result.Greyscreens} greyscreens for {savedRiotId}.\nSource: {result.Source}", "Greyscreen Sync", MessageBoxButton.OK, MessageBoxImage.Information);
+                string formattedTime = FormatGreyscreenDuration(result.GreyscreenSeconds);
+                MessageBox.Show($"Saved greyscreen time for {savedRiotId}: {formattedTime} ({result.Greyscreens} deaths).\nSource: {result.Source}", "Greyscreen Sync", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             finally
             {
                 button.IsEnabled = true;
             }
+        }
+
+        private static string FormatGreyscreenDuration(long seconds)
+        {
+            if (seconds <= 0)
+                return "0 min";
+
+            if (seconds < 60)
+                return $"{seconds}s";
+
+            long minutes = seconds / 60;
+            if (minutes < 120)
+                return $"{minutes} min";
+
+            double hours = seconds / 3600.0;
+            if (hours < 48)
+                return $"{hours:F1} h";
+
+            double days = seconds / 86400.0;
+            return $"{days:F1} d";
         }
 
         private static Models.Account? FindSavedAccountForGreyscreenSync(System.Collections.Generic.List<Models.Account> accounts, LcuGreyscreenStatsResult result)

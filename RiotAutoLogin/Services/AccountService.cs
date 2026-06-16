@@ -148,15 +148,16 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        public static (int totalGames, int totalWins, int totalLosses, double winRate, int totalGreyscreens) CalculateStats(List<Account> accounts)
+        public static (int totalGames, int totalWins, int totalLosses, double winRate, int totalGreyscreens, long totalGreyscreenSeconds) CalculateStats(List<Account> accounts)
         {
             int totalGames = accounts.Sum(a => a.Wins + a.Losses);
             int totalWins = accounts.Sum(a => a.Wins);
             int totalLosses = accounts.Sum(a => a.Losses);
             int totalGreyscreens = accounts.Sum(a => a.Greyscreens);
+            long totalGreyscreenSeconds = accounts.Sum(a => a.GreyscreenSeconds);
             double winRate = totalGames > 0 ? (double)totalWins / totalGames * 100 : 0;
 
-            return (totalGames, totalWins, totalLosses, winRate, totalGreyscreens);
+            return (totalGames, totalWins, totalLosses, winRate, totalGreyscreens, totalGreyscreenSeconds);
         }
     }
 }
