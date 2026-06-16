@@ -15,23 +15,19 @@ namespace RiotAutoLogin.Services
         {
             var (mainBg, cardBg, secondaryBg, textColor, statsBg, winColor, lossColor, cardBorder) = GetThemeColors(isDarkMode);
 
-            // Update resource dictionaries
             window.Resources["MainBackgroundBrush"] = mainBg;
             window.Resources["CardBackgroundBrush"] = cardBg;
             window.Resources["SecondaryBackgroundBrush"] = secondaryBg;
             window.Resources["TextColorBrush"] = textColor;
 
-            // Update window background
             window.Background = isDarkMode ? 
                 new SolidColorBrush(Color.FromRgb(10, 10, 16)) : 
                 new SolidColorBrush(Color.FromRgb(245, 245, 250));
 
-            // Update stats panel
             var statsPanel = window.FindName("statsPanel") as Border;
             if (statsPanel != null)
                 statsPanel.Background = statsBg;
 
-            // Update main content border
             var mainContentBorder = VisualTreeHelperExtensions.FindVisualChildren<Border>(window)
                 .FirstOrDefault(b => b.CornerRadius.TopLeft == 20);
             if (mainContentBorder != null)
@@ -177,25 +173,16 @@ namespace RiotAutoLogin.Services
                 Console.WriteLine($"Updated lbLoginAccounts with {accounts?.Count ?? 0} accounts");
             }
             
-            // FIX: Also update the icLoginAccounts ItemsControl that displays the login cards!
             if (icLoginAccounts != null)
             {
                 Console.WriteLine($"🎯 Updating icLoginAccounts directly...");
-                
-                // Clear and set directly (bypass binding)
                 icLoginAccounts.ItemsSource = null;
                 icLoginAccounts.ItemsSource = accounts;
-                
-                // Force layout update
                 icLoginAccounts.UpdateLayout();
                 icLoginAccounts.InvalidateVisual();
-                
                 Console.WriteLine($"✅ Updated icLoginAccounts with {accounts?.Count ?? 0} accounts");
-                
-                // Double-check by counting items
                 Console.WriteLine($"icLoginAccounts.Items.Count after update: {icLoginAccounts.Items.Count}");
                 
-                // Try to find borders immediately after update
                 System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                 {
                     var borders = VisualTreeHelperExtensions.FindVisualChildren<Border>(icLoginAccounts).ToList();
@@ -222,12 +209,13 @@ namespace RiotAutoLogin.Services
 
         public static void UpdateTotalGameStats(Window window, System.Collections.Generic.List<Models.Account> accounts)
         {
-            var (totalGames, totalWins, totalLosses, winRate) = AccountService.CalculateStats(accounts);
+            var (totalGames, totalWins, totalLosses, winRate, totalGreyscreens) = AccountService.CalculateStats(accounts);
 
             var txtStatsGamesValue = window.FindName("txtStatsGamesValue") as TextBlock;
             var txtStatsWinsValue = window.FindName("txtStatsWinsValue") as TextBlock;
             var txtStatsLossesValue = window.FindName("txtStatsLossesValue") as TextBlock;
             var txtStatsWinRateValue = window.FindName("txtStatsWinRateValue") as TextBlock;
+            var txtStatsGreyscreensValue = window.FindName("txtStatsGreyscreensValue") as TextBlock;
             var txtTotalGames = window.FindName("txtTotalGames") as TextBlock;
 
             if (txtStatsGamesValue != null)
@@ -242,8 +230,11 @@ namespace RiotAutoLogin.Services
             if (txtStatsWinRateValue != null)
                 txtStatsWinRateValue.Text = $"{winRate:F1}%";
 
+            if (txtStatsGreyscreensValue != null)
+                txtStatsGreyscreensValue.Text = totalGreyscreens.ToString();
+
             if (txtTotalGames != null)
-                txtTotalGames.Text = $"Total Games: {totalGames} | Wins: {totalWins} | Losses: {totalLosses} | Win Rate: {winRate:F1}%";
+                txtTotalGames.Text = $"Total Games: {totalGames} | Wins: {totalWins} | Losses: {totalLosses} | Win Rate: {winRate:F1}% | Greyscreens: {totalGreyscreens}";
         }
     }
-} 
+}
