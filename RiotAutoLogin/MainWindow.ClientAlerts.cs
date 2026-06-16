@@ -1,4 +1,4 @@
-using RiotAutoLogin.Models;
+using RiotAutoLogin.Controls;
 using RiotAutoLogin.Services;
 using RiotAutoLogin.Utilities;
 using System;
@@ -10,8 +10,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
-using System.Windows.Media;
 
 namespace RiotAutoLogin
 {
@@ -19,14 +17,12 @@ namespace RiotAutoLogin
     {
         private CancellationTokenSource? _clientAlertsCts;
         private bool _clientAlertsInitialized;
+        private bool _suppressClientAlertSettingEvents;
         private bool _gameStartAlertShownForCurrentGame;
         private bool _flashWarningShownForCurrentChampSelect;
         private string _lastClientAlertPhase = string.Empty;
         private string _lastFlashWarningSessionKey = string.Empty;
-        private ToggleButton? _tglGameStartAlert;
-        private ToggleButton? _tglFlashSlotWarning;
-        private RadioButton? _rbFlashSlot1;
-        private RadioButton? _rbFlashSlot2;
+        private ClientAlertsSettingsCard? _clientAlertsSettingsCard;
 
         protected override void OnContentRendered(EventArgs e)
         {
@@ -51,186 +47,124 @@ namespace RiotAutoLogin
             if (SettingsTab == null)
                 return;
 
-            StackPanel? settingsStack = VisualTreeHelperExtensions.FindVisualChildren<StackPanel>(SettingsTab).FirstOrDefault();
-            if (settingsStack == null || settingsStack.Children.OfType<FrameworkElement>().Any(element => Equals(element.Tag, "ClientAlertsSettingsCard")))
+            if (_clientAlertsSettingsCard != null)
                 return;
 
-            var card = new Border
-            {
-                Tag = "ClientAlertsSettingsCard",
-                Background = Resources["CardBackgroundBrush"] as Brush ?? new SolidColorBrush(Color.FromRgb(21, 27, 35)),
-                CornerRadius = new CornerRadius(18),
-                Padding = new Thickness(18),
-                Margin = new Thickness(0, 0, 0, 14)
-            };
+            StackPanel? settingsStack = FindSettingsRootStackPanel();
+            if (settingsStack == null)
+                return;
 
-            var root = new StackPanel();
-            root.Children.Add(new TextBlock
-            {
-                Text = "Client Alerts",
-                FontSize = 18,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Resources["TextColorBrush"] as Brush ?? Brushes.White
-            });
-            root.Children.Add(new TextBlock
-            {
-                Text = "Intrusive notifications for game start and warnings when Flash is on the opposite summoner spell slot.",
-                Margin = new Thickness(0, 6, 0, 14),
-                FontSize = 13,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = Resources["TextColorBrush"] as Brush ?? Brushes.White,
-                Opacity = 0.68
-            });
+            ClientAlertsSettingsCard? existingCard = settingsStack.Children
+                .OfType<ClientAlertsSettingsCard>()
+                .FirstOrDefault();
 
-            _tglGameStartAlert = CreateSettingsToggle("Enable game start alert", "Plays a repeated warning sound and shows a top-most dialog when the game starts.", _hotkeySettings.GameStartAlertEnabled);
-            _tglGameStartAlert.Checked += (_, _) =>
+            _clientAlertsSettingsCard = existingCard ?? new ClientAlertsSettingsCard();
+
+            if (existingCard == null)
             {
+                int insertIndex = Math.Min(3, settingsStack.Children.Count);
+                settingsStack.Children.Insert(insertIndex, _clientAlertsSettingsCard);
+            }
+
+            HookClientAlertSettingsEvents(_clientAlertsSettingsCard);
+        }
+
+        private StackPanel? FindSettingsRootStackPanel()
+        {
+            ScrollViewer? scrollViewer = VisualTreeHelperExtensions
+                .FindVisualChildren<ScrollViewer>(SettingsTab)
+                .FirstOrDefault(viewer => viewer.Content is StackPanel);
+
+            return scrollViewer?.Content as StackPanel;
+        }
+
+        private void HookClientAlertSettingsEvents(ClientAlertsSettingsCard card)
+        {
+            card.tglGameStartAlert.Checked += (_, _) =>
+            {
+                if (_suppressClientAlertSettingEvents)
+                    return;
+
                 _hotkeySettings.GameStartAlertEnabled = true;
                 SaveHotkeySettings();
                 UpdateClientAlertSettingsUi();
             };
-            _tglGameStartAlert.Unchecked += (_, _) =>
+
+            card.tglGameStartAlert.Unchecked += (_, _) =>
             {
+                if (_suppressClientAlertSettingEvents)
+                    return;
+
                 _hotkeySettings.GameStartAlertEnabled = false;
                 SaveHotkeySettings();
                 UpdateClientAlertSettingsUi();
             };
-            root.Children.Add(_tglGameStartAlert.Tag as UIElement ?? _tglGameStartAlert);
 
-            _tglFlashSlotWarning = CreateSettingsToggle("Enable Flash side warning", "Shows a warning if Flash is on the other side than your preference during champion select.", _hotkeySettings.FlashSlotWarningEnabled);
-            _tglFlashSlotWarning.Checked += (_, _) =>
+            card.tglFlashSlotWarning.Checked += (_, _) =>
             {
+                if (_suppressClientAlertSettingEvents)
+                    return;
+
                 _hotkeySettings.FlashSlotWarningEnabled = true;
                 SaveHotkeySettings();
                 UpdateClientAlertSettingsUi();
             };
-            _tglFlashSlotWarning.Unchecked += (_, _) =>
+
+            card.tglFlashSlotWarning.Unchecked += (_, _) =>
             {
+                if (_suppressClientAlertSettingEvents)
+                    return;
+
                 _hotkeySettings.FlashSlotWarningEnabled = false;
                 SaveHotkeySettings();
                 UpdateClientAlertSettingsUi();
             };
-            root.Children.Add(_tglFlashSlotWarning.Tag as UIElement ?? _tglFlashSlotWarning);
 
-            var flashPreference = new Border
+            card.rbFlashSlot1.Checked += (_, _) =>
             {
-                Background = Resources["SecondaryBackgroundBrush"] as Brush ?? new SolidColorBrush(Color.FromRgb(30, 38, 50)),
-                CornerRadius = new CornerRadius(12),
-                Padding = new Thickness(14),
-                Margin = new Thickness(0, 12, 0, 0)
-            };
-            var flashRoot = new StackPanel();
-            flashRoot.Children.Add(new TextBlock
-            {
-                Text = "Preferred Flash slot",
-                FontSize = 14,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Resources["TextColorBrush"] as Brush ?? Brushes.White
-            });
-            flashRoot.Children.Add(new TextBlock
-            {
-                Text = "Spell 1 is usually D, Spell 2 is usually F. If Flash is on the other side, the app warns you once per champion select.",
-                Margin = new Thickness(0, 4, 0, 10),
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = Resources["TextColorBrush"] as Brush ?? Brushes.White,
-                Opacity = 0.68
-            });
+                if (_suppressClientAlertSettingEvents)
+                    return;
 
-            var radioRow = new StackPanel { Orientation = Orientation.Horizontal };
-            _rbFlashSlot1 = CreateFlashRadio("Spell 1 / D", 1);
-            _rbFlashSlot2 = CreateFlashRadio("Spell 2 / F", 2);
-            radioRow.Children.Add(_rbFlashSlot1);
-            radioRow.Children.Add(_rbFlashSlot2);
-            flashRoot.Children.Add(radioRow);
-            flashPreference.Child = flashRoot;
-            root.Children.Add(flashPreference);
-
-            card.Child = root;
-            int insertIndex = Math.Min(3, settingsStack.Children.Count);
-            settingsStack.Children.Insert(insertIndex, card);
-        }
-
-        private ToggleButton CreateSettingsToggle(string title, string description, bool isChecked)
-        {
-            var toggle = new ToggleButton
-            {
-                Width = 100,
-                Content = isChecked ? "ON" : "OFF",
-                IsChecked = isChecked,
-                Style = TryFindResource("ModernToggleButton") as Style
-            };
-
-            var grid = new Grid { Margin = new Thickness(0, 0, 0, 12) };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var textPanel = new StackPanel();
-            textPanel.Children.Add(new TextBlock
-            {
-                Text = title,
-                FontSize = 14,
-                Foreground = Resources["TextColorBrush"] as Brush ?? Brushes.White
-            });
-            textPanel.Children.Add(new TextBlock
-            {
-                Text = description,
-                Margin = new Thickness(0, 4, 10, 0),
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = Resources["TextColorBrush"] as Brush ?? Brushes.White,
-                Opacity = 0.68
-            });
-
-            Grid.SetColumn(textPanel, 0);
-            Grid.SetColumn(toggle, 1);
-            grid.Children.Add(textPanel);
-            grid.Children.Add(toggle);
-            toggle.Tag = grid;
-            return toggle;
-        }
-
-        private RadioButton CreateFlashRadio(string text, int slot)
-        {
-            var radio = new RadioButton
-            {
-                Content = text,
-                Tag = slot,
-                GroupName = "PreferredFlashSlot",
-                Margin = new Thickness(0, 0, 18, 0),
-                Foreground = Resources["TextColorBrush"] as Brush ?? Brushes.White,
-                FontSize = 13,
-                VerticalContentAlignment = VerticalAlignment.Center
-            };
-            radio.Checked += (_, _) =>
-            {
-                _hotkeySettings.PreferredFlashSlot = slot;
+                _hotkeySettings.PreferredFlashSlot = 1;
                 SaveHotkeySettings();
+                UpdateClientAlertSettingsUi();
             };
-            return radio;
+
+            card.rbFlashSlot2.Checked += (_, _) =>
+            {
+                if (_suppressClientAlertSettingEvents)
+                    return;
+
+                _hotkeySettings.PreferredFlashSlot = 2;
+                SaveHotkeySettings();
+                UpdateClientAlertSettingsUi();
+            };
         }
 
         private void UpdateClientAlertSettingsUi()
         {
-            if (_tglGameStartAlert != null)
-            {
-                _tglGameStartAlert.IsChecked = _hotkeySettings.GameStartAlertEnabled;
-                _tglGameStartAlert.Content = _hotkeySettings.GameStartAlertEnabled ? "ON" : "OFF";
-            }
-
-            if (_tglFlashSlotWarning != null)
-            {
-                _tglFlashSlotWarning.IsChecked = _hotkeySettings.FlashSlotWarningEnabled;
-                _tglFlashSlotWarning.Content = _hotkeySettings.FlashSlotWarningEnabled ? "ON" : "OFF";
-            }
+            if (_clientAlertsSettingsCard == null)
+                return;
 
             if (_hotkeySettings.PreferredFlashSlot != 1 && _hotkeySettings.PreferredFlashSlot != 2)
                 _hotkeySettings.PreferredFlashSlot = 2;
 
-            if (_rbFlashSlot1 != null)
-                _rbFlashSlot1.IsChecked = _hotkeySettings.PreferredFlashSlot == 1;
-            if (_rbFlashSlot2 != null)
-                _rbFlashSlot2.IsChecked = _hotkeySettings.PreferredFlashSlot == 2;
+            _suppressClientAlertSettingEvents = true;
+            try
+            {
+                _clientAlertsSettingsCard.tglGameStartAlert.IsChecked = _hotkeySettings.GameStartAlertEnabled;
+                _clientAlertsSettingsCard.tglGameStartAlert.Content = _hotkeySettings.GameStartAlertEnabled ? "ON" : "OFF";
+
+                _clientAlertsSettingsCard.tglFlashSlotWarning.IsChecked = _hotkeySettings.FlashSlotWarningEnabled;
+                _clientAlertsSettingsCard.tglFlashSlotWarning.Content = _hotkeySettings.FlashSlotWarningEnabled ? "ON" : "OFF";
+
+                _clientAlertsSettingsCard.rbFlashSlot1.IsChecked = _hotkeySettings.PreferredFlashSlot == 1;
+                _clientAlertsSettingsCard.rbFlashSlot2.IsChecked = _hotkeySettings.PreferredFlashSlot == 2;
+            }
+            finally
+            {
+                _suppressClientAlertSettingEvents = false;
+            }
         }
 
         private void StartClientAlertMonitor()
