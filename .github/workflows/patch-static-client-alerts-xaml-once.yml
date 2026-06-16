@@ -1,5 +1,5 @@
 name: Patch static client alerts XAML once
-# run: 2
+# run: 3
 
 on:
   push:
@@ -140,7 +140,6 @@ jobs:
               xaml_path.write_text(xaml, encoding='utf-8')
 
           Path('.github/workflows/patch-static-client-alerts-xaml-once.yml').unlink(missing_ok=True)
-          Path('.github/static-client-alerts-xaml-run.txt').unlink(missing_ok=True)
 
       - name: Commit patch
         shell: bash
@@ -150,7 +149,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git status --short
           if git diff --quiet && git diff --cached --quiet; then echo "No changes to commit."; exit 0; fi
-          git add RiotAutoLogin/MainWindow.xaml .github/workflows/patch-static-client-alerts-xaml-once.yml .github/static-client-alerts-xaml-run.txt
+          git add -A
           git commit -m "Add client alerts controls to MainWindow XAML"
           git pull --rebase origin master
           git push origin HEAD:master
