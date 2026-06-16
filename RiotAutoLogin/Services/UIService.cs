@@ -11,6 +11,9 @@ namespace RiotAutoLogin.Services
 {
     public static class UIService
     {
+        private const string GreyscreenValueTag = "GreyscreenTotalValue";
+        private const string GreyscreenSyncButtonTag = "GreyscreenSyncButton";
+
         public static void ApplyTheme(Window window, bool isDarkMode)
         {
             var (mainBg, cardBg, secondaryBg, textColor, statsBg, winColor, lossColor, cardBorder) = GetThemeColors(isDarkMode);
@@ -181,25 +184,6 @@ namespace RiotAutoLogin.Services
                 icLoginAccounts.UpdateLayout();
                 icLoginAccounts.InvalidateVisual();
                 Console.WriteLine($"✅ Updated icLoginAccounts with {accounts?.Count ?? 0} accounts");
-                Console.WriteLine($"icLoginAccounts.Items.Count after update: {icLoginAccounts.Items.Count}");
-                
-                System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    var borders = VisualTreeHelperExtensions.FindVisualChildren<Border>(icLoginAccounts).ToList();
-                    Console.WriteLine($"🔍 Found {borders.Count} borders immediately after icLoginAccounts update");
-                    
-                    foreach (var border in borders.Take(2))
-                    {
-                        if (border.Tag is Models.Account acc)
-                        {
-                            Console.WriteLine($"  ✅ Border with account: {acc.GameName}");
-                        }
-                        else
-                        {
-                            Console.WriteLine($"  ❌ Border without account tag: {border.Tag?.GetType().Name ?? "null"}");
-                        }
-                    }
-                }), System.Windows.Threading.DispatcherPriority.Render);
             }
             else
             {
@@ -209,13 +193,15 @@ namespace RiotAutoLogin.Services
 
         public static void UpdateTotalGameStats(Window window, System.Collections.Generic.List<Models.Account> accounts)
         {
+            EnsureGreyscreenStatsUi(window, accounts);
+
             var (totalGames, totalWins, totalLosses, winRate, totalGreyscreens) = AccountService.CalculateStats(accounts);
 
             var txtStatsGamesValue = window.FindName("txtStatsGamesValue") as TextBlock;
             var txtStatsWinsValue = window.FindName("txtStatsWinsValue") as TextBlock;
             var txtStatsLossesValue = window.FindName("txtStatsLossesValue") as TextBlock;
             var txtStatsWinRateValue = window.FindName("txtStatsWinRateValue") as TextBlock;
-            var txtStatsGreyscreensValue = window.FindName("txtStatsGreyscreensValue") as TextBlock;
+            var txtStatsGreyscreensValue = FindTaggedTextBlock(window, GreyscreenValueTag);
             var txtTotalGames = window.FindName("txtTotalGames") as TextBlock;
 
             if (txtStatsGamesValue != null)
@@ -235,6 +221,144 @@ namespace RiotAutoLogin.Services
 
             if (txtTotalGames != null)
                 txtTotalGames.Text = $"Total Games: {totalGames} | Wins: {totalWins} | Losses: {totalLosses} | Win Rate: {winRate:F1}% | Greyscreens: {totalGreyscreens}";
+        }
+
+        private static void EnsureGreyscreenStatsUi(Window window, System.Collections.Generic.List<Models.Account> accounts)
+        {
+            if (FindTaggedTextBlock(window, GreyscreenValueTag) != null)
+                return;
+
+            if (window.FindName("statsPanel") is not Border statsPanel || statsPanel.Child is not Grid grid)
+                return;
+
+            const int insertColumn = 4;
+            if (grid.ColumnDefinitions.Count > insertColumn)
+            {
+                grid.ColumnDefinitions.Insert(insertColumn, new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                foreach (UIElement child in grid.Children)
+                {
+                    int column = Grid.GetColumn(child);
+                    if (column >= insertColumn)
+                        Grid.SetColumn(child, column + 1);
+                }
+            }
+
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var greyscreenValue = new TextBlock
+            {
+                Tag = GreyscreenValueTag,
+                Text = "0",
+                Margin = new Thickness(0, 4, 0, 0),
+                FontSize = 20,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(182, 109, 255))
+            };
+
+            var card = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(20, 27, 36)),
+                CornerRadius = new CornerRadius(14),
+                Padding = new Thickness(14),
+                Margin = new Thickness(0, 0, 10, 0),
+                Child = new StackPanel
+                {
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = "Greyscreens",
+                            FontSize = 11,
+                            Opacity = 0.65,
+                            Foreground = window.Resources["TextColorBrush"] as Brush ?? Brushes.White
+                        },
+                        greyscreenValue
+                    }
+                }
+            };
+            Grid.SetColumn(card, insertColumn);
+            grid.Children.Add(card);
+
+            var syncButton = new Button
+            {
+                Tag = GreyscreenSyncButtonTag,
+                Content = new TextBlock
+                {
+                    Text = "☠",
+                    FontSize = 16,
+                    Foreground = new SolidColorBrush(Color.FromRgb(201, 182, 255)),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                },
+                ToolTip = "Sync greyscreens from the currently logged League account",
+                VerticalAlignment = VerticalAlignment.Stretch,
+                Margin = new Thickness(8, 0, 0, 0),
+                Style = window.TryFindResource("GhostIconButton") as Style
+            };
+            syncButton.Click += async (_, _) => await SyncGreyscreensAsync(window, accounts, syncButton);
+            Grid.SetColumn(syncButton, Math.Max(0, grid.ColumnDefinitions.Count - 1));
+            grid.Children.Add(syncButton);
+        }
+
+        private static async System.Threading.Tasks.Task SyncGreyscreensAsync(Window window, System.Collections.Generic.List<Models.Account> accounts, Button button)
+        {
+            button.IsEnabled = false;
+            try
+            {
+                LcuGreyscreenStatsResult result = await LcuGreyscreenStatsService.GetCurrentAccountGreyscreensAsync();
+                if (!result.Success)
+                {
+                    MessageBox.Show(result.Message, "Greyscreen Sync", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                Models.Account? account = FindSavedAccountForGreyscreenSync(accounts, result);
+                if (account == null)
+                {
+                    string riotId = string.IsNullOrWhiteSpace(result.TagLine) ? result.GameName : $"{result.GameName}#{result.TagLine}";
+                    MessageBox.Show($"Synced {result.Greyscreens} greyscreens for {riotId}, but no matching saved account was found.", "Greyscreen Sync", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                account.Greyscreens = result.Greyscreens;
+                account.GreyscreensLastUpdatedUtc = DateTime.UtcNow.ToString("O");
+                AccountService.SaveAccounts(accounts);
+                RefreshAccountLists(window, accounts);
+                UpdateTotalGameStats(window, accounts);
+
+                string savedRiotId = string.IsNullOrWhiteSpace(account.TagLine) ? account.GameName : $"{account.GameName}#{account.TagLine}";
+                MessageBox.Show($"Saved {result.Greyscreens} greyscreens for {savedRiotId}.\nSource: {result.Source}", "Greyscreen Sync", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            finally
+            {
+                button.IsEnabled = true;
+            }
+        }
+
+        private static Models.Account? FindSavedAccountForGreyscreenSync(System.Collections.Generic.List<Models.Account> accounts, LcuGreyscreenStatsResult result)
+        {
+            string gameName = NormalizeRiotIdPart(result.GameName);
+            string tagLine = NormalizeRiotIdPart(result.TagLine);
+
+            Models.Account? exact = accounts.FirstOrDefault(account =>
+                NormalizeRiotIdPart(account.GameName) == gameName &&
+                (string.IsNullOrEmpty(tagLine) || NormalizeRiotIdPart(account.TagLine) == tagLine));
+
+            if (exact != null)
+                return exact;
+
+            return accounts.FirstOrDefault(account => NormalizeRiotIdPart(account.GameName) == gameName);
+        }
+
+        private static string NormalizeRiotIdPart(string value)
+        {
+            return (value ?? string.Empty).Trim().ToLowerInvariant();
+        }
+
+        private static TextBlock? FindTaggedTextBlock(Window window, string tag)
+        {
+            return VisualTreeHelperExtensions.FindVisualChildren<TextBlock>(window)
+                .FirstOrDefault(textBlock => Equals(textBlock.Tag, tag));
         }
     }
 }
