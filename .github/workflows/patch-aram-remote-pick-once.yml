@@ -77,6 +77,7 @@ jobs:
           )
 
           Path('.github/workflows/patch-aram-remote-pick-once.yml').unlink(missing_ok=True)
+          Path('.github/aram-remote-pick-run.txt').unlink(missing_ok=True)
 
       - name: Commit patch
         shell: bash
@@ -85,11 +86,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git status --short
-          if git diff --quiet && git diff --cached --quiet; then
-            echo "No changes to commit."
-            exit 0
-          fi
-          git add RiotAutoLogin/Models/RemotePickModels.cs RiotAutoLogin/Services/LCUService.cs .github/workflows/patch-aram-remote-pick-once.yml
+          if git diff --quiet && git diff --cached --quiet; then echo "No changes to commit."; exit 0; fi
+          git add RiotAutoLogin/Models/RemotePickModels.cs RiotAutoLogin/Services/LCUService.cs .github/workflows/patch-aram-remote-pick-once.yml .github/aram-remote-pick-run.txt
           git commit -m "Support ARAM champion swaps in Remote Pick"
           git pull --rebase origin master
           git push origin HEAD:master
