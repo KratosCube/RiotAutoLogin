@@ -235,7 +235,9 @@ namespace RiotAutoLogin.Services
             state.IsInChampSelect = state.Phase == "ChampSelect";
             state.CanLeave = state.Phase == "Lobby" || state.Phase == "Matchmaking" || state.Phase == "ReadyCheck" || state.Phase == "ChampSelect";
             TryLoadQueueFromGameflowOrLobby(state);
-            TryReadLiveGameState(state);
+
+            if (state.Phase == "GameStart" || state.Phase == "InProgress")
+                TryReadLiveGameState(state);
 
             if (!state.IsInChampSelect)
             {
@@ -1214,10 +1216,10 @@ namespace RiotAutoLogin.Services
             state.GameTimeSeconds = -1;
             state.GameStatus = state.IsGameClientRunning ? "Loading" : "Waiting";
 
-            if (TryReadLiveGameStats("https://127.0.0.1:2999/liveclientdata/gamestats", state))
+            if (!state.IsGameClientRunning)
                 return;
 
-            TryReadLiveGameStats("http://127.0.0.1:2999/liveclientdata/gamestats", state);
+            TryReadLiveGameStats("https://127.0.0.1:2999/liveclientdata/gamestats", state);
         }
 
         private static bool TryReadLiveGameStats(string url, RemotePickState state)
