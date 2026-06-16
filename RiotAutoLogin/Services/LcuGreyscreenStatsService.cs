@@ -29,10 +29,10 @@ namespace RiotAutoLogin.Services
             if (!summoner.success)
                 return Error(summoner.message);
 
-            if (string.IsNullOrWhiteSpace(summoner.puuid))
-                return Error("LCU did not return a PUUID for the current summoner.");
+            if (string.IsNullOrWhiteSpace(summoner.puuid) && string.IsNullOrWhiteSpace(summoner.accountId) && string.IsNullOrWhiteSpace(summoner.summonerId))
+                return Error("LCU did not return a PUUID, accountId, or summonerId for the current summoner.");
 
-            if (TryReadMatchHistoryDeaths(summoner.puuid, out int deaths, out string source))
+            if (TryReadMatchHistoryDeaths(summoner.puuid, summoner.accountId, summoner.summonerId, out int deaths, out string source))
             {
                 return new LcuGreyscreenStatsResult
                 {
@@ -46,7 +46,7 @@ namespace RiotAutoLogin.Services
                 };
             }
 
-            return Error("Could not find deaths/greyscreens in LCU match history for the current account.", summoner.gameName, summoner.tagLine, summoner.puuid);
+            return Error("Could not find the current player in LCU match history. Try opening your profile or match history in League Client once, then sync again.", summoner.gameName, summoner.tagLine, summoner.puuid);
         }
 
         private static LcuGreyscreenStatsResult Error(string message, string gameName = "", string tagLine = "", string puuid = "") => new()
@@ -58,11 +58,11 @@ namespace RiotAutoLogin.Services
             Puuid = puuid
         };
 
-        private static (bool success, string message, string gameName, string tagLine, string puuid) ReadCurrentSummoner()
+        private static (bool success, string message, string gameName, string tagLine, string puuid, string accountId, string summonerId) ReadCurrentSummoner()
         {
             string[] result = LCUService.ClientRequest("GET", "lol-summoner/v1/current-summoner");
             if (result[0] != "200")
-                return (false, $"Could not read current summoner from LCU. Status: {result[0]}", string.Empty, string.Empty, string.Empty);
+                return (false, $"Could not read current summoner from LCU. Status: {result[0]}", string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
 
             try
             {
@@ -72,6 +72,8 @@ namespace RiotAutoLogin.Services
                 string gameName = GetString(root, "gameName", "riotIdGameName", "displayName", "name");
                 string tagLine = GetString(root, "tagLine", "riotIdTagline", "riotIdTagLine");
                 string puuid = GetString(root, "puuid", "puuId");
+                string accountId = GetString(root, "accountId");
+                string summonerId = GetString(root, "summonerId", "id");
 
                 if (gameName.Contains('#') && string.IsNullOrWhiteSpace(tagLine))
                 {
@@ -80,18 +82,19 @@ namespace RiotAutoLogin.Services
                     tagLine = parts.Length > 1 ? parts[1] : string.Empty;
                 }
 
-                return (true, string.Empty, gameName, tagLine, puuid);
+                return (true, string.Empty, gameName, tagLine, puuid, accountId, summonerId);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Could not parse current summoner for greyscreens: {ex.Message}");
-                return (false, "Could not parse current summoner response from LCU.", string.Empty, string.Empty, string.Empty);
+                return (false, "Could not parse current summoner response from LCU.", string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
             }
         }
 
-        private static bool TryReadMatchHistoryDeaths(string puuid, out int deaths, out string source)
+        private static bool TryReadMatchHistoryDeaths(string puuid, string accountId, string summonerId, out int deaths, out string source)
         {
-            source = $"lol-match-history/v1/products/lol/{puuid}/matches?begIndex=0&endIndex=100";
+            string lookupId = !string.IsNullOrWhiteSpace(puuid) ? puuid : !string.IsNullOrWhiteSpace(accountId) ? accountId : summonerId;
+            source = $"lol-match-history/v1/products/lol/{lookupId}/matches?begIndex=0&endIndex=100";
             string[] result = LCUService.ClientRequest("GET", source);
             if (!result[0].StartsWith("2") || string.IsNullOrWhiteSpace(result[1]))
             {
@@ -102,8 +105,7 @@ namespace RiotAutoLogin.Services
             try
             {
                 using JsonDocument doc = JsonDocument.Parse(result[1]);
-                deaths = SumDeathsForPuuid(doc.RootElement, puuid);
-                return deaths > 0;
+                return TrySumDeathsForCurrentPlayer(doc.RootElement, puuid, accountId, summonerId, out deaths);
             }
             catch (Exception ex)
             {
@@ -113,25 +115,60 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        private static int SumDeathsForPuuid(JsonElement root, string puuid)
+        private static bool TrySumDeathsForCurrentPlayer(JsonElement root, string puuid, string accountId, string summonerId, out int totalDeaths)
         {
-            int total = 0;
-            if (!TryFindProperty(root, "games", out JsonElement games) || games.ValueKind != JsonValueKind.Array)
-                return 0;
+            totalDeaths = 0;
 
+            if (!TryFindGamesArray(root, out JsonElement games))
+                return false;
+
+            bool foundCurrentPlayerInAnyGame = false;
             foreach (JsonElement game in games.EnumerateArray())
             {
-                if (!TryFindParticipantIdForPuuid(game, puuid, out int participantId))
+                if (!TryFindParticipantIdForCurrentPlayer(game, puuid, accountId, summonerId, out int participantId))
                     continue;
 
                 if (TryFindParticipantStats(game, participantId, out JsonElement stats) && TryReadDeaths(stats, out int deaths))
-                    total += deaths;
+                {
+                    foundCurrentPlayerInAnyGame = true;
+                    totalDeaths += deaths;
+                }
             }
 
-            return total;
+            return foundCurrentPlayerInAnyGame;
         }
 
-        private static bool TryFindParticipantIdForPuuid(JsonElement game, string puuid, out int participantId)
+        private static bool TryFindGamesArray(JsonElement element, out JsonElement games)
+        {
+            games = default;
+
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    if (property.Name.Equals("games", StringComparison.OrdinalIgnoreCase) && property.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        games = property.Value;
+                        return true;
+                    }
+
+                    if (TryFindGamesArray(property.Value, out games))
+                        return true;
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement item in element.EnumerateArray())
+                {
+                    if (TryFindGamesArray(item, out games))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryFindParticipantIdForCurrentPlayer(JsonElement game, string puuid, string accountId, string summonerId, out int participantId)
         {
             participantId = 0;
             if (!TryFindProperty(game, "participantIdentities", out JsonElement identities) || identities.ValueKind != JsonValueKind.Array)
@@ -143,7 +180,7 @@ namespace RiotAutoLogin.Services
                 if (identity.TryGetProperty("player", out JsonElement nestedPlayer))
                     player = nestedPlayer;
 
-                if (!GetString(player, "puuid", "puuId").Equals(puuid, StringComparison.OrdinalIgnoreCase))
+                if (!MatchesCurrentPlayer(player, puuid, accountId, summonerId))
                     continue;
 
                 if (TryFindProperty(identity, "participantId", out JsonElement idElement) && TryGetInt(idElement, out participantId))
@@ -151,6 +188,20 @@ namespace RiotAutoLogin.Services
             }
 
             return false;
+        }
+
+        private static bool MatchesCurrentPlayer(JsonElement player, string puuid, string accountId, string summonerId)
+        {
+            string playerPuuid = GetString(player, "puuid", "puuId");
+            if (!string.IsNullOrWhiteSpace(puuid) && playerPuuid.Equals(puuid, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            string playerAccountId = GetString(player, "accountId");
+            if (!string.IsNullOrWhiteSpace(accountId) && playerAccountId.Equals(accountId, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            string playerSummonerId = GetString(player, "summonerId", "id");
+            return !string.IsNullOrWhiteSpace(summonerId) && playerSummonerId.Equals(summonerId, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool TryFindParticipantStats(JsonElement game, int participantId, out JsonElement stats)
@@ -230,8 +281,13 @@ namespace RiotAutoLogin.Services
         {
             foreach (string propertyName in propertyNames)
             {
-                if (element.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.String)
-                    return value.GetString() ?? string.Empty;
+                if (element.TryGetProperty(propertyName, out JsonElement value))
+                {
+                    if (value.ValueKind == JsonValueKind.String)
+                        return value.GetString() ?? string.Empty;
+                    if (value.ValueKind == JsonValueKind.Number)
+                        return value.GetRawText();
+                }
             }
 
             return string.Empty;
