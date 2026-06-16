@@ -61,7 +61,6 @@ namespace RiotAutoLogin.Services
                 if (rankResult.StartsWith("Error:"))
                 {
                     Debug.WriteLine($"⚠️ Rank API error for {account.GameName}: {rankResult}");
-                    // Don't overwrite existing rank info with error messages
                     return false;
                 }
                 
@@ -149,14 +148,15 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        public static (int totalGames, int totalWins, int totalLosses, double winRate) CalculateStats(List<Account> accounts)
+        public static (int totalGames, int totalWins, int totalLosses, double winRate, int totalGreyscreens) CalculateStats(List<Account> accounts)
         {
             int totalGames = accounts.Sum(a => a.Wins + a.Losses);
             int totalWins = accounts.Sum(a => a.Wins);
             int totalLosses = accounts.Sum(a => a.Losses);
+            int totalGreyscreens = accounts.Sum(a => a.Greyscreens);
             double winRate = totalGames > 0 ? (double)totalWins / totalGames * 100 : 0;
 
-            return (totalGames, totalWins, totalLosses, winRate);
+            return (totalGames, totalWins, totalLosses, winRate, totalGreyscreens);
         }
     }
-} 
+}
