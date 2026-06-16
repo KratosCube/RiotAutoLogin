@@ -243,36 +243,24 @@ namespace RiotAutoLogin
 
         private Task ShowGameStartAlertAsync()
         {
-            _ = Task.Run(async () =>
+            return Task.Run(async () =>
             {
-                for (int i = 0; i < 10; i++)
+                for (int i = 0; i < 14; i++)
                 {
-                    try { SystemSounds.Hand.Play(); } catch { }
+                    try
+                    {
+                        SystemSounds.Hand.Play();
+                        await Task.Delay(180);
+                        SystemSounds.Exclamation.Play();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Failed to play game start alert sound: {ex.Message}");
+                    }
+
                     await Task.Delay(260);
                 }
             });
-
-            return Dispatcher.InvokeAsync(() =>
-            {
-                try
-                {
-                    Show();
-                    WindowState = WindowState.Normal;
-                    Topmost = true;
-                    Activate();
-                    Focus();
-                    Topmost = false;
-                    System.Windows.MessageBox.Show(this,
-                        "GAME STARTED!\n\nLoading screen / in-game phase detected.",
-                        "Riot Auto Login - Game Start Alert",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Failed to show game start alert: {ex.Message}");
-                }
-            }).Task;
         }
 
         private async Task HandleFlashSlotWarningAsync(string phase)
