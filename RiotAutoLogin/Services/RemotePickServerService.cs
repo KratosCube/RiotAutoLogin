@@ -324,6 +324,7 @@ namespace RiotAutoLogin.Services
                 Probe("lol-perks/v1/pages");
                 Probe("lol-perks/v1/styles");
                 Probe("lol-perks/v1/inventory");
+                Probe("lol-game-data/assets/v1/perks.json");
                 Probe("lol-perks/v1/recommended-pages");
 
                 if (championId > 0)
@@ -457,18 +458,48 @@ namespace RiotAutoLogin.Services
             return Task.FromResult(new RemotePickActionResult { Success = success, Message = success ? "Rune page selected." : $"League Client rejected rune page change. Status: {result[0]}" });
         }
 
-        public Task<RemotePickActionResult> SelectRecommendedRunePageAsync(string body)
+        public async Task<RemotePickActionResult> SelectRecommendedRunePageAsync(string body)
         {
-            if (!LCUService.CheckIfLeagueClientIsOpen())
-                return Task.FromResult(Failure("League Client is not running."));
+            RemoteRecommendedRunePageRequest? request;
+            try { request = JsonSerializer.Deserialize<RemoteRecommendedRunePageRequest>(body, _jsonOptions); }
+            catch { return Failure("Invalid recommended rune page request."); }
 
-            string[] result = LCUService.ClientRequest("POST", "lol-perks/v1/rune-recommender-auto-select");
+            if (request == null || request.Index < 0)
+                return Failure("Invalid recommended rune page.");
+            if (!LCUService.CheckIfLeagueClientIsOpen())
+                return Failure("League Client is not running.");
+
+            RemotePickState state = await GetStateAsync();
+            RemoteRecommendedRunePageDto? recommendedPage = state.RecommendedRunePages.FirstOrDefault(page => page.Index == request.Index);
+            if (recommendedPage == null)
+                return Failure("Recommended rune page was not found for this champion.");
+            if (!recommendedPage.CanApply)
+                return Failure("This recommended rune page does not include enough rune data to apply it.");
+
+            long editablePageId = GetEditableRunePageId();
+            if (editablePageId <= 0)
+                return Failure("No editable rune page was found in League Client.");
+
+            string payloadJson = JsonSerializer.Serialize(new
+            {
+                id = editablePageId,
+                name = BuildAppliedRunePageName(recommendedPage),
+                primaryStyleId = recommendedPage.PrimaryStyleId,
+                subStyleId = recommendedPage.SubStyleId,
+                selectedPerkIds = recommendedPage.SelectedPerkIds,
+                current = true
+            }, _jsonOptions);
+
+            string[] result = LCUService.ClientRequest("PUT", $"lol-perks/v1/pages/{editablePageId}", payloadJson);
             bool success = result[0].StartsWith("2");
-            return Task.FromResult(new RemotePickActionResult
+            if (success)
+                _ = LCUService.ClientRequest("POST", $"lol-perks/v1/pages/{editablePageId}/current");
+
+            return new RemotePickActionResult
             {
                 Success = success,
-                Message = success ? "Riot recommended rune page applied." : $"League Client rejected Riot recommended runes. Status: {result[0]}"
-            });
+                Message = success ? $"Applied: {BuildAppliedRunePageName(recommendedPage)}" : $"League Client rejected recommended runes. Status: {result[0]}"
+            };
         }
 
         public async Task<RemotePickActionResult> LeaveLobbyAsync()
@@ -596,13 +627,16 @@ namespace RiotAutoLogin.Services
                     candidates.AddRange(ParseRecommendedRunePages(result[1]));
             }
 
-            state.RecommendedRunePages = candidates
+            List<RemoteRecommendedRunePageDto> pages = candidates
                 .Where(page => page.CanApply)
                 .GroupBy(page => string.Join(',', page.SelectedPerkIds))
                 .Select(group => group.First())
                 .Take(3)
                 .Select((page, index) => { page.Index = index; return page; })
                 .ToList();
+
+            EnrichRecommendedRunePageNames(pages);
+            state.RecommendedRunePages = pages;
         }
 
         private static IEnumerable<string> GetRecommendedRuneEndpoints(int championId, string position, int mapId)
@@ -676,6 +710,126 @@ namespace RiotAutoLogin.Services
 
             if (dto.CanApply && pages.All(existing => !existing.SelectedPerkIds.SequenceEqual(dto.SelectedPerkIds)))
                 pages.Add(dto);
+        }
+
+        private static void EnrichRecommendedRunePageNames(List<RemoteRecommendedRunePageDto> pages)
+        {
+            if (pages.Count == 0 || !LCUService.CheckIfLeagueClientIsOpen())
+                return;
+
+            Dictionary<int, string> perkNames = GetLcuIdNameMap("lol-game-data/assets/v1/perks.json");
+            foreach (KeyValuePair<int, string> pair in GetLcuIdNameMap("lol-perks/v1/styles"))
+            {
+                if (!perkNames.ContainsKey(pair.Key))
+                    perkNames[pair.Key] = pair.Value;
+            }
+
+            foreach (RemoteRecommendedRunePageDto page in pages)
+            {
+                string originalSubtitle = page.Subtitle;
+                string primaryStyle = GetNameOrId(perkNames, page.PrimaryStyleId);
+                string secondaryStyle = GetNameOrId(perkNames, page.SubStyleId);
+
+                var runeNames = page.SelectedPerkIds
+                    .Select(id => GetNameOrId(perkNames, id))
+                    .ToList();
+
+                if (runeNames.Count > 0)
+                    page.Name = runeNames[0];
+
+                string runeSummary = runeNames.Count > 1 ? string.Join(" · ", runeNames.Skip(1)) : string.Empty;
+                page.Subtitle = $"{originalSubtitle} · {primaryStyle} / {secondaryStyle}" + (string.IsNullOrWhiteSpace(runeSummary) ? string.Empty : $" · {runeSummary}");
+            }
+        }
+
+        private static Dictionary<int, string> GetLcuIdNameMap(string endpoint)
+        {
+            var map = new Dictionary<int, string>();
+            string[] result = LCUService.ClientRequest("GET", endpoint);
+            if (result[0] != "200")
+                return map;
+
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(result[1]);
+                CollectIdNamePairs(doc.RootElement, map);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not parse LCU id/name map from {endpoint}: {ex.Message}");
+            }
+            return map;
+        }
+
+        private static void CollectIdNamePairs(JsonElement element, Dictionary<int, string> map)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                if (TryGetPropertyInt(element, "id", out int id))
+                {
+                    string? name = GetStringProperty(element, "name", "displayName");
+                    if (id > 0 && !string.IsNullOrWhiteSpace(name) && !map.ContainsKey(id))
+                        map[id] = name;
+                }
+
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    if (property.Value.ValueKind == JsonValueKind.Object || property.Value.ValueKind == JsonValueKind.Array)
+                        CollectIdNamePairs(property.Value, map);
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement child in element.EnumerateArray())
+                    CollectIdNamePairs(child, map);
+            }
+        }
+
+        private static string GetNameOrId(Dictionary<int, string> names, int id)
+            => names.TryGetValue(id, out string? name) && !string.IsNullOrWhiteSpace(name) ? name : id.ToString();
+
+        private static string BuildAppliedRunePageName(RemoteRecommendedRunePageDto page)
+        {
+            string name = string.IsNullOrWhiteSpace(page.Name) ? "Recommended Runes" : page.Name;
+            return name.StartsWith("Remote Pick:", StringComparison.OrdinalIgnoreCase) ? name : $"Remote Pick: {name}";
+        }
+
+        private static long GetEditableRunePageId()
+        {
+            string[] result = LCUService.ClientRequest("GET", "lol-perks/v1/pages");
+            if (result[0] != "200")
+                return 0;
+
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(result[1]);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                    return 0;
+
+                long firstEditableId = 0;
+                foreach (JsonElement page in doc.RootElement.EnumerateArray())
+                {
+                    if (!TryGetPropertyLong(page, "id", out long pageId) || pageId <= 0)
+                        continue;
+
+                    bool isEditable = GetBoolProperty(page, "isEditable");
+                    bool isCurrent = GetBoolProperty(page, "current") || GetBoolProperty(page, "isCurrent");
+                    if (!isEditable)
+                        continue;
+
+                    if (firstEditableId == 0)
+                        firstEditableId = pageId;
+                    if (isCurrent)
+                        return pageId;
+                }
+
+                return firstEditableId;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not parse editable rune page id: {ex.Message}");
+                return 0;
+            }
         }
 
         private static List<int> GetPerkIds(JsonElement pageElement)
