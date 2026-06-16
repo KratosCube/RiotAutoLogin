@@ -1075,7 +1075,135 @@
                                                 </Border>
                                             </StackPanel>
                                         </Border>
+                                        <!-- Client Alerts -->
+                                        <Border Background="{StaticResource CardBackgroundBrush}"
+        CornerRadius="18"
+        Padding="18"
+        Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <TextBlock Text="Client Alerts"
+                   FontSize="18"
+                   FontWeight="SemiBold"
+                   Foreground="{StaticResource TextColorBrush}"/>
 
+                                                <TextBlock Text="Intrusive notifications for game start and warnings when Flash is on the opposite summoner spell slot."
+                   Margin="0,6,0,14"
+                   FontSize="13"
+                   TextWrapping="Wrap"
+                   Foreground="{StaticResource TextColorBrush}"
+                   Opacity="0.68"/>
+
+                                                <Grid Margin="0,0,0,12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="Enable game start alert"
+                           FontSize="14"
+                           Foreground="{StaticResource TextColorBrush}"/>
+                                                        <TextBlock Text="Plays a repeated warning sound and shows a top-most dialog when the game starts."
+                           Margin="0,4,10,0"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource TextColorBrush}"
+                           Opacity="0.68"/>
+                                                    </StackPanel>
+
+                                                    <ToggleButton x:Name="tglGameStartAlert"
+                          Grid.Column="1"
+                          Width="100"
+                          Content="OFF"
+                          Style="{StaticResource ModernToggleButton}"/>
+                                                    
+                                                </Grid>
+                                                <Grid Margin="0,0,0,12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="Game start sound repeats"
+                   FontSize="14"
+                   Foreground="{StaticResource TextColorBrush}"/>
+                                                        <TextBlock Text="How many times the warning sound should repeat when the game starts. Allowed range: 1-30."
+                   Margin="0,4,10,0"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   Foreground="{StaticResource TextColorBrush}"
+                   Opacity="0.68"/>
+                                                    </StackPanel>
+
+                                                    <TextBox x:Name="txtGameStartAlertRepeatCount"
+             Grid.Column="1"
+             Width="100"
+             Text="14"
+             HorizontalContentAlignment="Center"
+             Style="{StaticResource ModernTextBox}"/>
+                                                </Grid>
+                                                <Grid Margin="0,0,0,12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="Enable Flash side warning"
+                           FontSize="14"
+                           Foreground="{StaticResource TextColorBrush}"/>
+                                                        <TextBlock Text="Shows a warning if Flash is on the other side than your preference during champion select."
+                           Margin="0,4,10,0"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource TextColorBrush}"
+                           Opacity="0.68"/>
+                                                    </StackPanel>
+
+                                                    <ToggleButton x:Name="tglFlashSlotWarning"
+                          Grid.Column="1"
+                          Width="100"
+                          Content="OFF"
+                          Style="{StaticResource ModernToggleButton}"/>
+                                                </Grid>
+
+                                                <Border Background="{StaticResource SecondaryBackgroundBrush}"
+                CornerRadius="12"
+                Padding="14"
+                Margin="0,4,0,0">
+                                                    <StackPanel>
+                                                        <TextBlock Text="Preferred Flash slot"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource TextColorBrush}"/>
+                                                        <TextBlock Text="Spell 1 is usually D, Spell 2 is usually F. If Flash is on the other side, the app warns you once per champion select."
+                           Margin="0,4,0,10"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource TextColorBrush}"
+                           Opacity="0.68"/>
+
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <RadioButton x:Name="rbFlashSlot1"
+                                 Content="Spell 1 / D"
+                                 GroupName="PreferredFlashSlot"
+                                 Margin="0,0,18,0"
+                                 Foreground="{StaticResource TextColorBrush}"
+                                 FontSize="13"
+                                 VerticalContentAlignment="Center"/>
+                                                            <RadioButton x:Name="rbFlashSlot2"
+                                 Content="Spell 2 / F"
+                                 GroupName="PreferredFlashSlot"
+                                 Margin="0,0,18,0"
+                                 Foreground="{StaticResource TextColorBrush}"
+                                 FontSize="13"
+                                 VerticalContentAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+                                        </Border>
                                         <!-- Hotkey -->
                                         <Border Background="{StaticResource CardBackgroundBrush}"
                                                 CornerRadius="18"

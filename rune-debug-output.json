@@ -1,0 +1,50 @@
+﻿{
+    "generatedAt":  "2026-06-14T19:17:37.8291373+02:00",
+    "lcuPort":  "53367",
+    "selectedChampionId":  0,
+    "pickIntentChampionId":  0,
+    "championId":  0,
+    "assignedPosition":  "",
+    "normalizedPosition":  "UNKNOWN",
+    "mapId":  0,
+    "effectiveMapId":  11,
+    "queueId":  0,
+    "endpointResults":  [
+                            {
+                                "endpoint":  "lol-champ-select/v1/session",
+                                "status":  999,
+                                "contentLength":  74,
+                                "preview":  "Nadřízené připojení bylo uzavřeno: Došlo k neočekávané chybě při odeslání."
+                            },
+                            {
+                                "endpoint":  "lol-perks/v1/currentpage",
+                                "status":  999,
+                                "contentLength":  74,
+                                "preview":  "Nadřízené připojení bylo uzavřeno: Došlo k neočekávané chybě při odeslání."
+                            },
+                            {
+                                "endpoint":  "lol-perks/v1/pages",
+                                "status":  999,
+                                "contentLength":  74,
+                                "preview":  "Nadřízené připojení bylo uzavřeno: Došlo k neočekávané chybě při odeslání."
+                            },
+                            {
+                                "endpoint":  "lol-perks/v1/styles",
+                                "status":  999,
+                                "contentLength":  74,
+                                "preview":  "Nadřízené připojení bylo uzavřeno: Došlo k neočekávané chybě při odeslání."
+                            },
+                            {
+                                "endpoint":  "lol-perks/v1/inventory",
+                                "status":  999,
+                                "contentLength":  74,
+                                "preview":  "Nadřízené připojení bylo uzavřeno: Došlo k neočekávané chybě při odeslání."
+                            },
+                            {
+                                "endpoint":  "lol-perks/v1/recommended-pages",
+                                "status":  999,
+                                "contentLength":  74,
+                                "preview":  "Nadřízené připojení bylo uzavřeno: Došlo k neočekávané chybě při odeslání."
+                            }
+                        ]
+}
