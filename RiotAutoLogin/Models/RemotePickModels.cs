@@ -1,9 +1,12 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace RiotAutoLogin.Models
 {
     public class RemotePickState
     {
+        private List<RemoteChampionDto> _champions = new();
+
         public string Phase { get; set; } = "None";
         public string ChampSelectPhase { get; set; } = string.Empty;
         public string PhaseLabel { get; set; } = "Waiting";
@@ -39,7 +42,19 @@ namespace RiotAutoLogin.Models
         public List<int> PickedChampionIds { get; set; } = new();
         public List<int> AvailableSpellIds { get; set; } = new();
         public List<int> AvailableChampionIds { get; set; } = new();
-        public List<RemoteChampionDto> Champions { get; set; } = new();
+        public List<RemoteChampionDto> Champions
+        {
+            get
+            {
+                if (CanBan || !IsInChampSelect)
+                    return _champions;
+
+                return _champions
+                    .Where(champion => !champion.IsDisabled || champion.IsSelected || champion.IsIntent)
+                    .ToList();
+            }
+            set => _champions = value ?? new List<RemoteChampionDto>();
+        }
         public List<RemoteSummonerSpellDto> SummonerSpells { get; set; } = new();
         public List<RemoteRunePageDto> RunePages { get; set; } = new();
         public List<RemoteRecommendedRunePageDto> RecommendedRunePages { get; set; } = new();
