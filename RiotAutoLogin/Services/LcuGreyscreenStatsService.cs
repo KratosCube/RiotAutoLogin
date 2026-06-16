@@ -19,6 +19,8 @@ namespace RiotAutoLogin.Services
 
     public static class LcuGreyscreenStatsService
     {
+        private const long EstimatedSecondsPerDeath = 30;
+
         public static async Task<LcuGreyscreenStatsResult> GetCurrentAccountGreyscreensAsync()
         {
             await Task.Yield();
@@ -35,6 +37,14 @@ namespace RiotAutoLogin.Services
 
             if (TryReadMatchHistoryStats(summoner.puuid, summoner.accountId, summoner.summonerId, out int deaths, out long deadSeconds, out string source))
             {
+                bool estimated = false;
+                if (deadSeconds <= 0 && deaths > 0)
+                {
+                    deadSeconds = EstimateDeadSeconds(deaths);
+                    estimated = true;
+                    source += " + estimated death time";
+                }
+
                 return new LcuGreyscreenStatsResult
                 {
                     Success = true,
@@ -44,11 +54,18 @@ namespace RiotAutoLogin.Services
                     Greyscreens = deaths,
                     GreyscreenSeconds = deadSeconds,
                     Source = source,
-                    Message = deadSeconds > 0 ? $"Synced {FormatDuration(deadSeconds)} greyscreen time from LCU match history ({deaths} deaths)." : $"Synced {deaths} greyscreens from LCU match history."
+                    Message = estimated
+                        ? $"Estimated {FormatDuration(deadSeconds)} greyscreen time from {deaths} deaths because LCU did not expose exact timeSpentDead."
+                        : $"Synced {FormatDuration(deadSeconds)} greyscreen time from LCU match history ({deaths} deaths)."
                 };
             }
 
             return Error("Could not find the current player in LCU match history. Try opening your profile or match history in League Client once, then sync again.", summoner.gameName, summoner.tagLine, summoner.puuid);
+        }
+
+        private static long EstimateDeadSeconds(int deaths)
+        {
+            return Math.Max(0, deaths) * EstimatedSecondsPerDeath;
         }
 
         private static LcuGreyscreenStatsResult Error(string message, string gameName = "", string tagLine = "", string puuid = "") => new()
@@ -138,12 +155,44 @@ namespace RiotAutoLogin.Services
                     foundCurrentPlayerInAnyGame = true;
                     if (TryReadDeaths(stats, out int deaths))
                         totalDeaths += deaths;
+
                     if (TryReadDeadSeconds(stats, out long seconds))
+                    {
                         totalDeadSeconds += seconds;
+                    }
+                    else if (TryGetGameId(game, out long gameId) && TryReadDeadSecondsFromGameDetails(gameId, puuid, accountId, summonerId, out long detailedSeconds))
+                    {
+                        totalDeadSeconds += detailedSeconds;
+                    }
                 }
             }
 
             return foundCurrentPlayerInAnyGame;
+        }
+
+        private static bool TryReadDeadSecondsFromGameDetails(long gameId, string puuid, string accountId, string summonerId, out long seconds)
+        {
+            seconds = 0;
+            string[] result = LCUService.ClientRequest("GET", $"lol-match-history/v1/games/{gameId}");
+            if (!result[0].StartsWith("2") || string.IsNullOrWhiteSpace(result[1]))
+                return false;
+
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(result[1]);
+                if (!TryFindParticipantIdForCurrentPlayer(doc.RootElement, puuid, accountId, summonerId, out int participantId))
+                    return false;
+
+                if (!TryFindParticipantStats(doc.RootElement, participantId, out JsonElement stats))
+                    return false;
+
+                return TryReadDeadSeconds(stats, out seconds);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not parse match detail {gameId} for greyscreen time: {ex.Message}");
+                return false;
+            }
         }
 
         private static bool TryFindGamesArray(JsonElement element, out JsonElement games)
@@ -230,6 +279,15 @@ namespace RiotAutoLogin.Services
                 return true;
             }
 
+            return false;
+        }
+
+        private static bool TryGetGameId(JsonElement game, out long gameId)
+        {
+            if (TryFindProperty(game, "gameId", out JsonElement gameIdElement) && TryGetLong(gameIdElement, out gameId))
+                return true;
+
+            gameId = 0;
             return false;
         }
 
