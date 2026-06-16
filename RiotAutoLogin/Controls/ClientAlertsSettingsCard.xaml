@@ -37,6 +37,7 @@
                 </StackPanel>
 
                 <ToggleButton x:Name="tglGameStartAlert"
+                              x:FieldModifier="public"
                               Grid.Column="1"
                               Width="100"
                               Content="OFF"
@@ -62,6 +63,7 @@
                 </StackPanel>
 
                 <ToggleButton x:Name="tglFlashSlotWarning"
+                              x:FieldModifier="public"
                               Grid.Column="1"
                               Width="100"
                               Content="OFF"
@@ -85,6 +87,7 @@
                                Opacity="0.68"/>
                     <StackPanel Orientation="Horizontal">
                         <RadioButton x:Name="rbFlashSlot1"
+                                     x:FieldModifier="public"
                                      Content="Spell 1 / D"
                                      GroupName="PreferredFlashSlot"
                                      Margin="0,0,18,0"
@@ -92,6 +95,7 @@
                                      FontSize="13"
                                      VerticalContentAlignment="Center"/>
                         <RadioButton x:Name="rbFlashSlot2"
+                                     x:FieldModifier="public"
                                      Content="Spell 2 / F"
                                      GroupName="PreferredFlashSlot"
                                      Margin="0,0,18,0"
