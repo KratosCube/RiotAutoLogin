@@ -202,6 +202,8 @@ namespace RiotAutoLogin.Services
         {
             RemotePickState state = await GetTimerStateAsync();
             var pickedChampionIds = new HashSet<int>();
+            var allyPickedChampionIds = new HashSet<int>();
+            var enemyPickedChampionIds = new HashSet<int>();
 
             if (state.IsInChampSelect && LCUService.CheckIfLeagueClientIsOpen())
             {
@@ -209,13 +211,15 @@ namespace RiotAutoLogin.Services
                 if (sessionResult[0] == "200")
                 {
                     using JsonDocument doc = JsonDocument.Parse(sessionResult[1]);
-                    ParsePicks(doc.RootElement, pickedChampionIds);
+                    ParsePicks(doc.RootElement, pickedChampionIds, allyPickedChampionIds, enemyPickedChampionIds);
                     state.PickedChampionIds = pickedChampionIds.OrderBy(id => id).ToList();
+                    state.AllyPickedChampionIds = allyPickedChampionIds.OrderBy(id => id).ToList();
+                    state.EnemyPickedChampionIds = enemyPickedChampionIds.OrderBy(id => id).ToList();
                 }
             }
 
             if (state.IsInChampSelect)
-                await AddChampionSpellAndRuneListsAsync(state, new HashSet<int>(state.BannedChampionIds), pickedChampionIds);
+                await AddChampionSpellAndRuneListsAsync(state, new HashSet<int>(state.BannedChampionIds), pickedChampionIds, allyPickedChampionIds, enemyPickedChampionIds);
 
             return state;
         }
@@ -527,7 +531,7 @@ namespace RiotAutoLogin.Services
             return Failure($"Cannot leave during phase: {phase}");
         }
 
-        private async Task AddChampionSpellAndRuneListsAsync(RemotePickState state, HashSet<int> bannedChampionIds, HashSet<int> pickedChampionIds)
+        private async Task AddChampionSpellAndRuneListsAsync(RemotePickState state, HashSet<int> bannedChampionIds, HashSet<int> pickedChampionIds, HashSet<int> allyPickedChampionIds, HashSet<int> enemyPickedChampionIds)
         {
             await EnsureRemoteChampionCacheAsync();
             await EnsureRemoteSpellCacheAsync();
@@ -546,7 +550,8 @@ namespace RiotAutoLogin.Services
                     IsPicked = pickedChampionIds.Contains(champion.Id),
                     IsSelected = state.SelectedChampionId == champion.Id,
                     IsIntent = state.PickIntentChampionId == champion.Id,
-                    IsAvailableInCurrentMode = !shouldFilterRandomChampions || availableChampionIds.Contains(champion.Id) || state.SelectedChampionId == champion.Id || state.PickIntentChampionId == champion.Id
+                    IsAvailableInCurrentMode = !shouldFilterRandomChampions || availableChampionIds.Contains(champion.Id) || state.SelectedChampionId == champion.Id || state.PickIntentChampionId == champion.Id,
+                    TeamSide = allyPickedChampionIds.Contains(champion.Id) ? "ally" : enemyPickedChampionIds.Contains(champion.Id) ? "enemy" : string.Empty
                 })
                 .ToList();
 
@@ -981,10 +986,10 @@ namespace RiotAutoLogin.Services
             AddChampionIdsFromArray(bansElement, "theirTeamBans", bannedChampionIds);
         }
 
-        private static void ParsePicks(JsonElement root, HashSet<int> pickedChampionIds)
+        private static void ParsePicks(JsonElement root, HashSet<int> pickedChampionIds, HashSet<int> allyPickedChampionIds, HashSet<int> enemyPickedChampionIds)
         {
-            AddChampionIdsFromTeam(root, "myTeam", pickedChampionIds);
-            AddChampionIdsFromTeam(root, "theirTeam", pickedChampionIds);
+            AddChampionIdsFromTeam(root, "myTeam", pickedChampionIds, allyPickedChampionIds);
+            AddChampionIdsFromTeam(root, "theirTeam", pickedChampionIds, enemyPickedChampionIds);
         }
 
         private static void ParseLocalPlayerSelection(JsonElement root, RemotePickState state)
@@ -1189,13 +1194,17 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        private static void AddChampionIdsFromTeam(JsonElement root, string propertyName, HashSet<int> championIds)
+        private static void AddChampionIdsFromTeam(JsonElement root, string propertyName, HashSet<int> championIds, HashSet<int>? teamChampionIds = null)
         {
             if (!root.TryGetProperty(propertyName, out JsonElement teamElement) || teamElement.ValueKind != JsonValueKind.Array)
                 return;
             foreach (JsonElement player in teamElement.EnumerateArray())
             {
-                if (TryGetPropertyInt(player, "championId", out int championId) && championId > 0) championIds.Add(championId);
+                if (TryGetPropertyInt(player, "championId", out int championId) && championId > 0)
+                {
+                    championIds.Add(championId);
+                    teamChampionIds?.Add(championId);
+                }
             }
         }
 

@@ -40,6 +40,8 @@ namespace RiotAutoLogin.Models
         public int Spell2Id { get; set; }
         public List<int> BannedChampionIds { get; set; } = new();
         public List<int> PickedChampionIds { get; set; } = new();
+        public List<int> AllyPickedChampionIds { get; set; } = new();
+        public List<int> EnemyPickedChampionIds { get; set; } = new();
         public List<int> AvailableSpellIds { get; set; } = new();
         public List<int> AvailableChampionIds { get; set; } = new();
         public List<RemoteChampionDto> Champions
@@ -71,6 +73,7 @@ namespace RiotAutoLogin.Models
         public bool IsSelected { get; set; }
         public bool IsIntent { get; set; }
         public bool IsAvailableInCurrentMode { get; set; } = true;
+        public string TeamSide { get; set; } = string.Empty;
         public bool IsDisabled => IsBanned || IsPicked || !IsAvailableInCurrentMode || !RiotAutoLogin.Services.RemoteChampionAvailabilityService.CanUseChampion(Id);
     }
 
