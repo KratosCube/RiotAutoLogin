@@ -1,13 +1,17 @@
 name: Build release executable
 
 on:
+  push:
+    tags:
+      - 'v*.*.*'
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to upload the executable to, for example v1.1.1
+        description: Release tag to create or update, for example v1.2.0
         required: true
+        default: v1.2.0
         type: string
 
 permissions:
@@ -19,12 +23,37 @@ jobs:
     runs-on: windows-latest
 
     env:
-      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
       PROJECT_PATH: RiotAutoLogin/RiotAutoLogin.csproj
       PUBLISH_DIR: publish
       ARTIFACT_DIR: artifact
 
     steps:
+      - name: Resolve release tag and version
+        id: release_info
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'release') {
+            $tag = '${{ github.event.release.tag_name }}'
+          } elseif ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $tag = '${{ inputs.tag }}'
+          } else {
+            $tag = '${{ github.ref_name }}'
+          }
+
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            throw 'Release tag could not be resolved.'
+          }
+
+          if (!$tag.StartsWith('v')) {
+            $tag = "v$tag"
+          }
+
+          $version = $tag.TrimStart('v')
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Release tag: $tag"
+          Write-Host "Release version: $version"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -36,6 +65,9 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore $env:PROJECT_PATH
 
+      - name: Build
+        run: dotnet build $env:PROJECT_PATH --configuration Release --no-restore
+
       - name: Publish self-contained single-file exe
         run: >
           dotnet publish $env:PROJECT_PATH
@@ -46,25 +78,31 @@ jobs:
           /p:PublishSingleFile=true
           /p:IncludeNativeLibrariesForSelfExtract=true
           /p:EnableCompressionInSingleFile=true
+          /p:DebugType=None
+          /p:Version=${{ steps.release_info.outputs.version }}
+          /p:AssemblyVersion=${{ steps.release_info.outputs.version }}.0
+          /p:FileVersion=${{ steps.release_info.outputs.version }}.0
 
       - name: Prepare release asset
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path $env:ARTIFACT_DIR | Out-Null
           $source = Join-Path $env:PUBLISH_DIR "RiotAutoLogin.exe"
-          $assetName = "RiotAutoLogin-$env:RELEASE_TAG-win-x64.exe"
+          $assetName = "RiotAutoLogin-${{ steps.release_info.outputs.tag }}-win-x64.exe"
           $destination = Join-Path $env:ARTIFACT_DIR $assetName
 
           if (!(Test-Path $source)) {
-            Write-Error "Published executable was not found at $source"
+            throw "Published executable was not found at $source"
           }
 
           Copy-Item $source $destination -Force
           Write-Host "Prepared release asset: $destination"
 
-      - name: Upload exe to GitHub release
+      - name: Create or update GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: RiotAutoLogin ${{ steps.release_info.outputs.tag }}
+          generate_release_notes: true
           files: artifact/*.exe
           fail_on_unmatched_files: true
