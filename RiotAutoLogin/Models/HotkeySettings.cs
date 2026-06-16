@@ -11,5 +11,9 @@ namespace RiotAutoLogin.Models
 
         // New: persisted auto-accept preference
         public bool AutoAcceptEnabled { get; set; } = false;
+
+        public bool GameStartAlertEnabled { get; set; } = false;
+        public bool FlashSlotWarningEnabled { get; set; } = false;
+        public int PreferredFlashSlot { get; set; } = 2;
     }
 }
