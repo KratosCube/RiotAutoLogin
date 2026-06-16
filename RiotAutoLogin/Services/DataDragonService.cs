@@ -184,6 +184,13 @@ namespace RiotAutoLogin.Services
         {
             try
             {
+                var lcuChampions = GetAvailableChampionsFromLeagueClient();
+                if (lcuChampions.Count > 0)
+                {
+                    Debug.WriteLine($"Loaded {lcuChampions.Count} owned/available champions from LCU");
+                    return lcuChampions;
+                }
+
                 var version = await GetLatestVersionAsync();
                 var response = await _httpClient.GetStringAsync(
                     $"https://ddragon.leagueoflegends.com/cdn/{version}/data/en_US/champion.json");
@@ -222,6 +229,116 @@ namespace RiotAutoLogin.Services
                 Debug.WriteLine($"Error getting champions: {ex.Message}");
                 return new List<ChampionModel>();
             }
+        }
+
+        private static List<ChampionModel> GetAvailableChampionsFromLeagueClient()
+        {
+            var champions = new List<ChampionModel>();
+
+            try
+            {
+                if (!LCUService.CheckIfLeagueClientIsOpen())
+                    return champions;
+
+                string[] result = LCUService.ClientRequest("GET", "lol-champions/v1/owned-champions-minimal");
+                if (result[0] != "200")
+                {
+                    Debug.WriteLine($"Could not read owned champions from LCU. Status: {result[0]}");
+                    return champions;
+                }
+
+                using JsonDocument doc = JsonDocument.Parse(result[1]);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                    return champions;
+
+                foreach (JsonElement champion in doc.RootElement.EnumerateArray())
+                {
+                    if (!TryGetIntProperty(champion, "id", out int championId) || championId <= 0)
+                        continue;
+
+                    string? championName = GetStringProperty(champion, "name", "displayName", "alias");
+                    if (string.IsNullOrWhiteSpace(championName))
+                        continue;
+
+                    bool isOwnedOrFree = false;
+                    if (champion.TryGetProperty("ownership", out JsonElement ownership) && ownership.ValueKind == JsonValueKind.Object)
+                    {
+                        isOwnedOrFree = GetBoolProperty(ownership, "owned") ||
+                                        GetBoolProperty(ownership, "freeToPlayReward") ||
+                                        GetBoolProperty(ownership, "freeToPlay") ||
+                                        GetBoolProperty(ownership, "freeToPlayForQueue") ||
+                                        GetBoolProperty(ownership, "rental");
+                    }
+                    else
+                    {
+                        isOwnedOrFree = GetBoolProperty(champion, "owned") ||
+                                        GetBoolProperty(champion, "freeToPlay") ||
+                                        GetBoolProperty(champion, "freeToPlayForQueue");
+                    }
+
+                    bool isDisabled = GetBoolProperty(champion, "disabled") || GetBoolProperty(champion, "inactive");
+                    if (!isOwnedOrFree || isDisabled)
+                        continue;
+
+                    champions.Add(new ChampionModel
+                    {
+                        Name = championName,
+                        Id = championId,
+                        IsAvailable = true
+                    });
+                }
+
+                return champions
+                    .GroupBy(champion => champion.Id)
+                    .Select(group => group.First())
+                    .OrderBy(champion => champion.Name)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error getting owned champions from LCU: {ex.Message}");
+                return champions;
+            }
+        }
+
+        private static bool TryGetIntProperty(JsonElement element, string propertyName, out int value)
+        {
+            if (element.TryGetProperty(propertyName, out JsonElement property))
+            {
+                if (property.ValueKind == JsonValueKind.Number)
+                    return property.TryGetInt32(out value);
+                if (property.ValueKind == JsonValueKind.String)
+                    return int.TryParse(property.GetString(), out value);
+            }
+
+            value = 0;
+            return false;
+        }
+
+        private static bool GetBoolProperty(JsonElement element, string propertyName)
+        {
+            if (!element.TryGetProperty(propertyName, out JsonElement property))
+                return false;
+
+            if (property.ValueKind == JsonValueKind.True || property.ValueKind == JsonValueKind.False)
+                return property.GetBoolean();
+            if (property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out int number))
+                return number != 0;
+            if (property.ValueKind == JsonValueKind.String && bool.TryParse(property.GetString(), out bool boolean))
+                return boolean;
+
+            return false;
+        }
+
+        private static string? GetStringProperty(JsonElement element, params string[] propertyNames)
+        {
+            foreach (string propertyName in propertyNames)
+            {
+                if (element.TryGetProperty(propertyName, out JsonElement property) && property.ValueKind == JsonValueKind.String)
+                    return property.GetString();
+            }
+
+            return null;
         }
 
         private static string NormalizeChampionName(string championName)
