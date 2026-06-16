@@ -50,7 +50,7 @@ namespace RiotAutoLogin.Models
                     return _champions;
 
                 return _champions
-                    .Where(champion => !champion.IsDisabled || champion.IsSelected || champion.IsIntent)
+                    .Where(champion => !champion.IsDisabled || champion.IsSelected || champion.IsIntent || champion.IsPicked || champion.IsBanned)
                     .ToList();
             }
             set => _champions = value ?? new List<RemoteChampionDto>();
