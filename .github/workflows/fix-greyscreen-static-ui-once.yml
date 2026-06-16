@@ -1,0 +1,182 @@
+name: Fix static greyscreen UI once
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Patch static greyscreen controls and refresh sync
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8-sig')
+              if old not in text:
+                  raise SystemExit(f'Pattern not found in {path}: {old[:160]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # Static XAML: add Greyscreen Time as a fixed card next to Win Rate.
+          replace('RiotAutoLogin/MainWindow.xaml',
+                  '''                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>''',
+                  '''                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>''')
+
+          replace('RiotAutoLogin/MainWindow.xaml',
+                  '''                                        <Button Grid.Column="4"
+                x:Name="btnRefreshQuickStats"''',
+                  '''                                        <Border Grid.Column="4"
+                Background="#141B24"
+                CornerRadius="14"
+                Padding="14"
+                Margin="0,0,10,0">
+                                            <StackPanel>
+                                                <TextBlock Text="Greyscreen Time"
+                           FontSize="11"
+                           Opacity="0.65"
+                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock x:Name="txtStatsGreyscreenTimeValue"
+                           Text="0 min"
+                           Margin="0,4,0,0"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           Foreground="#B66DFF"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Button Grid.Column="5"
+                x:Name="btnRefreshQuickStats"''')
+
+          # MainWindow: refresh stats button also syncs greyscreen time for currently logged LCU account.
+          replace('RiotAutoLogin/MainWindow.xaml.cs',
+                  '''        private async void btnRefreshQuickStats_Click(object sender, RoutedEventArgs e)
+        {
+            btnRefreshQuickStats.IsEnabled = false;
+
+            try
+            {
+                await UpdateAllAccountsAsync();
+                RefreshAccountLists();
+                UpdateQuickLoginViewport();
+                UpdateTotalGameStats();
+                SaveAccounts();
+            }
+            finally
+            {
+                btnRefreshQuickStats.IsEnabled = true;
+            }
+        }''',
+                  '''        private async void btnRefreshQuickStats_Click(object sender, RoutedEventArgs e)
+        {
+            btnRefreshQuickStats.IsEnabled = false;
+
+            try
+            {
+                await UpdateAllAccountsAsync();
+                await SyncGreyscreensForCurrentLcuAccountAsync(showMessageOnSuccess: false);
+                RefreshAccountLists();
+                UpdateQuickLoginViewport();
+                UpdateTotalGameStats();
+                SaveAccounts();
+            }
+            finally
+            {
+                btnRefreshQuickStats.IsEnabled = true;
+            }
+        }
+
+        private async Task SyncGreyscreensForCurrentLcuAccountAsync(bool showMessageOnSuccess)
+        {
+            LcuGreyscreenStatsResult result = await LcuGreyscreenStatsService.GetCurrentAccountGreyscreensAsync();
+            if (!result.Success)
+                return;
+
+            Account? account = FindSavedAccountForGreyscreenSync(result);
+            if (account == null)
+                return;
+
+            account.Greyscreens = result.Greyscreens;
+            account.GreyscreenSeconds = result.GreyscreenSeconds;
+            account.GreyscreensLastUpdatedUtc = DateTime.UtcNow.ToString("O");
+
+            if (showMessageOnSuccess)
+            {
+                string savedRiotId = string.IsNullOrWhiteSpace(account.TagLine) ? account.GameName : $"{account.GameName}#{account.TagLine}";
+                System.Windows.MessageBox.Show($"Saved greyscreen time for {savedRiotId}.\\nDeaths: {result.Greyscreens}\\nSource: {result.Source}", "Greyscreen Sync", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
+        private Account? FindSavedAccountForGreyscreenSync(LcuGreyscreenStatsResult result)
+        {
+            string gameName = NormalizeRiotIdPart(result.GameName);
+            string tagLine = NormalizeRiotIdPart(result.TagLine);
+
+            Account? exact = _accounts.FirstOrDefault(account =>
+                NormalizeRiotIdPart(account.GameName) == gameName &&
+                (string.IsNullOrEmpty(tagLine) || NormalizeRiotIdPart(account.TagLine) == tagLine));
+
+            if (exact != null)
+                return exact;
+
+            return _accounts.FirstOrDefault(account => NormalizeRiotIdPart(account.GameName) == gameName);
+        }
+
+        private static string NormalizeRiotIdPart(string value)
+        {
+            return (value ?? string.Empty).Trim().ToLowerInvariant();
+        }''')
+
+          # UIService: stop mutating layout dynamically. Only update the static XAML control.
+          replace('RiotAutoLogin/Services/UIService.cs',
+                  '            EnsureGreyscreenStatsUi(window, accounts);\n\n            var (totalGames, totalWins, totalLosses, winRate, totalGreyscreens, totalGreyscreenSeconds) = AccountService.CalculateStats(accounts);',
+                  '            var (totalGames, totalWins, totalLosses, winRate, totalGreyscreens, totalGreyscreenSeconds) = AccountService.CalculateStats(accounts);')
+          replace('RiotAutoLogin/Services/UIService.cs',
+                  '            var txtStatsGreyscreensValue = FindTaggedTextBlock(window, GreyscreenValueTag) ?? window.FindName("txtStatsGreyscreenTimeValue") as TextBlock;',
+                  '            var txtStatsGreyscreensValue = window.FindName("txtStatsGreyscreenTimeValue") as TextBlock;')
+
+          start = '        private static void EnsureGreyscreenStatsUi(Window window, System.Collections.Generic.List<Models.Account> accounts)\n        {'
+          end = '        private static string FormatGreyscreenDuration(long seconds)\n        {'
+          ui_path = Path('RiotAutoLogin/Services/UIService.cs')
+          ui = ui_path.read_text(encoding='utf-8-sig')
+          s = ui.find(start)
+          e = ui.find(end)
+          if s != -1 and e != -1:
+              ui = ui[:s] + ui[e:]
+          ui_path.write_text(ui, encoding='utf-8')
+
+          Path('.github/workflows/fix-greyscreen-static-ui-once.yml').unlink(missing_ok=True)
+          Path('.github/static-greyscreen-ui-run.txt').unlink(missing_ok=True)
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git status --short
+          if git diff --quiet && git diff --cached --quiet; then echo "No changes to commit."; exit 0; fi
+          git add RiotAutoLogin/MainWindow.xaml RiotAutoLogin/MainWindow.xaml.cs RiotAutoLogin/Services/UIService.cs .github/workflows/fix-greyscreen-static-ui-once.yml .github/static-greyscreen-ui-run.txt
+          git commit -m "Make greyscreen time a static stats card"
+          git pull --rebase origin master
+          git push origin HEAD:master
