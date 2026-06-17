@@ -1,8 +1,10 @@
 using System;
 using System.Reflection;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace RiotAutoLogin
@@ -11,6 +13,7 @@ namespace RiotAutoLogin
     {
         private bool _staticClientAlertControlsHooked;
         private bool _suppressStaticClientAlertEvents;
+        private bool _remotePickLanUrlUiPatched;
 
         protected override void OnInitialized(EventArgs e)
         {
@@ -18,6 +21,7 @@ namespace RiotAutoLogin
 
             Dispatcher.BeginInvoke(new Action(UpdateCurrentVersionDisplay), DispatcherPriority.Loaded);
             Dispatcher.BeginInvoke(new Action(StartClientAlertsSettingsRetryTimer), DispatcherPriority.Loaded);
+            Dispatcher.BeginInvoke(new Action(StartRemotePickLanUrlPatchTimer), DispatcherPriority.Loaded);
         }
 
         private void UpdateCurrentVersionDisplay()
@@ -71,6 +75,152 @@ namespace RiotAutoLogin
             };
 
             timer.Start();
+        }
+
+        private void StartRemotePickLanUrlPatchTimer()
+        {
+            int attempts = 0;
+            var timer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(500)
+            };
+
+            timer.Tick += (_, _) =>
+            {
+                attempts++;
+
+                if (TryPatchRemotePickLanUrlUi() || attempts >= 30)
+                    timer.Stop();
+            };
+
+            timer.Start();
+        }
+
+        private bool TryPatchRemotePickLanUrlUi()
+        {
+            if (_remotePickLanUrlUiPatched)
+                return true;
+
+            if (_remotePickToggle == null)
+                return false;
+
+            Button? copyButton = FindRemotePickCopyButton(this);
+            if (copyButton == null)
+                return false;
+
+            _remotePickLanUrlUiPatched = true;
+            copyButton.Content = "Copy Link";
+
+            copyButton.Click += (_, _) =>
+            {
+                if (!_remotePickServerService.IsRunning)
+                    return;
+
+                string url = GetPreferredRemotePickPhoneUrl();
+                Clipboard.SetText(url);
+                UpdateRemotePickStatus(
+                    "Link copied. Open this URL on your phone while it is on the same Wi-Fi/LAN:",
+                    url);
+            };
+
+            _remotePickToggle.Checked += (_, _) =>
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (!_remotePickServerService.IsRunning)
+                        return;
+
+                    UpdateRemotePickStatus(
+                        "Remote Pick is running. Open this URL on your phone while it is on the same Wi-Fi/LAN:",
+                        GetPreferredRemotePickPhoneUrl());
+                }), DispatcherPriority.Background);
+            };
+
+            return true;
+        }
+
+        private string GetPreferredRemotePickPhoneUrl()
+        {
+            foreach (string url in _remotePickServerService.LocalUrls)
+            {
+                if (RemotePickUrlHostStartsWith(url, "192.168."))
+                    return url;
+            }
+
+            foreach (string url in _remotePickServerService.LocalUrls)
+            {
+                if (IsPrivateRemotePickUrl(url))
+                    return url;
+            }
+
+            foreach (string url in _remotePickServerService.LocalUrls)
+            {
+                if (!RemotePickUrlHostStartsWith(url, "127."))
+                    return url;
+            }
+
+            return _remotePickServerService.LocalUrl;
+        }
+
+        private static bool IsPrivateRemotePickUrl(string url)
+        {
+            if (!TryGetRemotePickUrlHost(url, out string host))
+                return false;
+
+            if (host.StartsWith("192.168.", StringComparison.Ordinal))
+                return true;
+
+            if (host.StartsWith("10.", StringComparison.Ordinal))
+                return true;
+
+            if (!host.StartsWith("172.", StringComparison.Ordinal))
+                return false;
+
+            string[] parts = host.Split('.');
+            return parts.Length >= 2 &&
+                   int.TryParse(parts[1], out int secondOctet) &&
+                   secondOctet >= 16 &&
+                   secondOctet <= 31;
+        }
+
+        private static bool RemotePickUrlHostStartsWith(string url, string prefix)
+        {
+            return TryGetRemotePickUrlHost(url, out string host) && host.StartsWith(prefix, StringComparison.Ordinal);
+        }
+
+        private static bool TryGetRemotePickUrlHost(string url, out string host)
+        {
+            host = string.Empty;
+
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri))
+                return false;
+
+            host = uri.Host;
+            return !string.IsNullOrWhiteSpace(host);
+        }
+
+        private static Button? FindRemotePickCopyButton(DependencyObject root)
+        {
+            int childCount = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < childCount; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is Button button)
+                {
+                    string? content = button.Content?.ToString();
+                    if (string.Equals(content, "Copy Links", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(content, "Copy Link", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return button;
+                    }
+                }
+
+                Button? nestedButton = FindRemotePickCopyButton(child);
+                if (nestedButton != null)
+                    return nestedButton;
+            }
+
+            return null;
         }
 
         private void HookStaticClientAlertSettingsControls()
