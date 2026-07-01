@@ -19,6 +19,7 @@ namespace RiotAutoLogin
 
             _autoStatsRefreshCts = new CancellationTokenSource();
             Closed += (_, _) => StopAutomaticAccountInfoRefresh();
+            Task.Run(() => RefreshAccountInfoAfterStartupAsync(_autoStatsRefreshCts.Token));
             Task.Run(() => MonitorAutomaticAccountInfoRefreshAsync(_autoStatsRefreshCts.Token));
         }
 
@@ -31,6 +32,30 @@ namespace RiotAutoLogin
                 _autoStatsRefreshCts = null;
             }
             catch { }
+        }
+
+        private async Task RefreshAccountInfoAfterStartupAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                for (int attempt = 0; attempt < 12 && !cancellationToken.IsCancellationRequested; attempt++)
+                {
+                    await Task.Delay(2500, cancellationToken);
+
+                    if (_accounts != null && _accounts.Count > 0)
+                    {
+                        await RefreshAccountInfoAutomaticallyAsync("startup");
+                        return;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Startup account info refresh failed: {ex.Message}");
+            }
         }
 
         private async Task MonitorAutomaticAccountInfoRefreshAsync(CancellationToken cancellationToken)
