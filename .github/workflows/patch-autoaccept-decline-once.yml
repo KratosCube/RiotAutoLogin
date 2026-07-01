@@ -1,6 +1,9 @@
 name: Patch delayed auto accept decline once
 
 on:
+  push:
+    paths:
+      - '.github/workflows/patch-autoaccept-decline-once.yml'
   workflow_dispatch:
 
 permissions:
