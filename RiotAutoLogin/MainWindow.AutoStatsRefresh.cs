@@ -18,6 +18,7 @@ namespace RiotAutoLogin
                 return;
 
             _autoStatsRefreshCts = new CancellationTokenSource();
+            Closed += (_, _) => StopAutomaticAccountInfoRefresh();
             Task.Run(() => MonitorAutomaticAccountInfoRefreshAsync(_autoStatsRefreshCts.Token));
         }
 
