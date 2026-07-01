@@ -1,0 +1,138 @@
+name: Patch delayed auto accept decline once
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch LCU service
+        shell: pwsh
+        run: |
+          $path = 'RiotAutoLogin/Services/LCUService.cs'
+          $text = Get-Content $path -Raw
+
+          $old = @'
+                            int acceptDelayMs = AutoAcceptSettingsService.DelayMilliseconds;
+                            if (acceptDelayMs > 0)
+                            {
+                                await Task.Delay(acceptDelayMs, cancellationToken);
+                                if (!CheckIfLeagueClientIsOpen())
+                                    continue;
+
+                                gameSession = ClientRequest("GET", "lol-gameflow/v1/session");
+                                if (gameSession[0] != "200" || !TryGetPhase(gameSession[1], out phase) || phase != "ReadyCheck")
+                                {
+                                    Debug.WriteLine("ReadyCheck is no longer active after delay. Skipping auto-accept.");
+                                    await Task.Delay(1000, cancellationToken);
+                                    continue;
+                                }
+                            }
+
+                            string[] acceptResult = ClientRequest("POST", "lol-matchmaking/v1/ready-check/accept");
+'@
+
+          $new = @'
+                            int acceptDelayMs = AutoAcceptSettingsService.DelayMilliseconds;
+                            if (acceptDelayMs > 0)
+                                await Task.Delay(acceptDelayMs, cancellationToken);
+
+                            if (!CheckIfLeagueClientIsOpen())
+                                continue;
+
+                            if (!IsReadyCheckStillAcceptable())
+                            {
+                                Debug.WriteLine("ReadyCheck was declined, answered, or ended before auto-accept. Skipping auto-accept.");
+                                await Task.Delay(1000, cancellationToken);
+                                continue;
+                            }
+
+                            string[] acceptResult = ClientRequest("POST", "lol-matchmaking/v1/ready-check/accept");
+'@
+
+          if (!$text.Contains($old)) {
+            throw 'Target auto-accept block was not found.'
+          }
+          $text = $text.Replace($old, $new)
+
+          $marker = @'
+        private static string[] GetLeagueAuth(Process client)
+'@
+          $helper = @'
+        private static bool IsReadyCheckStillAcceptable()
+        {
+            string[] gameSession = ClientRequest("GET", "lol-gameflow/v1/session");
+            if (gameSession[0] != "200" || !TryGetPhase(gameSession[1], out string phase) || phase != "ReadyCheck")
+                return false;
+
+            string[] readyCheck = ClientRequest("GET", "lol-matchmaking/v1/ready-check");
+            if (readyCheck[0] != "200")
+                return false;
+
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(readyCheck[1]);
+                JsonElement root = doc.RootElement;
+                string state = GetStringProperty(root, "state");
+                string playerResponse = GetStringProperty(root, "playerResponse");
+
+                bool readyCheckInProgress = string.Equals(state, "InProgress", StringComparison.OrdinalIgnoreCase);
+                bool playerHasNotResponded = string.Equals(playerResponse, "None", StringComparison.OrdinalIgnoreCase);
+
+                if (!playerHasNotResponded)
+                    Debug.WriteLine($"Skipping auto-accept because ready-check playerResponse is {playerResponse}.");
+
+                return readyCheckInProgress && playerHasNotResponded;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not parse ready-check state before auto-accept: {ex.Message}");
+                return false;
+            }
+        }
+
+'@
+          if (!$text.Contains('private static bool IsReadyCheckStillAcceptable()')) {
+            if (!$text.Contains($marker)) {
+              throw 'Helper insertion marker was not found.'
+            }
+            $text = $text.Replace($marker, $helper + $marker)
+          }
+
+          $phaseHelperMarker = @'
+        private static bool IsOurCellId(JsonElement sessionElement, int cellId)
+'@
+          $stringHelper = @'
+        private static string GetStringProperty(JsonElement element, string propertyName)
+        {
+            return element.TryGetProperty(propertyName, out JsonElement property) && property.ValueKind == JsonValueKind.String
+                ? property.GetString() ?? string.Empty
+                : string.Empty;
+        }
+
+'@
+          if (!$text.Contains('private static string GetStringProperty(JsonElement element, string propertyName)')) {
+            if (!$text.Contains($phaseHelperMarker)) {
+              throw 'String helper insertion marker was not found.'
+            }
+            $text = $text.Replace($phaseHelperMarker, $stringHelper + $phaseHelperMarker)
+          }
+
+          Set-Content -Path $path -Value $text -Encoding UTF8
+      - name: Commit patch
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add RiotAutoLogin/Services/LCUService.cs
+          if (git diff --cached --quiet) {
+            Write-Host 'No changes to commit.'
+            exit 0
+          }
+          git commit -m 'Cancel delayed auto-accept after manual decline'
+          git push
