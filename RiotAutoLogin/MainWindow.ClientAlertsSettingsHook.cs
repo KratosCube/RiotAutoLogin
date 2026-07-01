@@ -22,6 +22,7 @@ namespace RiotAutoLogin
             Dispatcher.BeginInvoke(new Action(UpdateCurrentVersionDisplay), DispatcherPriority.Loaded);
             Dispatcher.BeginInvoke(new Action(StartClientAlertsSettingsRetryTimer), DispatcherPriority.Loaded);
             Dispatcher.BeginInvoke(new Action(StartRemotePickLanUrlPatchTimer), DispatcherPriority.Loaded);
+            Dispatcher.BeginInvoke(new Action(StartAutomaticAccountInfoRefresh), DispatcherPriority.Loaded);
         }
 
         private void UpdateCurrentVersionDisplay()
