@@ -51,3 +51,5 @@ jobs:
           }
           git commit -m 'Run startup stats refresh after starting league monitor'
           git push
+
+# run: 2
