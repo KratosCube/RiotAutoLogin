@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,6 +13,12 @@ namespace RiotAutoLogin.Services
         private static CancellationTokenSource? _cts;
         private static Task? _monitorTask;
         private static bool _manualDeclineActive;
+
+        [ModuleInitializer]
+        internal static void Initialize()
+        {
+            Start();
+        }
 
         public static void Start()
         {
