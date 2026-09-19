@@ -1,0 +1,29 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - master
+      - 'codex/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore RiotAutoLogin/RiotAutoLogin.csproj
+
+      - name: Build
+        run: dotnet build RiotAutoLogin/RiotAutoLogin.csproj --configuration Release --no-restore /p:ContinuousIntegrationBuild=true

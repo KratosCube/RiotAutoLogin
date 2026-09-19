@@ -2,15 +2,15 @@
 using FlaUI.UIA3;
 using RiotAutoLogin.Models;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 
 namespace RiotAutoLogin.Services
 {
@@ -19,6 +19,15 @@ namespace RiotAutoLogin.Services
     public static class RiotClientAutomationService
     {
         private static readonly HttpClient _httpClient = new();
+        private static readonly SemaphoreSlim LoginGate = new(1, 1);
+        private static readonly string[] LoginProcessNames =
+        {
+            "RiotClientUx",
+            "Riot Client",
+            "RiotClientServices"
+        };
+
+        private static readonly TimeSpan LoginFormTimeout = TimeSpan.FromSeconds(60);
 
         static RiotClientAutomationService()
         {
@@ -28,188 +37,221 @@ namespace RiotAutoLogin.Services
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
         }
 
-        public static async Task LaunchAndLoginAsync(string username, string password)
+        public static async Task<RiotLoginResult> LaunchAndLoginAsync(
+            string username,
+            string password,
+            IProgress<RiotLoginProgress>? progress = null,
+            CancellationToken cancellationToken = default)
         {
-            Debug.WriteLine("Starting Riot Client process...");
-            Process? riotClientProcess = null;
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
+                return RiotLoginResult.Failed("The selected account does not contain valid login credentials.");
 
-            Process[] processes = Process.GetProcessesByName("Riot Client");
-            if (processes.Length > 0)
+            if (!await LoginGate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+                return RiotLoginResult.Failed("Another Riot Client login is already in progress.");
+
+            try
             {
-                riotClientProcess = processes[0];
-                Debug.WriteLine("Riot Client already running...");
-            }
-            else
-            {
-                Debug.WriteLine("Launching Riot Client...");
-                try
+                progress?.Report(new RiotLoginProgress(RiotLoginStage.Preparing, "Preparing Riot Client…"));
+
+                if (!IsRiotClientRunning())
                 {
                     string riotClientPath = FindRiotClientPath();
                     if (string.IsNullOrEmpty(riotClientPath))
                     {
-                        MessageBox.Show(
-                            "Riot Client not found in common installation locations:\n" +
-                            "• C:\\Riot Games\\Riot Client\\RiotClientServices.exe\n" +
-                            "• C:\\Program Files\\Riot Games\\Riot Client\\RiotClientServices.exe\n" +
-                            "• C:\\Program Files (x86)\\Riot Games\\Riot Client\\RiotClientServices.exe\n\n" +
-                            "Please make sure Riot Client is installed or manually start it before using auto-login.",
-                            "Client Not Found",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Error);
-                        return;
+                        return RiotLoginResult.Failed(
+                            "Riot Client was not found. Install it in a standard location or start it once manually so RiotClientInstalls.json can be discovered.");
                     }
 
-                    ProcessStartInfo startInfo = new()
+                    progress?.Report(new RiotLoginProgress(RiotLoginStage.LaunchingClient, "Starting Riot Client…"));
+                    Process? launcher = Process.Start(new ProcessStartInfo
                     {
                         FileName = riotClientPath,
-                        Arguments = "--launch-product=league_of_legends --launch-patchline=live"
-                    };
+                        WorkingDirectory = Path.GetDirectoryName(riotClientPath) ?? string.Empty,
+                        Arguments = "--launch-product=league_of_legends --launch-patchline=live",
+                        UseShellExecute = false
+                    });
 
-                    riotClientProcess = Process.Start(startInfo);
+                    launcher?.Dispose();
                     Debug.WriteLine($"Riot Client launched from: {riotClientPath}");
                 }
-                catch (Exception ex)
+
+                progress?.Report(new RiotLoginProgress(
+                    RiotLoginStage.WaitingForClient,
+                    "Waiting for the Riot login screen…"));
+
+                Stopwatch timer = Stopwatch.StartNew();
+                string lastDetail = "Riot Client is still starting.";
+                int nextProgressUpdateSecond = 5;
+
+                while (timer.Elapsed < LoginFormTimeout)
                 {
-                    MessageBox.Show(
-                        $"Error launching Riot Client: {ex.Message}",
-                        "Launch Error",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error);
-                    return;
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    LoginAttempt attempt = await Task.Run(
+                        () => TrySubmitCredentials(username, password),
+                        cancellationToken).ConfigureAwait(false);
+
+                    if (attempt.Submitted)
+                    {
+                        progress?.Report(new RiotLoginProgress(RiotLoginStage.Submitting, "Credentials submitted…"));
+                        await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+                        progress?.Report(new RiotLoginProgress(RiotLoginStage.Completed, "Login sent to Riot Client."));
+                        return RiotLoginResult.Succeeded("Riot Client is signing in. Complete any verification prompt in the client.");
+                    }
+
+                    lastDetail = attempt.Detail;
+                    if (timer.Elapsed.TotalSeconds >= nextProgressUpdateSecond)
+                    {
+                        progress?.Report(new RiotLoginProgress(
+                            RiotLoginStage.WaitingForClient,
+                            $"Waiting for Riot Client… {Math.Ceiling(timer.Elapsed.TotalSeconds):0}s"));
+                        nextProgressUpdateSecond += 5;
+                    }
+
+                    await Task.Delay(attempt.WindowFound ? 250 : 500, cancellationToken).ConfigureAwait(false);
+                }
+
+                return RiotLoginResult.Failed(
+                    $"The Riot login form did not become ready within {LoginFormTimeout.TotalSeconds:0} seconds. {lastDetail}");
+            }
+            catch (OperationCanceledException)
+            {
+                return RiotLoginResult.Failed("Login was cancelled.");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Riot login failed: {ex}");
+                return RiotLoginResult.Failed($"Could not start the Riot login: {ex.Message}");
+            }
+            finally
+            {
+                LoginGate.Release();
+            }
+        }
+
+        private static LoginAttempt TrySubmitCredentials(string username, string password)
+        {
+            bool windowFound = false;
+            IReadOnlyList<Process> processes = GetRiotProcesses();
+
+            try
+            {
+                foreach (Process process in processes)
+                {
+                    try
+                    {
+                        process.Refresh();
+                        if (process.HasExited || process.MainWindowHandle == IntPtr.Zero)
+                            continue;
+
+                        windowFound = true;
+                        using var automation = new UIA3Automation();
+                        using var app = Application.Attach(process);
+                        var mainWindow = app.GetMainWindow(automation);
+                        if (mainWindow == null)
+                            continue;
+
+                        var riotClientPane = mainWindow.FindFirstDescendant(
+                            cf => cf.ByName("Riot Client").And(cf.ByControlType(ControlType.Pane)));
+                        var parentElement = riotClientPane ?? mainWindow;
+
+                        var usernameEdit = parentElement.FindFirstDescendant(
+                            cf => cf.ByAutomationId("username").And(cf.ByControlType(ControlType.Edit)));
+                        var passwordEdit = parentElement.FindFirstDescendant(
+                            cf => cf.ByAutomationId("password").And(cf.ByControlType(ControlType.Edit)));
+
+                        if (usernameEdit == null || passwordEdit == null)
+                            continue;
+
+                        mainWindow.Focus();
+                        usernameEdit.Focus();
+                        usernameEdit.Patterns.Value.Pattern.SetValue(string.Empty);
+                        usernameEdit.Patterns.Value.Pattern.SetValue(username);
+
+                        passwordEdit.Focus();
+                        passwordEdit.Patterns.Value.Pattern.SetValue(string.Empty);
+                        passwordEdit.Patterns.Value.Pattern.SetValue(password);
+                        passwordEdit.Focus();
+
+                        FlaUI.Core.Input.Keyboard.Press(FlaUI.Core.WindowsAPI.VirtualKeyShort.ENTER);
+                        Debug.WriteLine($"Login credentials submitted through {process.ProcessName} ({process.Id}).");
+                        return new LoginAttempt(true, true, "Credentials were submitted.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Riot UI process {process.Id} is not ready yet: {ex.Message}");
+                    }
+                }
+            }
+            finally
+            {
+                foreach (Process process in processes)
+                    process.Dispose();
+            }
+
+            return windowFound
+                ? new LoginAttempt(false, true, "The Riot window is visible, but its login fields are not ready yet.")
+                : new LoginAttempt(false, false, "No Riot Client window is visible yet.");
+        }
+
+        private static bool IsRiotClientRunning()
+        {
+            IReadOnlyList<Process> processes = GetRiotProcesses();
+            try
+            {
+                foreach (Process process in processes)
+                {
+                    try
+                    {
+                        // RiotClientServices may remain alive without an open client. In that
+                        // case launching it again is what asks Riot to show the League login UI.
+                        if (!process.HasExited &&
+                            !process.ProcessName.Equals("RiotClientServices", StringComparison.OrdinalIgnoreCase))
+                            return true;
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            finally
+            {
+                foreach (Process process in processes)
+                    process.Dispose();
+            }
+
+            return false;
+        }
+
+        private static IReadOnlyList<Process> GetRiotProcesses()
+        {
+            var seenProcessIds = new HashSet<int>();
+            var result = new List<Process>();
+            foreach (string processName in LoginProcessNames)
+            {
+                Process[] processes;
+                try
+                {
+                    processes = Process.GetProcessesByName(processName);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (Process process in processes)
+                {
+                    if (seenProcessIds.Add(process.Id))
+                        result.Add(process);
+                    else
+                        process.Dispose();
                 }
             }
 
-            Debug.WriteLine("Waiting for login form...");
-            await Task.Delay(800);
-
-            using var automation = new UIA3Automation();
-
-            if (riotClientProcess != null && !riotClientProcess.HasExited)
-            {
-                await Task.Delay(200);
-                await AutomateLoginAsync(riotClientProcess, automation, username, password);
-            }
-            else
-            {
-                Debug.WriteLine("Riot Client process is not available or already exited.");
-                MessageBox.Show(
-                    "Riot Client process is not available. Please try again.",
-                    "Login Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-            }
+            return result;
         }
 
-        private static async Task AutomateLoginAsync(Process process, UIA3Automation automation, string username, string password)
-        {
-            var app = Application.Attach(process);
-            var mainWindow = app.GetMainWindow(automation);
-
-            if (mainWindow == null)
-            {
-                Debug.WriteLine("Could not find main window.");
-                MessageBox.Show(
-                    "Could not find Riot Client main window.",
-                    "Login Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-                return;
-            }
-
-            var riotClientPane = mainWindow.FindFirstDescendant(
-                cf => cf.ByName("Riot Client").And(cf.ByControlType(ControlType.Pane)));
-
-            var parentElement = riotClientPane ?? mainWindow;
-
-            var usernameEdit = parentElement.FindFirstDescendant(
-                cf => cf.ByAutomationId("username").And(cf.ByControlType(ControlType.Edit)));
-
-            if (usernameEdit == null)
-            {
-                Debug.WriteLine("Username field not found.");
-                MessageBox.Show(
-                    "Could not find username field. Make sure Riot Client login screen is visible.",
-                    "Login Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-                return;
-            }
-
-            try
-            {
-                usernameEdit.Focus();
-                usernameEdit.Patterns.Value.Pattern.SetValue(string.Empty);
-                usernameEdit.Patterns.Value.Pattern.SetValue(username);
-                Debug.WriteLine("Username filled successfully.");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error filling username: {ex.Message}");
-                MessageBox.Show(
-                    $"Error filling username: {ex.Message}",
-                    "Login Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-                return;
-            }
-
-            var passwordEdit = parentElement.FindFirstDescendant(
-                cf => cf.ByAutomationId("password").And(cf.ByControlType(ControlType.Edit)));
-
-            if (passwordEdit == null)
-            {
-                Debug.WriteLine("Password field not found.");
-                MessageBox.Show(
-                    "Could not find password field. Make sure Riot Client login screen is visible.",
-                    "Login Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-                return;
-            }
-
-            try
-            {
-                passwordEdit.Focus();
-                passwordEdit.Patterns.Value.Pattern.SetValue(string.Empty);
-                passwordEdit.Patterns.Value.Pattern.SetValue(password);
-                Debug.WriteLine("Password filled successfully.");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error filling password: {ex.Message}");
-                MessageBox.Show(
-                    $"Error filling password: {ex.Message}",
-                    "Login Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-                return;
-            }
-
-            try
-            {
-                Debug.WriteLine("Pressing Enter to submit login form...");
-
-                await Task.Delay(100);
-                passwordEdit.Focus();
-                await Task.Delay(50);
-
-                FlaUI.Core.Input.Keyboard.Press(FlaUI.Core.WindowsAPI.VirtualKeyShort.ENTER);
-
-                Debug.WriteLine("Enter key pressed successfully. Waiting for response...");
-                await Task.Delay(500);
-
-                Console.WriteLine("✅ Login attempt completed. Check Riot Client for any authentication prompts.");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error pressing Enter key: {ex.Message}");
-                MessageBox.Show(
-                    $"Error submitting login form: {ex.Message}",
-                    "Login Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-            }
-        }
+        private sealed record LoginAttempt(bool Submitted, bool WindowFound, string Detail);
 
         public static async Task<string> GetRankAsync(string gameName, string tagLine, string region)
         {
@@ -405,45 +447,6 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        private static string? TryResolveSummonerId(JsonElement root)
-        {
-            string[] candidateNames =
-            {
-                "id",
-                "summonerId",
-                "summoner_id",
-                "encryptedSummonerId"
-            };
-
-            foreach (string candidate in candidateNames)
-            {
-                if (root.TryGetProperty(candidate, out JsonElement value) &&
-                    value.ValueKind == JsonValueKind.String)
-                {
-                    string? parsed = value.GetString();
-                    if (!string.IsNullOrWhiteSpace(parsed))
-                        return parsed;
-                }
-            }
-
-            if (root.TryGetProperty("data", out JsonElement data) &&
-                data.ValueKind == JsonValueKind.Object)
-            {
-                foreach (string candidate in candidateNames)
-                {
-                    if (data.TryGetProperty(candidate, out JsonElement value) &&
-                        value.ValueKind == JsonValueKind.String)
-                    {
-                        string? parsed = value.GetString();
-                        if (!string.IsNullOrWhiteSpace(parsed))
-                            return parsed;
-                    }
-                }
-            }
-
-            return null;
-        }
-
         private static string FormatRankInfo(RankData? rankInfo)
         {
             if (rankInfo == null)
@@ -474,38 +477,17 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        public static bool LaunchRiotClient(string username, string password, string region, bool rememberMe = true)
-        {
-            try
-            {
-                string riotClientPath = FindRiotClientPath();
-                if (string.IsNullOrEmpty(riotClientPath))
-                {
-                    Debug.WriteLine("Riot Client not found");
-                    return false;
-                }
-
-                ProcessStartInfo startInfo = new()
-                {
-                    FileName = riotClientPath,
-                    Arguments = BuildLaunchArguments(username, password, region, rememberMe),
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-
-                using var process = Process.Start(startInfo);
-                Debug.WriteLine($"Riot Client launched with PID: {process?.Id}");
-                return process != null;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error launching Riot Client: {ex.Message}");
-                return false;
-            }
-        }
-
         private static string FindRiotClientPath()
         {
+            string installMetadataPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "Riot Games",
+                "RiotClientInstalls.json");
+
+            string? metadataPath = TryFindRiotClientPathInMetadata(installMetadataPath);
+            if (!string.IsNullOrEmpty(metadataPath))
+                return metadataPath;
+
             string[] possiblePaths =
             {
                 @"C:\Riot Games\Riot Client\RiotClientServices.exe",
@@ -535,90 +517,53 @@ namespace RiotAutoLogin.Services
             return string.Empty;
         }
 
-        private static string BuildLaunchArguments(string username, string password, string region, bool rememberMe)
-        {
-            StringBuilder args = new();
-            args.Append("--launch-product=league_of_legends");
-            args.Append(" --launch-patchline=live");
-
-            if (!string.IsNullOrEmpty(username))
-                args.Append($" --username=\"{username}\"");
-
-            if (!string.IsNullOrEmpty(password))
-                args.Append($" --password=\"{password}\"");
-
-            if (!string.IsNullOrEmpty(region))
-                args.Append($" --region=\"{region}\"");
-
-            if (rememberMe)
-                args.Append(" --remember-me");
-
-            return args.ToString();
-        }
-
-        public static bool CloseRiotClient()
+        private static string? TryFindRiotClientPathInMetadata(string metadataPath)
         {
             try
             {
-                var processes = Process.GetProcessesByName("RiotClientServices")
-                    .Concat(Process.GetProcessesByName("LeagueClient"))
-                    .Concat(Process.GetProcessesByName("LeagueClientUx"));
+                if (!File.Exists(metadataPath))
+                    return null;
 
-                foreach (Process process in processes)
-                {
-                    try
-                    {
-                        process.CloseMainWindow();
-                        if (!process.WaitForExit(5000))
-                            process.Kill();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Error closing process {process.ProcessName}: {ex.Message}");
-                    }
-                    finally
-                    {
-                        process.Dispose();
-                    }
-                }
-
-                return true;
+                using JsonDocument document = JsonDocument.Parse(File.ReadAllText(metadataPath));
+                return FindRiotClientExecutable(document.RootElement);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error closing Riot Client: {ex.Message}");
-                return false;
+                Debug.WriteLine($"Could not read Riot install metadata: {ex.Message}");
+                return null;
             }
         }
 
-        public static void ShowRiotClient()
+        private static string? FindRiotClientExecutable(JsonElement element)
         {
-            try
+            if (element.ValueKind == JsonValueKind.String)
             {
-                var process = Process.GetProcessesByName("RiotClientUx")
-                    .Concat(Process.GetProcessesByName("LeagueClient"))
-                    .FirstOrDefault();
-
-                if (process != null)
+                string? candidate = element.GetString();
+                if (!string.IsNullOrWhiteSpace(candidate) &&
+                    candidate.EndsWith("RiotClientServices.exe", StringComparison.OrdinalIgnoreCase) &&
+                    File.Exists(candidate))
+                    return candidate;
+            }
+            else if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in element.EnumerateObject())
                 {
-                    IntPtr hWnd = process.MainWindowHandle;
-                    if (hWnd != IntPtr.Zero)
-                    {
-                        ShowWindow(hWnd, 9);
-                        SetForegroundWindow(hWnd);
-                    }
+                    string? found = FindRiotClientExecutable(property.Value);
+                    if (!string.IsNullOrEmpty(found))
+                        return found;
                 }
             }
-            catch (Exception ex)
+            else if (element.ValueKind == JsonValueKind.Array)
             {
-                Debug.WriteLine($"Error showing Riot Client: {ex.Message}");
+                foreach (JsonElement item in element.EnumerateArray())
+                {
+                    string? found = FindRiotClientExecutable(item);
+                    if (!string.IsNullOrEmpty(found))
+                        return found;
+                }
             }
+
+            return null;
         }
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     }
 }

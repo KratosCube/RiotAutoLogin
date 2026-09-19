@@ -9,27 +9,20 @@ namespace RiotAutoLogin.Services
     public static class StartupManager
     {
         private const string RegistryKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-        // Use the assembly name as the registry value name for uniqueness.
         private static readonly string AppName = Assembly.GetEntryAssembly()?.GetName().Name ?? "RiotAutoLogin";
         private static readonly string AppPath = Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
 
-
         public static bool IsRegisteredForStartup()
         {
-            if (string.IsNullOrEmpty(AppName)) return false;
+            if (string.IsNullOrEmpty(AppName) || string.IsNullOrEmpty(AppPath))
+                return false;
 
             try
             {
-                using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, false))
-                {
-                    if (key == null)
-                    {
-                        Debug.WriteLine($"StartupManager: Registry key '{RegistryKeyPath}' not found.");
-                        return false;
-                    }
-                    object? value = key.GetValue(AppName);
-                    return value != null && value.ToString()?.Equals(AppPath, StringComparison.OrdinalIgnoreCase) == true;
-                }
+                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, false);
+                string command = key?.GetValue(AppName)?.ToString() ?? string.Empty;
+                string registeredPath = ExtractExecutablePath(command);
+                return registeredPath.Equals(AppPath, StringComparison.OrdinalIgnoreCase);
             }
             catch (Exception ex)
             {
@@ -53,23 +46,13 @@ namespace RiotAutoLogin.Services
 
             try
             {
-                using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true)) // true for writable
-                {
-                    if (key == null)
-                    {
-                        // This should ideally not happen for HKCU path unless major OS issues or very restrictive permissions.
-                        // Attempt to create it if it doesn't exist, though CurrentVersion\Run should always exist.
-                        // For robustness, let's assume OpenSubKey might return null if the path needs creation,
-                        // though CreateSubKey is more direct for that.
-                        // Re-opening with create if null might be an option or directly using CreateSubKey from CurrentUser.
-                        // For now, let's log and fail if it's null directly after OpenSubKey.
-                        Debug.WriteLine($"StartupManager: Could not open or create registry key '{RegistryKeyPath}' for writing.");
-                        return false;
-                    }
-                    key.SetValue(AppName, $"\"{AppPath}\""); // Ensure path is quoted if it contains spaces
-                    Debug.WriteLine($"StartupManager: Application '{AppName}' added to startup with path '{AppPath}'.");
-                    return true;
-                }
+                using RegistryKey? key = Registry.CurrentUser.CreateSubKey(RegistryKeyPath, true);
+                if (key == null)
+                    return false;
+
+                key.SetValue(AppName, $"\"{AppPath}\"");
+                Debug.WriteLine($"StartupManager: Application '{AppName}' added to startup with path '{AppPath}'.");
+                return true;
             }
             catch (Exception ex)
             {
@@ -88,24 +71,16 @@ namespace RiotAutoLogin.Services
 
             try
             {
-                using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true)) // true for writable
+                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true);
+                if (key == null)
                 {
-                    if (key == null)
-                    {
-                        Debug.WriteLine($"StartupManager: Registry key '{RegistryKeyPath}' not found. Nothing to remove.");
-                        return true; // Technically successful if it's not there.
-                    }
-                    if (key.GetValue(AppName) != null)
-                    {
-                        key.DeleteValue(AppName, false); // false: do not throw if not found
-                        Debug.WriteLine($"StartupManager: Application '{AppName}' removed from startup.");
-                    }
-                    else
-                    {
-                        Debug.WriteLine($"StartupManager: Application '{AppName}' was not found in startup. Nothing to remove.");
-                    }
+                    Debug.WriteLine($"StartupManager: Registry key '{RegistryKeyPath}' not found. Nothing to remove.");
                     return true;
                 }
+
+                key.DeleteValue(AppName, false);
+                Debug.WriteLine($"StartupManager: Application '{AppName}' removed from startup.");
+                return true;
             }
             catch (Exception ex)
             {
@@ -113,5 +88,21 @@ namespace RiotAutoLogin.Services
                 return false;
             }
         }
+
+        private static string ExtractExecutablePath(string command)
+        {
+            string value = command.Trim();
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+
+            if (value[0] == '"')
+            {
+                int closingQuote = value.IndexOf('"', 1);
+                return closingQuote > 1 ? value[1..closingQuote] : value.Trim('"');
+            }
+
+            int executableEnd = value.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+            return executableEnd >= 0 ? value[..(executableEnd + 4)] : value;
+        }
     }
-} 
+}

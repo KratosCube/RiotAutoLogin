@@ -2,21 +2,17 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              MinHeight="0">
-    <Border Background="{StaticResource CardBackgroundBrush}"
-            CornerRadius="18"
-            Padding="18"
-            Margin="0,0,0,14">
+    <Border Style="{DynamicResource SettingsCardStyle}">
         <StackPanel>
             <TextBlock Text="Client Alerts"
                        FontSize="18"
                        FontWeight="SemiBold"
-                       Foreground="{StaticResource TextColorBrush}"/>
+                       Foreground="{DynamicResource TextColorBrush}"/>
             <TextBlock Text="Intrusive notifications for game start and warnings when Flash is on the opposite summoner spell slot."
                        Margin="0,6,0,14"
                        FontSize="13"
                        TextWrapping="Wrap"
-                       Foreground="{StaticResource TextColorBrush}"
-                       Opacity="0.68"/>
+                       Foreground="{DynamicResource MutedTextBrush}"/>
 
             <Grid Margin="0,0,0,12">
                 <Grid.ColumnDefinitions>
@@ -27,13 +23,12 @@
                 <StackPanel Grid.Column="0">
                     <TextBlock Text="Enable game start alert"
                                FontSize="14"
-                               Foreground="{StaticResource TextColorBrush}"/>
+                               Foreground="{DynamicResource TextColorBrush}"/>
                     <TextBlock Text="Plays a repeated warning sound when in-game timer reaches about 0:01."
                                Margin="0,4,10,0"
                                FontSize="12"
                                TextWrapping="Wrap"
-                               Foreground="{StaticResource TextColorBrush}"
-                               Opacity="0.68"/>
+                               Foreground="{DynamicResource MutedTextBrush}"/>
                 </StackPanel>
 
                 <ToggleButton x:Name="tglGameStartAlert"
@@ -41,7 +36,7 @@
                               Grid.Column="1"
                               Width="100"
                               Content="OFF"
-                              Style="{StaticResource ModernToggleButton}"/>
+                              Style="{DynamicResource ModernToggleButton}"/>
             </Grid>
 
             <Grid Margin="0,0,0,12">
@@ -53,13 +48,12 @@
                 <StackPanel Grid.Column="0">
                     <TextBlock Text="Game start sound repeats"
                                FontSize="14"
-                               Foreground="{StaticResource TextColorBrush}"/>
+                               Foreground="{DynamicResource TextColorBrush}"/>
                     <TextBlock Text="How many times the warning sound should repeat when the game starts. Allowed range: 1-30."
                                Margin="0,4,10,0"
                                FontSize="12"
                                TextWrapping="Wrap"
-                               Foreground="{StaticResource TextColorBrush}"
-                               Opacity="0.68"/>
+                               Foreground="{DynamicResource MutedTextBrush}"/>
                 </StackPanel>
 
                 <TextBox x:Name="txtGameStartAlertRepeatCount"
@@ -68,7 +62,7 @@
                          Width="100"
                          Text="14"
                          HorizontalContentAlignment="Center"
-                         Style="{StaticResource ModernTextBox}"/>
+                         Style="{DynamicResource ModernTextBox}"/>
             </Grid>
 
             <Grid Margin="0,0,0,12">
@@ -80,13 +74,12 @@
                 <StackPanel Grid.Column="0">
                     <TextBlock Text="Enable Flash side warning"
                                FontSize="14"
-                               Foreground="{StaticResource TextColorBrush}"/>
+                               Foreground="{DynamicResource TextColorBrush}"/>
                     <TextBlock Text="Shows a warning if Flash is on the other side than your preference during champion select."
                                Margin="0,4,10,0"
                                FontSize="12"
                                TextWrapping="Wrap"
-                               Foreground="{StaticResource TextColorBrush}"
-                               Opacity="0.68"/>
+                               Foreground="{DynamicResource MutedTextBrush}"/>
                 </StackPanel>
 
                 <ToggleButton x:Name="tglFlashSlotWarning"
@@ -94,10 +87,10 @@
                               Grid.Column="1"
                               Width="100"
                               Content="OFF"
-                              Style="{StaticResource ModernToggleButton}"/>
+                              Style="{DynamicResource ModernToggleButton}"/>
             </Grid>
 
-            <Border Background="{StaticResource SecondaryBackgroundBrush}"
+            <Border Background="{DynamicResource SecondaryBackgroundBrush}"
                     CornerRadius="12"
                     Padding="14"
                     Margin="0,4,0,0">
@@ -105,20 +98,19 @@
                     <TextBlock Text="Preferred Flash slot"
                                FontSize="14"
                                FontWeight="SemiBold"
-                               Foreground="{StaticResource TextColorBrush}"/>
+                               Foreground="{DynamicResource TextColorBrush}"/>
                     <TextBlock Text="Spell 1 is usually D, Spell 2 is usually F. If Flash is on the other side, the app warns you once per champion select."
                                Margin="0,4,0,10"
                                FontSize="12"
                                TextWrapping="Wrap"
-                               Foreground="{StaticResource TextColorBrush}"
-                               Opacity="0.68"/>
+                               Foreground="{DynamicResource MutedTextBrush}"/>
                     <StackPanel Orientation="Horizontal">
                         <RadioButton x:Name="rbFlashSlot1"
                                      x:FieldModifier="public"
                                      Content="Spell 1 / D"
                                      GroupName="PreferredFlashSlot"
                                      Margin="0,0,18,0"
-                                     Foreground="{StaticResource TextColorBrush}"
+                                     Foreground="{DynamicResource TextColorBrush}"
                                      FontSize="13"
                                      VerticalContentAlignment="Center"/>
                         <RadioButton x:Name="rbFlashSlot2"
@@ -126,7 +118,7 @@
                                      Content="Spell 2 / F"
                                      GroupName="PreferredFlashSlot"
                                      Margin="0,0,18,0"
-                                     Foreground="{StaticResource TextColorBrush}"
+                                     Foreground="{DynamicResource TextColorBrush}"
                                      FontSize="13"
                                      VerticalContentAlignment="Center"/>
                     </StackPanel>

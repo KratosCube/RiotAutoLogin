@@ -6,7 +6,8 @@
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- Compression saves download size but noticeably hurts cold start for a self-contained WPF app. -->
+    <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
     <TrimMode>partial</TrimMode>
     <DebugType>embedded</DebugType>
     
