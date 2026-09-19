@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,13 +11,9 @@ namespace RiotAutoLogin.Services
         private static readonly object SyncRoot = new();
         private static CancellationTokenSource? _cts;
         private static Task? _monitorTask;
-        private static bool _manualDeclineActive;
+        private static volatile bool _manualDeclineActive;
 
-        [ModuleInitializer]
-        internal static void Initialize()
-        {
-            Start();
-        }
+        public static bool IsManualDeclineActive => _manualDeclineActive;
 
         public static void Start()
         {

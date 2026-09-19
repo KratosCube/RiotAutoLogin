@@ -3,289 +3,28 @@ using RiotAutoLogin.Services;
 using System;
 using System.Globalization;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Media;
 
 namespace RiotAutoLogin
 {
     public partial class MainWindow
     {
-        private TextBox? _autoAcceptDelaySecondsTextBox;
-        private TextBlock? _autoAcceptDelayHintTextBlock;
         private bool _manualUpdateCheckRequested;
         private bool _manualUpdateFeedbackInitialized;
-        private bool _remotePickUiInitialized;
         private readonly RemotePickServerService _remotePickServerService = new();
-        private ToggleButton? _remotePickToggle;
-        private TextBlock? _remotePickStatusText;
-        private TextBlock? _remotePickUrlText;
 
-        static MainWindow()
+        private void InitializeSettingsExtras()
         {
-            EventManager.RegisterClassHandler(
-                typeof(MainWindow),
-                FrameworkElement.LoadedEvent,
-                new RoutedEventHandler(OnMainWindowLoadedForAutoAcceptDelay));
-        }
-
-        private static void OnMainWindowLoadedForAutoAcceptDelay(object sender, RoutedEventArgs e)
-        {
-            if (sender is MainWindow window)
-            {
-                window.InitializeAutoAcceptDelayUi();
-                window.InitializeRemotePickServerUi();
-                window.InitializeManualUpdateFeedback();
-            }
-        }
-
-        private void InitializeAutoAcceptDelayUi()
-        {
-            if (_autoAcceptDelaySecondsTextBox != null)
-                return;
-
             AutoAcceptSettingsService.Load();
+            txtAutoAcceptDelaySeconds.Text = AutoAcceptSettingsService.DelaySeconds
+                .ToString(CultureInfo.InvariantCulture);
+            UpdateAutoAcceptDelayHint(AutoAcceptSettingsService.DelaySeconds);
 
-            if (FindName("tglAutoAccept") is not ToggleButton autoAcceptToggle)
-                return;
+            tglRemotePick.IsChecked = false;
+            btnCopyRemotePickLink.IsEnabled = false;
+            UpdateRemotePickStatus("Stopped. Enable Remote Pick only when you want to use your phone.");
 
-            StackPanel? autoAcceptStack = FindVisualParent<StackPanel>(autoAcceptToggle);
-            if (autoAcceptStack == null)
-                return;
-
-            Border delayPanel = CreateAutoAcceptDelayPanel();
-
-            // Auto Accept card children are: title, description, toggle grid, status panel.
-            // Insert the delay control between the toggle and the status text.
-            int insertIndex = Math.Min(3, autoAcceptStack.Children.Count);
-            autoAcceptStack.Children.Insert(insertIndex, delayPanel);
-        }
-
-        private Border CreateAutoAcceptDelayPanel()
-        {
-            var container = new Border
-            {
-                Background = TryFindResource("SecondaryBackgroundBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(30, 38, 50)),
-                CornerRadius = new CornerRadius(12),
-                Padding = new Thickness(14),
-                Margin = new Thickness(0, 14, 0, 0)
-            };
-
-            var root = new Grid();
-            root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var textStack = new StackPanel
-            {
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
-            textStack.Children.Add(new TextBlock
-            {
-                Text = "Delay before accepting",
-                FontSize = 14,
-                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White,
-                VerticalAlignment = VerticalAlignment.Center
-            });
-
-            _autoAcceptDelayHintTextBlock = new TextBlock
-            {
-                Text = $"0 = accept immediately. Max {AutoAcceptSettingsService.MaxDelaySeconds} seconds.",
-                Margin = new Thickness(0, 4, 0, 0),
-                FontSize = 12,
-                Opacity = 0.68,
-                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White,
-                TextWrapping = TextWrapping.Wrap
-            };
-            textStack.Children.Add(_autoAcceptDelayHintTextBlock);
-
-            Grid.SetColumn(textStack, 0);
-            root.Children.Add(textStack);
-
-            var inputStack = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(16, 0, 0, 0)
-            };
-
-            _autoAcceptDelaySecondsTextBox = new TextBox
-            {
-                Width = 72,
-                Text = AutoAcceptSettingsService.DelaySeconds.ToString(CultureInfo.InvariantCulture),
-                HorizontalContentAlignment = HorizontalAlignment.Center,
-                VerticalContentAlignment = VerticalAlignment.Center,
-                ToolTip = "How many seconds RiotAutoLogin should wait before accepting the match."
-            };
-
-            if (TryFindResource("ModernTextBox") is Style textBoxStyle)
-            {
-                _autoAcceptDelaySecondsTextBox.Style = textBoxStyle;
-            }
-
-            _autoAcceptDelaySecondsTextBox.PreviewTextInput += AutoAcceptDelaySecondsTextBox_PreviewTextInput;
-            _autoAcceptDelaySecondsTextBox.LostFocus += (_, _) => SaveAutoAcceptDelayFromTextBox();
-            _autoAcceptDelaySecondsTextBox.KeyDown += AutoAcceptDelaySecondsTextBox_KeyDown;
-            DataObject.AddPastingHandler(_autoAcceptDelaySecondsTextBox, AutoAcceptDelaySecondsTextBox_Pasting);
-
-            inputStack.Children.Add(_autoAcceptDelaySecondsTextBox);
-            inputStack.Children.Add(new TextBlock
-            {
-                Text = "sec",
-                Margin = new Thickness(8, 0, 0, 0),
-                FontSize = 13,
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White,
-                Opacity = 0.8
-            });
-
-            Grid.SetColumn(inputStack, 1);
-            root.Children.Add(inputStack);
-
-            container.Child = root;
-            return container;
-        }
-
-        private void InitializeRemotePickServerUi()
-        {
-            if (_remotePickUiInitialized)
-                return;
-
-            if (FindName("tglAutoAccept") is not ToggleButton autoAcceptToggle)
-                return;
-
-            StackPanel? autoAcceptStack = FindVisualParent<StackPanel>(autoAcceptToggle);
-            Border? autoAcceptCard = autoAcceptStack == null ? null : FindVisualParent<Border>(autoAcceptStack);
-            StackPanel? settingsStack = autoAcceptCard == null ? null : FindVisualParent<StackPanel>(autoAcceptCard);
-            if (settingsStack == null)
-                return;
-
-            _remotePickUiInitialized = true;
-
-            Border remotePickCard = CreateRemotePickCard();
-            int insertIndex = autoAcceptCard == null ? settingsStack.Children.Count : settingsStack.Children.IndexOf(autoAcceptCard) + 1;
-            settingsStack.Children.Insert(Math.Max(0, insertIndex), remotePickCard);
-
-            Closed += (_, _) => _remotePickServerService.Stop();
-        }
-
-        private Border CreateRemotePickCard()
-        {
-            var card = new Border
-            {
-                Background = TryFindResource("CardBackgroundBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(20, 25, 35)),
-                CornerRadius = new CornerRadius(18),
-                Padding = new Thickness(18),
-                Margin = new Thickness(0, 0, 0, 14)
-            };
-
-            var stack = new StackPanel();
-            card.Child = stack;
-
-            stack.Children.Add(new TextBlock
-            {
-                Text = "Remote Pick Server",
-                FontSize = 18,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White
-            });
-
-            stack.Children.Add(new TextBlock
-            {
-                Text = "Start a temporary LAN page for picking champions from your phone.",
-                Margin = new Thickness(0, 6, 0, 14),
-                FontSize = 13,
-                Opacity = 0.68,
-                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White,
-                TextWrapping = TextWrapping.Wrap
-            });
-
-            var toggleGrid = new Grid();
-            toggleGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            toggleGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            toggleGrid.Children.Add(new TextBlock
-            {
-                Text = $"Enable web pick page on port {RemotePickServerService.DefaultPort}",
-                FontSize = 14,
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White
-            });
-
-            _remotePickToggle = new ToggleButton
-            {
-                Width = 100,
-                Content = "OFF",
-                Style = TryFindResource("ModernToggleButton") as Style
-            };
-            _remotePickToggle.Checked += RemotePickToggle_Checked;
-            _remotePickToggle.Unchecked += RemotePickToggle_Unchecked;
-            Grid.SetColumn(_remotePickToggle, 1);
-            toggleGrid.Children.Add(_remotePickToggle);
-            stack.Children.Add(toggleGrid);
-
-            var statusPanel = new Border
-            {
-                Background = TryFindResource("SecondaryBackgroundBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(30, 38, 50)),
-                CornerRadius = new CornerRadius(12),
-                Padding = new Thickness(14),
-                Margin = new Thickness(0, 14, 0, 0)
-            };
-
-            var statusStack = new StackPanel();
-            statusPanel.Child = statusStack;
-
-            _remotePickStatusText = new TextBlock
-            {
-                Text = "Remote Pick is stopped. Enable it only when you want to pick from your phone.",
-                FontSize = 13,
-                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White,
-                TextWrapping = TextWrapping.Wrap
-            };
-            statusStack.Children.Add(_remotePickStatusText);
-
-            _remotePickUrlText = new TextBlock
-            {
-                Text = string.Empty,
-                Margin = new Thickness(0, 8, 0, 0),
-                FontSize = 14,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = TryFindResource("TextColorBrush") as Brush ?? Brushes.White,
-                TextWrapping = TextWrapping.Wrap
-            };
-            statusStack.Children.Add(_remotePickUrlText);
-
-            var buttonStack = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Margin = new Thickness(0, 12, 0, 0)
-            };
-
-            var copyButton = new Button
-            {
-                Content = "Copy Links",
-                Style = TryFindResource("SecondaryButton") as Style,
-                IsEnabled = false
-            };
-            copyButton.Click += (_, _) =>
-            {
-                if (!_remotePickServerService.IsRunning)
-                    return;
-
-                Clipboard.SetText(_remotePickServerService.LocalUrlDisplay);
-                UpdateRemotePickStatus(
-                    "Links copied. If one address does not work, try the next one. Your phone must be on the same Wi-Fi.",
-                    _remotePickServerService.LocalUrlDisplay);
-            };
-
-            _remotePickToggle.Checked += (_, _) => copyButton.IsEnabled = true;
-            _remotePickToggle.Unchecked += (_, _) => copyButton.IsEnabled = false;
-            buttonStack.Children.Add(copyButton);
-            statusStack.Children.Add(buttonStack);
-
-            stack.Children.Add(statusPanel);
-            return card;
+            InitializeManualUpdateFeedback();
         }
 
         private async void RemotePickToggle_Checked(object sender, RoutedEventArgs e)
@@ -293,22 +32,20 @@ namespace RiotAutoLogin
             try
             {
                 await _remotePickServerService.StartAsync();
-                if (_remotePickToggle != null)
-                    _remotePickToggle.Content = "ON";
+                tglRemotePick.Content = "ON";
+                btnCopyRemotePickLink.IsEnabled = true;
 
                 UpdateRemotePickStatus(
-                    "Remote Pick is running. Try these addresses on your phone; one may be a VPN/virtual adapter, so use the Wi-Fi/LAN address that works:",
-                    _remotePickServerService.LocalUrlDisplay);
+                    "Remote Pick is running. Open this address on a phone connected to the same Wi-Fi/LAN:",
+                    GetPreferredRemotePickPhoneUrl());
             }
             catch (Exception ex)
             {
-                if (_remotePickToggle != null)
-                {
-                    _remotePickToggle.IsChecked = false;
-                    _remotePickToggle.Content = "OFF";
-                }
-
+                tglRemotePick.IsChecked = false;
+                tglRemotePick.Content = "OFF";
+                btnCopyRemotePickLink.IsEnabled = false;
                 UpdateRemotePickStatus($"Failed to start Remote Pick: {ex.Message}");
+
                 MessageBox.Show(
                     $"Remote Pick server could not be started:\n{ex.Message}\n\nIf Windows Firewall asks for access, allow it for Private networks.",
                     "Remote Pick Error",
@@ -320,38 +57,94 @@ namespace RiotAutoLogin
         private void RemotePickToggle_Unchecked(object sender, RoutedEventArgs e)
         {
             _remotePickServerService.Stop();
-            if (_remotePickToggle != null)
-                _remotePickToggle.Content = "OFF";
+            tglRemotePick.Content = "OFF";
+            btnCopyRemotePickLink.IsEnabled = false;
+            UpdateRemotePickStatus("Stopped. Enable Remote Pick only when you want to use your phone.");
+        }
 
-            UpdateRemotePickStatus("Remote Pick is stopped. Enable it only when you want to pick from your phone.");
+        private void btnCopyRemotePickLink_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_remotePickServerService.IsRunning)
+                return;
+
+            string url = GetPreferredRemotePickPhoneUrl();
+            Clipboard.SetText(url);
+            UpdateRemotePickStatus("Link copied. Open it on a phone connected to the same Wi-Fi/LAN:", url);
         }
 
         private void UpdateRemotePickStatus(string status, string? url = null)
         {
-            if (_remotePickStatusText != null)
-                _remotePickStatusText.Text = status;
+            txtRemotePickStatus.Text = status;
+            txtRemotePickUrl.Text = url ?? string.Empty;
+        }
 
-            if (_remotePickUrlText != null)
-                _remotePickUrlText.Text = url ?? string.Empty;
+        private string GetPreferredRemotePickPhoneUrl()
+        {
+            foreach (string url in _remotePickServerService.LocalUrls)
+            {
+                if (RemotePickUrlHostStartsWith(url, "192.168."))
+                    return url;
+            }
+
+            foreach (string url in _remotePickServerService.LocalUrls)
+            {
+                if (IsPrivateRemotePickUrl(url))
+                    return url;
+            }
+
+            foreach (string url in _remotePickServerService.LocalUrls)
+            {
+                if (!RemotePickUrlHostStartsWith(url, "127."))
+                    return url;
+            }
+
+            return _remotePickServerService.LocalUrl;
+        }
+
+        private static bool IsPrivateRemotePickUrl(string url)
+        {
+            if (!TryGetRemotePickUrlHost(url, out string host))
+                return false;
+
+            if (host.StartsWith("192.168.", StringComparison.Ordinal) ||
+                host.StartsWith("10.", StringComparison.Ordinal))
+                return true;
+
+            if (!host.StartsWith("172.", StringComparison.Ordinal))
+                return false;
+
+            string[] parts = host.Split('.');
+            return parts.Length >= 2 &&
+                   int.TryParse(parts[1], out int secondOctet) &&
+                   secondOctet is >= 16 and <= 31;
+        }
+
+        private static bool RemotePickUrlHostStartsWith(string url, string prefix)
+        {
+            return TryGetRemotePickUrlHost(url, out string host) &&
+                   host.StartsWith(prefix, StringComparison.Ordinal);
+        }
+
+        private static bool TryGetRemotePickUrlHost(string url, out string host)
+        {
+            host = string.Empty;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri))
+                return false;
+
+            host = uri.Host;
+            return !string.IsNullOrWhiteSpace(host);
         }
 
         private void InitializeManualUpdateFeedback()
         {
-            if (_manualUpdateFeedbackInitialized)
-                return;
-
-            if (FindName("btnCheckUpdates") is not Button checkUpdatesButton)
+            if (_manualUpdateFeedbackInitialized || _updateService == null)
                 return;
 
             _manualUpdateFeedbackInitialized = true;
-
-            // The original Click handler in MainWindow.xaml.cs still performs the update check.
-            // These handlers only mark the check as manual so UpdateProgressChanged can show visible feedback.
-            checkUpdatesButton.PreviewMouseLeftButtonDown += (_, _) => _manualUpdateCheckRequested = true;
-            checkUpdatesButton.Click += (_, _) => _manualUpdateCheckRequested = true;
-            checkUpdatesButton.KeyDown += (_, e) =>
+            btnCheckUpdates.PreviewMouseLeftButtonDown += (_, _) => _manualUpdateCheckRequested = true;
+            btnCheckUpdates.KeyDown += (_, e) =>
             {
-                if (e.Key == Key.Enter || e.Key == Key.Space)
+                if (e.Key is Key.Enter or Key.Space)
                     _manualUpdateCheckRequested = true;
             };
 
@@ -383,19 +176,23 @@ namespace RiotAutoLogin
             }
             else if (progress.Status == UpdateStatus.UpdateAvailable)
             {
-                // The existing UpdateAvailable event opens the update window.
                 _manualUpdateCheckRequested = false;
             }
         }
 
         private void AutoAcceptDelaySecondsTextBox_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Enter)
-            {
-                SaveAutoAcceptDelayFromTextBox();
-                Keyboard.ClearFocus();
-                e.Handled = true;
-            }
+            if (e.Key != Key.Enter)
+                return;
+
+            SaveAutoAcceptDelayFromTextBox();
+            Keyboard.ClearFocus();
+            e.Handled = true;
+        }
+
+        private void AutoAcceptDelaySecondsTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            SaveAutoAcceptDelayFromTextBox();
         }
 
         private void AutoAcceptDelaySecondsTextBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
@@ -405,14 +202,9 @@ namespace RiotAutoLogin
 
         private void AutoAcceptDelaySecondsTextBox_Pasting(object sender, DataObjectPastingEventArgs e)
         {
-            if (!e.DataObject.GetDataPresent(DataFormats.Text))
-            {
-                e.CancelCommand();
-                return;
-            }
-
-            string? pastedText = e.DataObject.GetData(DataFormats.Text) as string;
-            if (!int.TryParse(pastedText, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+            if (!e.DataObject.GetDataPresent(DataFormats.Text) ||
+                e.DataObject.GetData(DataFormats.Text) is not string pastedText ||
+                !int.TryParse(pastedText, NumberStyles.None, CultureInfo.InvariantCulture, out _))
             {
                 e.CancelCommand();
             }
@@ -420,37 +212,25 @@ namespace RiotAutoLogin
 
         private void SaveAutoAcceptDelayFromTextBox()
         {
-            if (_autoAcceptDelaySecondsTextBox == null)
-                return;
-
-            if (!int.TryParse(_autoAcceptDelaySecondsTextBox.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int delaySeconds))
+            if (!int.TryParse(
+                    txtAutoAcceptDelaySeconds.Text,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out int delaySeconds))
             {
                 delaySeconds = 0;
             }
 
             int normalizedDelay = AutoAcceptSettingsService.SaveDelaySeconds(delaySeconds);
-            _autoAcceptDelaySecondsTextBox.Text = normalizedDelay.ToString(CultureInfo.InvariantCulture);
-
-            if (_autoAcceptDelayHintTextBlock != null)
-            {
-                _autoAcceptDelayHintTextBlock.Text = normalizedDelay == 0
-                    ? $"0 = accept immediately. Max {AutoAcceptSettingsService.MaxDelaySeconds} seconds."
-                    : $"RiotAutoLogin will wait {normalizedDelay} seconds, then accept only if ReadyCheck is still active.";
-            }
+            txtAutoAcceptDelaySeconds.Text = normalizedDelay.ToString(CultureInfo.InvariantCulture);
+            UpdateAutoAcceptDelayHint(normalizedDelay);
         }
 
-        private static T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject
+        private void UpdateAutoAcceptDelayHint(int delaySeconds)
         {
-            DependencyObject? parent = VisualTreeHelper.GetParent(child);
-            while (parent != null)
-            {
-                if (parent is T typedParent)
-                    return typedParent;
-
-                parent = VisualTreeHelper.GetParent(parent);
-            }
-
-            return null;
+            txtAutoAcceptDelayHint.Text = delaySeconds == 0
+                ? $"0 = accept immediately. Maximum {AutoAcceptSettingsService.MaxDelaySeconds} seconds."
+                : $"Wait {delaySeconds} seconds, then accept only if ReadyCheck is still active.";
         }
     }
 }

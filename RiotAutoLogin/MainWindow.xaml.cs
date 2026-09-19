@@ -4,11 +4,9 @@ using RiotAutoLogin.Utilities;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,8 +17,6 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 using System.Windows.Forms;
 using Path = System.IO.Path;
 
@@ -31,20 +27,6 @@ namespace RiotAutoLogin
         // DllImports to bring a window to the front.
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
-        [DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-        [DllImport("user32.dll")]
-        private static extern bool IsIconic(IntPtr hWnd);
-        [DllImport("user32.dll")]
-        private static extern bool BringWindowToTop(IntPtr hWnd);
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetForegroundWindow();
-        [DllImport("user32.dll")]
-        private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
-        [DllImport("user32.dll")]
-        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
-        [DllImport("kernel32.dll")]
-        private static extern uint GetCurrentThreadId();
         
         // DllImports for cursor position and screen detection
         [DllImport("user32.dll")]
@@ -81,16 +63,8 @@ namespace RiotAutoLogin
 
         private const uint MONITOR_DEFAULTTONEAREST = 2;
 
-        private const int SW_RESTORE = 9;
-        private const int SW_SHOW = 5;
-        private const int SW_MAXIMIZE = 3;
-
         // Data and configuration fields.
         private List<Account> _accounts = new List<Account>();
-        private readonly string _configFilePath = System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "RiotClientAutoLogin", "accounts.json");
-
         // System Tray Icon
         private NotifyIcon? _notifyIcon;
 
@@ -104,15 +78,16 @@ namespace RiotAutoLogin
         // Update Service
         private UpdateService? _updateService;
 
-        private bool _isDarkMode = true;
         private bool _suppressAutoAcceptEvents = false;
         private string _selectedAvatarPath = string.Empty;
         private string _selectedRegion = "eun1";
-        private Border? _lastSelectedCard;
-
-        // For mapping an account to its card border (used in selection highlighting).
-        private Dictionary<Account, Border> _accountCardMap = new Dictionary<Account, Border>();
         private System.Windows.Controls.Primitives.Popup? _quickLoginPopup;
+        private CancellationTokenSource? _lifetimeCts;
+        private CancellationTokenSource? _loginCts;
+        private bool _startupInitialized;
+        private bool _deferredServicesInitialized;
+        private bool _suppressStartupToggleEvents;
+        private bool _isLoginInProgress;
 
         public MainWindow()
         {
@@ -121,18 +96,21 @@ namespace RiotAutoLogin
 
             LoadAccounts();
             LoadHotkeySettings();
-            InitializeServices();
+            InitializeUpdateService();
             RefreshUI();
             
             this.Closing += MainWindow_Closing;
             this.KeyDown += MainWindow_KeyDown;
         }
 
-        private void InitializeServices()
+        private void InitializeDeferredServices()
         {
+            if (_deferredServicesInitialized)
+                return;
+
+            _deferredServicesInitialized = true;
             InitializeNotifyIcon(); 
             InitializeHotkeyService();
-            InitializeUpdateService();
         }
             
         private void RefreshUI()
@@ -142,7 +120,7 @@ namespace RiotAutoLogin
             UpdateTotalGameStats();
             UpdateHotkeyDisplay();
             UpdateRunOnStartupToggleUI();
-            UpdateAutoAcceptToggleUI();
+            SetAutoAcceptUiPendingClientCheck();
         }
 
         private void InitializeNotifyIcon()
@@ -243,7 +221,11 @@ namespace RiotAutoLogin
             {
                 try
                 {
-                    var updateWindow = new UpdateNotificationWindow(updateInfo, _updateService);
+                    UpdateService? updateService = _updateService;
+                    if (updateService == null)
+                        return;
+
+                    var updateWindow = new UpdateNotificationWindow(updateInfo, updateService);
                     updateWindow.Owner = this;
                     updateWindow.Show();
                 }
@@ -262,6 +244,10 @@ namespace RiotAutoLogin
 
         private async void btnCheckUpdates_Click(object sender, RoutedEventArgs e)
         {
+            UpdateService? updateService = _updateService;
+            if (updateService == null)
+                return;
+
             try
             {
                 // Disable the button during check
@@ -269,7 +255,7 @@ namespace RiotAutoLogin
                 btnCheckUpdates.Content = "Checking...";
                 
                 Console.WriteLine("🔄 Manual update check requested...");
-                await _updateService.CheckForUpdatesAsync();
+                await updateService.CheckForUpdatesAsync();
                 
                 // Reset button
                 btnCheckUpdates.IsEnabled = true;
@@ -681,13 +667,12 @@ namespace RiotAutoLogin
             button.Content = buttonBorder;
 
             // Add click handler
-            button.Click += (sender, e) =>
+            button.Click += async (sender, e) =>
             {
                 Console.WriteLine($"🎯 Quick login clicked: {account.GameName}");
-                _quickLoginPopup.IsOpen = false;
-                
-                // Start login in background
-                Task.Run(() => StartLoginProcess(account));
+                if (_quickLoginPopup != null)
+                    _quickLoginPopup.IsOpen = false;
+                await StartLoginAsync(account);
             };
 
             return button;
@@ -699,7 +684,8 @@ namespace RiotAutoLogin
             this.WindowState = WindowState.Normal;
             this.Activate();
             SetForegroundWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle); // Bring to front
-            _notifyIcon.Visible = false;
+            if (_notifyIcon != null)
+                _notifyIcon.Visible = false;
         }
 
         private void ExitApplication()
@@ -723,119 +709,113 @@ namespace RiotAutoLogin
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            Console.WriteLine("🚀 Application starting - Loading accounts and initializing...");
-            
-            LoadAccounts();
-            RefreshAccountLists();
-            UpdateQuickLoginViewport();
-            UpdateTotalGameStats();
-            Task preloadTask = GameData.PreloadAllDataAsync();
-            await Task.Run(() => MonitorLeagueClientAsync());
+            if (_startupInitialized)
+                return;
 
-            // Deferred API key loading and account update.
-            await Task.Run(async () =>
-            {
-                try
-                {
-                    // Load API key with UI update
-                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
-                {
-                    var apiKeyTextBox = this.FindName("txtApiKey") as System.Windows.Controls.TextBox;
-                    if (apiKeyTextBox != null)
-                    {
-                        string apiKey = await Task.Run(() => ApiKeyManager.GetApiKey());
-                        if (!string.IsNullOrEmpty(apiKey))
-                        {
-                            apiKeyTextBox.Text = "••••••••••••••••••••" + apiKey.Substring(Math.Max(0, apiKey.Length - 4));
-                            apiKeyTextBox.ToolTip = "API key is saved. Enter a new key to update.";
-                                Console.WriteLine("✅ API key loaded successfully");
-                            }
-                            else
-                            {
-                                Console.WriteLine("⚠️ No API key found - rank updates will not work");
-                            }
-                        }
-                    });
-                    
-                    // Update account ranks with feedback
-                    if (_accounts.Any())
-                    {
-                        Console.WriteLine($"🔄 Starting automatic rank update for {_accounts.Count} accounts...");
-                    await UpdateAllAccountsAsync();
-                        
-                        // Update UI after rank update
-                        await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-                        {
-                            RefreshAccountLists();
-                            UpdateQuickLoginViewport();
-                            UpdateTotalGameStats();
-                            SaveAccounts();
-                        });
-                        
-                        Console.WriteLine("✅ Account ranks updated successfully on startup");
-                    }
-                    else
-                    {
-                        Console.WriteLine("ℹ️ No accounts found - skipping rank update");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"❌ Error during startup rank update: {ex.Message}");
-                    // Still refresh UI even if rank update failed
-                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-                    {
-                        RefreshAccountLists();
-                        UpdateQuickLoginViewport();
-                        UpdateTotalGameStats();
-                    });
-                }
-            });
-            
+            _startupInitialized = true;
+            Console.WriteLine("🚀 Application shell loaded. Starting deferred services...");
+
+            // Give WPF a chance to paint the shell before initializing tray, hotkey,
+            // LCU, network, and Data Dragon work.
+            await System.Windows.Threading.Dispatcher.Yield(
+                System.Windows.Threading.DispatcherPriority.ContextIdle);
+
+            InitializeDeferredServices();
+            InitializeSettingsExtras();
             LoadAutoPickSettings();
-            UpdateAutoAcceptToggleUI();
-            // Update current version display
-            try
-            {
-                var currentVersion = _updateService.GetSettings(); // Get current version from update service
-                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                var version = assembly.GetName().Version ?? new Version("1.0.0");
-                txtCurrentVersion.Text = $"Current version: v{version.ToString(3)}"; // Only show major.minor.patch
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error updating version display: {ex.Message}");
-                txtCurrentVersion.Text = "Current version: v1.0.0";
-            }
+            UpdateCurrentVersionDisplay();
+
+            _lifetimeCts = new CancellationTokenSource();
+            CancellationToken lifetimeToken = _lifetimeCts.Token;
+
+            AutoAcceptDeclineGuardService.Start();
+            _ = Task.Run(() => MonitorLeagueClientAsync(lifetimeToken), lifetimeToken);
+            StartAutomaticAccountInfoRefresh();
+
+            _ = PreloadGameDataSafelyAsync(lifetimeToken);
+            _ = LoadApiKeyForDisplayAsync(lifetimeToken);
+            _ = SyncGreyscreenStatsAfterStartupAsync(lifetimeToken);
+            _ = CheckForUpdatesAfterStartupAsync(lifetimeToken);
 
             // Start auto-pick monitor if any auto-pick feature is enabled
             if (_autoPickSettings.AutoPickEnabled || _autoPickSettings.AutoBanEnabled || _autoPickSettings.AutoSpellsEnabled)
             {
                 StartAutoPickMonitor();
             }
-            
-            // Check for updates on startup (non-blocking)
-            _ = Task.Run(async () =>
+
+            Console.WriteLine("🎉 Application is ready; background initialization is running.");
+        }
+
+        private static async Task PreloadGameDataSafelyAsync(CancellationToken cancellationToken)
+        {
+            try
             {
-                try
+                await Task.Run(() => GameData.PreloadAllDataAsync(), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Game data preload failed: {ex.Message}");
+            }
+        }
+
+        private async Task LoadApiKeyForDisplayAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                string apiKey = await Task.Run(ApiKeyManager.GetApiKey, cancellationToken);
+                if (string.IsNullOrEmpty(apiKey))
+                    return;
+
+                txtApiKey.Text = "••••••••••••••••••••" + apiKey.Substring(Math.Max(0, apiKey.Length - 4));
+                txtApiKey.ToolTip = "API key is saved. Enter a new key to update.";
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"API key display load failed: {ex.Message}");
+            }
+        }
+
+        private async Task SyncGreyscreenStatsAfterStartupAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await Task.Delay(750, cancellationToken);
+                if (await UIService.TrySyncGreyscreenStatsAsync(_accounts, cancellationToken))
                 {
-                    if (_updateService.ShouldCheckForUpdates())
-                    {
-                        Console.WriteLine("🔄 Checking for application updates...");
-                        await _updateService.CheckForUpdatesAsync();
-                    }
-                    else
-                    {
-                        Console.WriteLine("⏭️ Skipping update check (checked recently)");
-                    }
+                    UpdateTotalGameStats();
+                    RefreshAccountLists();
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"❌ Error checking for updates: {ex.Message}");
-                }
-            });
-            
-            Console.WriteLine("🎉 Application fully loaded and ready to use!");
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Greyscreen stats sync failed: {ex.Message}");
+            }
+        }
+
+        private async Task CheckForUpdatesAfterStartupAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await Task.Delay(1500, cancellationToken);
+                if (_updateService?.ShouldCheckForUpdates() == true)
+                    await _updateService.CheckForUpdatesAsync();
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Update check failed: {ex.Message}");
+            }
         }
 
         #region Window Control Event Handlers
@@ -862,12 +842,6 @@ namespace RiotAutoLogin
         private void btnClose_Click(object sender, RoutedEventArgs e)
         {
             this.Close();
-        }
-
-        private void btnToggleTheme_Click(object sender, RoutedEventArgs e)
-        {
-            _isDarkMode = !_isDarkMode;
-            ApplyTheme();
         }
 
         #endregion
@@ -972,20 +946,6 @@ namespace RiotAutoLogin
                     btnEUNE.IsChecked = _selectedRegion == "eun1";
                 }
 
-                if (_accountCardMap.TryGetValue(selected, out Border selectedBorder))
-                {
-                    if (_lastSelectedCard != null)
-                    {
-                        _lastSelectedCard.BorderBrush = new SolidColorBrush(Color.FromRgb(62, 62, 74));
-                        _lastSelectedCard.BorderThickness = new Thickness(1);
-                        _lastSelectedCard.Background = (SolidColorBrush)Resources["CardBackgroundBrush"];
-                    }
-
-                    selectedBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 82, 82));
-                    selectedBorder.Background = new SolidColorBrush(Color.FromRgb(42, 42, 54));
-                    selectedBorder.BorderThickness = new Thickness(2);
-                    _lastSelectedCard = selectedBorder;
-                }
             }
         }
 
@@ -1044,69 +1004,97 @@ namespace RiotAutoLogin
             }
         }
 
-        // NEW: Completely rewritten - no async, no await, pure simplicity
-        private void LoginCard_MouseDown(object sender, MouseButtonEventArgs e)
+        private async void LoginCard_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (sender is Border clickedBorder && clickedBorder.Tag is Account account)
             {
                 Console.WriteLine($"🎯 LOGIN card clicked: {account.GameName}");
-                
-                // Prevent multiple clicks
-                if (_isLoginInProgress)
-                {
-                    Console.WriteLine("Login already in progress, ignoring click...");
-                    return;
-                }
-                
-                // Start login in background thread to avoid UI issues
-                Task.Run(() => StartLoginProcess(account));
+                await StartLoginAsync(account);
             }
         }
 
-        private void StartLoginProcess(Account account)
+        private async Task StartLoginAsync(Account account)
         {
+            if (_isLoginInProgress)
+                return;
+
+            _isLoginInProgress = true;
+            _loginCts?.Dispose();
+            _loginCts = new CancellationTokenSource();
+            icLoginAccounts.IsEnabled = false;
+            icLoginAccounts.Opacity = 0.72;
+            Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+
             try
             {
-                _isLoginInProgress = true;
-                Console.WriteLine($"Starting background login for: {account.GameName}");
-                
-                // Focus window first
-                FocusRiotClientWindow();
-                
-                // Small delay
-                Thread.Sleep(500);
-                
-                // Decrypt password
+                SetLoginStatus($"Preparing {account.GameName}…", Color.FromRgb(216, 60, 69), Color.FromRgb(53, 32, 39));
+
                 string password = EncryptionService.DecryptString(account.EncryptedPassword);
                 if (string.IsNullOrEmpty(password))
                 {
-                    Console.WriteLine("Failed to decrypt password!");
+                    SetLoginStatus("Could not decrypt this account", Color.FromRgb(255, 108, 117), Color.FromRgb(58, 29, 34));
+                    System.Windows.MessageBox.Show(
+                        "The saved password could not be decrypted. Update the account and save its password again.",
+                        "Login Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
                     return;
                 }
-                
-                // Call the automation service (this is already async internally)
-                var loginTask = RiotClientAutomationService.LaunchAndLoginAsync(account.AccountName, password);
-                loginTask.Wait(); // Wait for completion
-                
-                Console.WriteLine("Login process completed!");
+
+                var progress = new Progress<RiotLoginProgress>(loginProgress =>
+                {
+                    Color indicator = loginProgress.Stage == RiotLoginStage.Completed
+                        ? Color.FromRgb(61, 220, 151)
+                        : Color.FromRgb(216, 60, 69);
+                    SetLoginStatus(loginProgress.Message, indicator, Color.FromRgb(53, 32, 39));
+                });
+
+                RiotLoginResult result = await RiotClientAutomationService.LaunchAndLoginAsync(
+                    account.AccountName,
+                    password,
+                    progress,
+                    _loginCts.Token);
+
+                if (result.Success)
+                {
+                    SetLoginStatus("Sign-in submitted", Color.FromRgb(61, 220, 151), Color.FromRgb(25, 55, 46));
+                }
+                else
+                {
+                    SetLoginStatus("Login needs attention", Color.FromRgb(255, 108, 117), Color.FromRgb(58, 29, 34));
+                    if (IsLoaded && !_loginCts.IsCancellationRequested)
+                    {
+                        System.Windows.MessageBox.Show(result.Message, "Login Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error in login process: {ex.Message}");
+                SetLoginStatus("Login failed", Color.FromRgb(255, 108, 117), Color.FromRgb(58, 29, 34));
             }
             finally
             {
                 _isLoginInProgress = false;
+                icLoginAccounts.IsEnabled = true;
+                icLoginAccounts.Opacity = 1;
+                Mouse.OverrideCursor = null;
             }
         }
 
+        private void SetLoginStatus(string message, Color indicatorColor, Color backgroundColor)
+        {
+            txtLoginStatus.Text = message;
+            loginStatusIndicator.Fill = new SolidColorBrush(indicatorColor);
+            loginStatusPill.Background = new SolidColorBrush(backgroundColor);
+        }
 
-        private void lbLoginAccounts_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        private async void lbLoginAccounts_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (lbLoginAccounts.SelectedItem is Account account)
             {
                 Console.WriteLine($"Double-click login for: {account.GameName}");
-                Task.Run(() => StartLoginProcess(account));
+                await StartLoginAsync(account);
             }
         }
 
@@ -1148,7 +1136,7 @@ namespace RiotAutoLogin
 
             // Adjust these if you change the card template later
             const int columns = 4;
-            const double cardHeight = 220;   // must match card Height in XAML
+            const double cardHeight = 224;   // must match card Height in XAML
             const double rowGap = 12;        // must match bottom margin between rows
             const double safetyBottom = 16;  // prevents clipping at the bottom
 
@@ -1266,9 +1254,18 @@ namespace RiotAutoLogin
 
             if (LCUService.CheckIfLeagueClientIsOpen())
             {
-                LCUService.StartAutoAccept();
-                autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
-                txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
+                if (AutoAcceptDeclineGuardService.IsManualDeclineActive)
+                {
+                    LCUService.StopAutoAccept();
+                    autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(244, 201, 93));
+                    txtAutoAcceptStatus.Text = "This match was declined. Auto-accept will resume for the next ReadyCheck.";
+                }
+                else
+                {
+                    LCUService.StartAutoAccept();
+                    autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
+                    txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
+                }
             }
             else
             {
@@ -1303,6 +1300,10 @@ namespace RiotAutoLogin
         {
             // This method is called when the window is truly closing (e.g., after Application.Shutdown() is called).
             // Ensure resources are released here.
+            _loginCts?.Cancel();
+            _loginCts?.Dispose();
+            _lifetimeCts?.Cancel();
+            _lifetimeCts?.Dispose();
             _hotkeyService?.Dispose(); 
             _notifyIcon?.Dispose(); 
             
@@ -1311,16 +1312,19 @@ namespace RiotAutoLogin
             {
                 _updateService.UpdateAvailable -= OnUpdateAvailable;
                 _updateService.UpdateProgressChanged -= OnUpdateProgressChanged;
+                _updateService.UpdateProgressChanged -= OnManualUpdateProgressChanged;
             }
             
             LCUService.StopAutoAccept();
+            AutoAcceptDeclineGuardService.Stop();
+            _remotePickServerService.Stop();
             StopAutoPickMonitor();
             base.OnClosed(e);
         }
 
-        private async Task MonitorLeagueClientAsync()
+        private async Task MonitorLeagueClientAsync(CancellationToken cancellationToken)
         {
-            while (true)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
@@ -1338,11 +1342,18 @@ namespace RiotAutoLogin
 
                             if (isLeagueOpen)
                             {
-                                if (_hotkeySettings.AutoAcceptEnabled)
+                                if (_hotkeySettings.AutoAcceptEnabled &&
+                                    !AutoAcceptDeclineGuardService.IsManualDeclineActive)
                                 {
                                     LCUService.StartAutoAccept();
                                     autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
                                     txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
+                                }
+                                else if (AutoAcceptDeclineGuardService.IsManualDeclineActive)
+                                {
+                                    LCUService.StopAutoAccept();
+                                    autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(244, 201, 93));
+                                    txtAutoAcceptStatus.Text = "This match was declined. Auto-accept will resume for the next ReadyCheck.";
                                 }
                                 else
                                 {
@@ -1366,21 +1377,18 @@ namespace RiotAutoLogin
                         }
                     });
                 }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
                 catch (Exception ex)
                 {
                     Console.WriteLine("Error monitoring League client: " + ex.Message);
                 }
 
-                await Task.Delay(5000);
+                await Task.Delay(5000, cancellationToken);
             }
         }
-
-        #endregion
-
-        #region (Optional) Helper Methods
-
-        // Example: Cache account card borders for quick access (if your XAML uses an ItemsControl named icAccounts).
-
 
         #endregion
 
@@ -2238,6 +2246,7 @@ namespace RiotAutoLogin
                 // RunOnStartup is false by default
                  // DO NOT SAVE here to avoid overwriting a potentially recoverable file
             }
+            _hotkeySettings.RunOnStartup = StartupManager.IsRegisteredForStartup();
             // UI updates are now handled by the caller (e.g., constructor or TabControl_SelectionChanged)
         }
 
@@ -2300,8 +2309,16 @@ namespace RiotAutoLogin
                 Console.WriteLine("UpdateRunOnStartupToggleUI: Toggle button not ready yet.");
                 return;
             }
-            tglRunOnStartup.IsChecked = _hotkeySettings.RunOnStartup;
-            tglRunOnStartup.Content = _hotkeySettings.RunOnStartup ? "ON" : "OFF";
+            _suppressStartupToggleEvents = true;
+            try
+            {
+                tglRunOnStartup.IsChecked = _hotkeySettings.RunOnStartup;
+                tglRunOnStartup.Content = _hotkeySettings.RunOnStartup ? "ON" : "OFF";
+            }
+            finally
+            {
+                _suppressStartupToggleEvents = false;
+            }
             Console.WriteLine($"Run on startup toggle UI updated: {_hotkeySettings.RunOnStartup}");
         }
 
@@ -2351,6 +2368,9 @@ namespace RiotAutoLogin
 
         private void tglRunOnStartup_Checked(object sender, RoutedEventArgs e)
         {
+            if (_suppressStartupToggleEvents)
+                return;
+
             _hotkeySettings.RunOnStartup = true;
             if (StartupManager.AddToStartup())
             {
@@ -2369,6 +2389,9 @@ namespace RiotAutoLogin
 
         private void tglRunOnStartup_Unchecked(object sender, RoutedEventArgs e)
         {
+            if (_suppressStartupToggleEvents)
+                return;
+
             _hotkeySettings.RunOnStartup = false;
             if (StartupManager.RemoveFromStartup())
             {
@@ -2418,62 +2441,23 @@ namespace RiotAutoLogin
             }
         }
 
-        private void ApplyTheme()
+        private void SetAutoAcceptUiPendingClientCheck()
         {
-            UIService.ApplyTheme(this, _isDarkMode);
-            RefreshAccountLists();
-            UpdateQuickLoginViewport();
-            UpdateLayout();
-        }
-        private void UpdateAutoAcceptToggleUI()
-        {
-            if (tglAutoAccept == null || autoAcceptStatusIndicator == null || txtAutoAcceptStatus == null)
-            {
-                Console.WriteLine("UpdateAutoAcceptToggleUI: controls not ready yet.");
-                return;
-            }
-
-            bool isLeagueOpen = LCUService.CheckIfLeagueClientIsOpen();
-
             _suppressAutoAcceptEvents = true;
             try
             {
                 tglAutoAccept.IsChecked = _hotkeySettings.AutoAcceptEnabled;
                 tglAutoAccept.Content = _hotkeySettings.AutoAcceptEnabled ? "ON" : "OFF";
-                tglAutoAccept.IsEnabled = isLeagueOpen;
-
-                if (!isLeagueOpen)
-                {
-                    autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
-
-                    txtAutoAcceptStatus.Text = _hotkeySettings.AutoAcceptEnabled
-                        ? "Auto-accept is enabled and will activate when League Client starts."
-                        : "League Client is not running. Start League of Legends to use auto-accept.";
-
-                    LCUService.StopAutoAccept();
-                }
-                else
-                {
-                    if (_hotkeySettings.AutoAcceptEnabled)
-                    {
-                        LCUService.StartAutoAccept();
-                        autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
-                        txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
-                    }
-                    else
-                    {
-                        LCUService.StopAutoAccept();
-                        autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
-                        txtAutoAcceptStatus.Text = "Auto-accept is inactive. Enable to automatically accept game matches.";
-                    }
-                }
+                tglAutoAccept.IsEnabled = false;
+                autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
+                txtAutoAcceptStatus.Text = "Checking League Client in the background…";
             }
             finally
             {
                 _suppressAutoAcceptEvents = false;
             }
         }
-        private void MainWindow_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        private async void MainWindow_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             // Handle Escape key to close quick login popup
             if (e.Key == Key.Escape && _quickLoginPopup != null && _quickLoginPopup.IsOpen)
@@ -2488,179 +2472,8 @@ namespace RiotAutoLogin
             if (e.Key == Key.Enter && lbLoginAccounts?.SelectedItem is Account account)
             {
                 Console.WriteLine($"Enter key pressed for login: {account.GameName}");
-                
-                // Show Riot Client window if it exists
-                Process[] processes = Process.GetProcessesByName("Riot Client");
-                if (processes.Length > 0)
-                {
-                    IntPtr hWnd = processes[0].MainWindowHandle;
-                    if (hWnd != IntPtr.Zero)
-                    {
-                        ShowWindow(hWnd, SW_RESTORE);
-                        SetForegroundWindow(hWnd);
-                    }
-                }
-                
-                // Perform login
-                string decryptedPassword = EncryptionService.DecryptString(account.EncryptedPassword);
-                if (!string.IsNullOrEmpty(decryptedPassword))
-                {
-                    _ = RiotClientAutomationService.LaunchAndLoginAsync(account.AccountName, decryptedPassword);
-                }
-                else
-                {
-                    System.Windows.MessageBox.Show("Failed to decrypt password for the selected account.", 
-                        "Login Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-                
+                await StartLoginAsync(account);
                 e.Handled = true;
-            }
-            // Add debug hotkey F12 to test account loading
-            else if (e.Key == Key.F12)
-            {
-                Console.WriteLine("=== F12 DEBUG INFO ===");
-                Console.WriteLine($"Total accounts loaded: {_accounts?.Count ?? 0}");
-                Console.WriteLine($"lbLoginAccounts is null: {lbLoginAccounts == null}");
-                Console.WriteLine($"icLoginAccounts is null: {icLoginAccounts == null}");
-                
-                if (_accounts != null)
-                {
-                    foreach (var acc in _accounts)
-                    {
-                        Console.WriteLine($"Account: {acc.GameName} - {acc.AccountName}");
-                    }
-                }
-                
-                // Try to find account cards in the UI
-                if (icLoginAccounts != null)
-                {
-                    var borders = VisualTreeHelperExtensions.FindVisualChildren<Border>(icLoginAccounts).ToList();
-                    Console.WriteLine($"Found {borders.Count} borders in icLoginAccounts");
-                    
-                    foreach (var border in borders)
-                    {
-                        if (border.Tag is Account acc)
-                        {
-                            Console.WriteLine($"Border with account: {acc.GameName}, Name: {border.Name ?? "null"}");
-                        }
-                        else
-                        {
-                            Console.WriteLine($"Border without account tag, Name: {border.Name ?? "null"}");
-                        }
-                    }
-                }
-                
-                e.Handled = true;
-            }
-        }
-
-        // Add flag to prevent multiple login attempts
-        private bool _isLoginInProgress = false;
-
-        private static void FocusRiotClientWindow()
-        {
-            try
-            {
-                Console.WriteLine("Attempting to focus Riot Client window...");
-                
-                // Try different process names that Riot Client might use
-                string[] processNames = { "Riot Client", "RiotClientServices", "RiotClientUx" };
-                Process riotProcess = null;
-                
-                foreach (string processName in processNames)
-                {
-                    Process[] processes = Process.GetProcessesByName(processName);
-                    if (processes.Length > 0)
-                    {
-                        // Find the process with a visible main window
-                        foreach (Process proc in processes)
-                        {
-                            if (proc.MainWindowHandle != IntPtr.Zero)
-                            {
-                                riotProcess = proc;
-                                Console.WriteLine($"Found Riot Client process: {processName} (ID: {proc.Id})");
-                                break;
-                            }
-                        }
-                        if (riotProcess != null) break;
-                    }
-                }
-                
-                if (riotProcess == null)
-                {
-                    Console.WriteLine("No Riot Client process with visible window found.");
-                    return;
-                }
-                
-                IntPtr hWnd = riotProcess.MainWindowHandle;
-                if (hWnd == IntPtr.Zero)
-                {
-                    Console.WriteLine("Riot Client window handle is invalid.");
-                    return;
-                }
-                
-                Console.WriteLine($"Riot Client window handle: {hWnd}");
-                
-                // Multi-step approach to ensure window gets focus
-                
-                // Step 1: Restore if minimized
-                if (IsIconic(hWnd))
-                {
-                    Console.WriteLine("Window is minimized, restoring...");
-                    ShowWindow(hWnd, SW_RESTORE);
-                    Thread.Sleep(200); // Short delay to allow restore
-                }
-                else
-                {
-                    Console.WriteLine("Window is not minimized.");
-                }
-                
-                // Step 2: Show the window
-                Console.WriteLine("Showing window...");
-                ShowWindow(hWnd, SW_SHOW);
-                Thread.Sleep(100);
-                
-                // Step 3: Bring to top
-                Console.WriteLine("Bringing window to top...");
-                BringWindowToTop(hWnd);
-                Thread.Sleep(100);
-                
-                // Step 4: Force foreground (with thread attachment trick)
-                Console.WriteLine("Setting foreground window...");
-                IntPtr foregroundWindow = GetForegroundWindow();
-                if (foregroundWindow != hWnd)
-                {
-                    uint currentThreadId = GetCurrentThreadId();
-                    uint targetThreadId = GetWindowThreadProcessId(hWnd, out uint targetProcessId);
-                    
-                    if (targetThreadId != currentThreadId)
-                    {
-                        Console.WriteLine($"Attaching threads (current: {currentThreadId}, target: {targetThreadId})");
-                        AttachThreadInput(currentThreadId, targetThreadId, true);
-                        SetForegroundWindow(hWnd);
-                        AttachThreadInput(currentThreadId, targetThreadId, false);
-                    }
-                    else
-                    {
-                        SetForegroundWindow(hWnd);
-                    }
-                }
-                
-                // Step 5: Final verification
-                Thread.Sleep(100);
-                IntPtr newForegroundWindow = GetForegroundWindow();
-                if (newForegroundWindow == hWnd)
-                {
-                    Console.WriteLine("✅ Successfully focused Riot Client window!");
-                }
-                else
-                {
-                    Console.WriteLine($"⚠️ Window focus may not have worked. Current foreground: {newForegroundWindow}, Expected: {hWnd}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error focusing Riot Client window: {ex.Message}");
             }
         }
 

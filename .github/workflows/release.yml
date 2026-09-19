@@ -77,7 +77,8 @@ jobs:
           --output $env:PUBLISH_DIR
           /p:PublishSingleFile=true
           /p:IncludeNativeLibrariesForSelfExtract=true
-          /p:EnableCompressionInSingleFile=true
+          /p:EnableCompressionInSingleFile=false
+          /p:PublishReadyToRun=true
           /p:DebugType=None
           /p:Version=${{ steps.release_info.outputs.version }}
           /p:AssemblyVersion=${{ steps.release_info.outputs.version }}.0

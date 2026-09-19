@@ -1,10 +1,8 @@
 using RiotAutoLogin.Controls;
 using RiotAutoLogin.Services;
-using RiotAutoLogin.Utilities;
 using System;
 using System.Diagnostics;
 using System.Globalization;
-using System.Linq;
 using System.Media;
 using System.Net.Http;
 using System.Text.Json;
@@ -47,38 +45,11 @@ namespace RiotAutoLogin
 
         private void EnsureClientAlertSettingsCard()
         {
-            if (SettingsTab == null)
-                return;
-
             if (_clientAlertsSettingsCard != null)
                 return;
 
-            StackPanel? settingsStack = FindSettingsRootStackPanel();
-            if (settingsStack == null)
-                return;
-
-            ClientAlertsSettingsCard? existingCard = settingsStack.Children
-                .OfType<ClientAlertsSettingsCard>()
-                .FirstOrDefault();
-
-            _clientAlertsSettingsCard = existingCard ?? new ClientAlertsSettingsCard();
-
-            if (existingCard == null)
-            {
-                int insertIndex = Math.Min(3, settingsStack.Children.Count);
-                settingsStack.Children.Insert(insertIndex, _clientAlertsSettingsCard);
-            }
-
+            _clientAlertsSettingsCard = clientAlertsSettingsCard;
             HookClientAlertSettingsEvents(_clientAlertsSettingsCard);
-        }
-
-        private StackPanel? FindSettingsRootStackPanel()
-        {
-            ScrollViewer? scrollViewer = VisualTreeHelperExtensions
-                .FindVisualChildren<ScrollViewer>(SettingsTab)
-                .FirstOrDefault(viewer => viewer.Content is StackPanel);
-
-            return scrollViewer?.Content as StackPanel;
         }
 
         private void HookClientAlertSettingsEvents(ClientAlertsSettingsCard card)
@@ -166,8 +137,9 @@ namespace RiotAutoLogin
             _hotkeySettings.GameStartAlertRepeatCount = ClampGameStartAlertRepeatCount(parsedValue);
             SaveHotkeySettings();
             UpdateClientAlertSettingsUi();
-            UpdateStaticClientAlertSettingsUi();
         }
+
+        private static int ClampGameStartAlertRepeatCount(int value) => Math.Clamp(value, 1, 30);
 
         private void UpdateClientAlertSettingsUi()
         {
