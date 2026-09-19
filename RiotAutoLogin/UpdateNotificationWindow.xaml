@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Update Available - Riot Auto Login" 
-        Height="400" Width="500"
+        Height="455" Width="520"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -11,7 +11,7 @@
     
     <Window.Resources>
         <Style x:Key="ModernButton" TargetType="Button">
-            <Setter Property="Background" Value="#FF3C82F6"/>
+            <Setter Property="Background" Value="#FFD83C45"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="15,8"/>
@@ -30,10 +30,10 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#FF2563EB"/>
+                    <Setter Property="Background" Value="#FFEA4B54"/>
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#FF1D4ED8"/>
+                    <Setter Property="Background" Value="#FFB92E38"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -59,10 +59,11 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             
             <!-- Header -->
-            <Grid Grid.Row="0" Background="#FF059669" Margin="0,0,0,0">
+            <Grid Grid.Row="0" Background="#FFD83C45" Margin="0,0,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
@@ -92,8 +93,23 @@
                 </StackPanel>
             </ScrollViewer>
             
+            <Border Grid.Row="2"
+                    Margin="20,0,20,12"
+                    Padding="14,11"
+                    Background="#FF18212D"
+                    BorderBrush="#FF374151"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                <CheckBox x:Name="chkFutureUpdateNotifications"
+                          Content="Notify me about future releases when the app starts"
+                          FontSize="12"
+                          Foreground="#FFE5E7EB"
+                          VerticalContentAlignment="Center"
+                          Click="chkFutureUpdateNotifications_Click"/>
+            </Border>
+
             <!-- Progress Bar (Initially Hidden) -->
-            <Grid Grid.Row="2" x:Name="progressPanel" Visibility="Collapsed" Margin="20,0,20,10">
+            <Grid Grid.Row="3" x:Name="progressPanel" Visibility="Collapsed" Margin="20,0,20,10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -102,11 +118,11 @@
                 <TextBlock x:Name="txtProgress" Grid.Row="0" Text="Downloading..." 
                           FontSize="12" Foreground="#FFE5E7EB" Margin="0,0,0,5"/>
                 <ProgressBar x:Name="progressBar" Grid.Row="1" Height="6" Background="#FF374151" 
-                            Foreground="#FF059669" BorderThickness="0"/>
+                            Foreground="#FFD83C45" BorderThickness="0"/>
             </Grid>
             
             <!-- Buttons -->
-            <Grid Grid.Row="3" Margin="20,0,20,20">
+            <Grid Grid.Row="4" Margin="20,0,20,20">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
@@ -124,4 +140,4 @@
             </Grid>
         </Grid>
     </Border>
-</Window> 
+</Window>

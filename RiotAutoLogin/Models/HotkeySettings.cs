@@ -14,7 +14,11 @@ namespace RiotAutoLogin.Models
 
         public bool GameStartAlertEnabled { get; set; } = false;
         public int GameStartAlertRepeatCount { get; set; } = 14;
+        public string GameStartAlertSoundPath { get; set; } = string.Empty;
+        public bool PickTurnAlertEnabled { get; set; } = false;
+        public string PickTurnAlertSoundPath { get; set; } = string.Empty;
         public bool FlashSlotWarningEnabled { get; set; } = false;
+        public string FlashSlotWarningSoundPath { get; set; } = string.Empty;
         public int PreferredFlashSlot { get; set; } = 2;
     }
 }

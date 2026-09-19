@@ -77,6 +77,7 @@ namespace RiotAutoLogin
 
         // Update Service
         private UpdateService? _updateService;
+        private UpdateNotificationWindow? _updateNotificationWindow;
 
         private bool _suppressAutoAcceptEvents = false;
         private string _selectedAvatarPath = string.Empty;
@@ -210,6 +211,7 @@ namespace RiotAutoLogin
             // Subscribe to update events
             _updateService.UpdateAvailable += OnUpdateAvailable;
             _updateService.UpdateProgressChanged += OnUpdateProgressChanged;
+            UpdateUpdateNotificationUi();
             
             Console.WriteLine("Update service initialized");
         }
@@ -225,8 +227,21 @@ namespace RiotAutoLogin
                     if (updateService == null)
                         return;
 
+                    if (_updateNotificationWindow?.IsVisible == true)
+                    {
+                        _updateNotificationWindow.Activate();
+                        return;
+                    }
+
                     var updateWindow = new UpdateNotificationWindow(updateInfo, updateService);
+                    _updateNotificationWindow = updateWindow;
                     updateWindow.Owner = this;
+                    updateWindow.NotificationPreferenceChanged += _ => UpdateUpdateNotificationUi();
+                    updateWindow.Closed += (_, _) =>
+                    {
+                        if (ReferenceEquals(_updateNotificationWindow, updateWindow))
+                            _updateNotificationWindow = null;
+                    };
                     updateWindow.Show();
                 }
                 catch (Exception ex)
@@ -806,7 +821,7 @@ namespace RiotAutoLogin
             try
             {
                 await Task.Delay(1500, cancellationToken);
-                if (_updateService?.ShouldCheckForUpdates() == true)
+                if (_updateService?.NotificationsEnabled == true)
                     await _updateService.CheckForUpdatesAsync();
             }
             catch (OperationCanceledException)

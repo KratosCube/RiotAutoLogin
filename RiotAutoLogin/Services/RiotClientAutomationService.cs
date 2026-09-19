@@ -5,9 +5,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,6 +29,52 @@ namespace RiotAutoLogin.Services
         };
 
         private static readonly TimeSpan LoginFormTimeout = TimeSpan.FromSeconds(60);
+        private const int SwShow = 5;
+        private const int SwRestore = 9;
+
+        private delegate bool EnumWindowsProc(IntPtr windowHandle, IntPtr parameter);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr windowHandle, out uint processId);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsWindowVisible(IntPtr windowHandle);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsIconic(IntPtr windowHandle);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ShowWindowAsync(IntPtr windowHandle, int command);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(IntPtr windowHandle);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowText(IntPtr windowHandle, StringBuilder text, int maximumCount);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetClassName(IntPtr windowHandle, StringBuilder className, int maximumCount);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetWindowRect(IntPtr windowHandle, out NativeRect rectangle);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeRect
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
 
         static RiotClientAutomationService()
         {
@@ -53,7 +100,8 @@ namespace RiotAutoLogin.Services
             {
                 progress?.Report(new RiotLoginProgress(RiotLoginStage.Preparing, "Preparing Riot Client…"));
 
-                if (!IsRiotClientRunning())
+                bool restoredExistingWindow = TryRestoreExistingRiotClientWindow();
+                if (!restoredExistingWindow)
                 {
                     string riotClientPath = FindRiotClientPath();
                     if (string.IsNullOrEmpty(riotClientPath))
@@ -63,16 +111,13 @@ namespace RiotAutoLogin.Services
                     }
 
                     progress?.Report(new RiotLoginProgress(RiotLoginStage.LaunchingClient, "Starting Riot Client…"));
-                    Process? launcher = Process.Start(new ProcessStartInfo
-                    {
-                        FileName = riotClientPath,
-                        WorkingDirectory = Path.GetDirectoryName(riotClientPath) ?? string.Empty,
-                        Arguments = "--launch-product=league_of_legends --launch-patchline=live",
-                        UseShellExecute = false
-                    });
-
-                    launcher?.Dispose();
-                    Debug.WriteLine($"Riot Client launched from: {riotClientPath}");
+                    StartRiotClient(riotClientPath);
+                }
+                else
+                {
+                    progress?.Report(new RiotLoginProgress(
+                        RiotLoginStage.LaunchingClient,
+                        "Restoring Riot Client from the system tray…"));
                 }
 
                 progress?.Report(new RiotLoginProgress(
@@ -141,10 +186,16 @@ namespace RiotAutoLogin.Services
                     try
                     {
                         process.Refresh();
-                        if (process.HasExited || process.MainWindowHandle == IntPtr.Zero)
+                        if (process.HasExited ||
+                            process.ProcessName.Equals("RiotClientServices", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        IntPtr riotWindowHandle = FindBestTopLevelWindow(process);
+                        if (riotWindowHandle == IntPtr.Zero)
                             continue;
 
                         windowFound = true;
+                        RestoreWindow(riotWindowHandle);
                         using var automation = new UIA3Automation();
                         using var app = Application.Attach(process);
                         var mainWindow = app.GetMainWindow(automation);
@@ -194,7 +245,21 @@ namespace RiotAutoLogin.Services
                 : new LoginAttempt(false, false, "No Riot Client window is visible yet.");
         }
 
-        private static bool IsRiotClientRunning()
+        private static void StartRiotClient(string riotClientPath)
+        {
+            Process? launcher = Process.Start(new ProcessStartInfo
+            {
+                FileName = riotClientPath,
+                WorkingDirectory = Path.GetDirectoryName(riotClientPath) ?? string.Empty,
+                Arguments = "--launch-product=league_of_legends --launch-patchline=live",
+                UseShellExecute = false
+            });
+
+            launcher?.Dispose();
+            Debug.WriteLine($"Riot Client launched from: {riotClientPath}");
+        }
+
+        private static bool TryRestoreExistingRiotClientWindow()
         {
             IReadOnlyList<Process> processes = GetRiotProcesses();
             try
@@ -203,14 +268,23 @@ namespace RiotAutoLogin.Services
                 {
                     try
                     {
-                        // RiotClientServices may remain alive without an open client. In that
-                        // case launching it again is what asks Riot to show the League login UI.
-                        if (!process.HasExited &&
-                            !process.ProcessName.Equals("RiotClientServices", StringComparison.OrdinalIgnoreCase))
-                            return true;
+                        if (process.HasExited ||
+                            process.ProcessName.Equals("RiotClientServices", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        IntPtr windowHandle = FindBestTopLevelWindow(process);
+                        if (windowHandle == IntPtr.Zero)
+                            continue;
+
+                        RestoreWindow(windowHandle);
+                        Debug.WriteLine($"Restored Riot Client window for {process.ProcessName} ({process.Id}).");
+                        return true;
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        Debug.WriteLine($"Could not restore Riot process {process.Id}: {ex.Message}");
                     }
                 }
             }
@@ -221,6 +295,87 @@ namespace RiotAutoLogin.Services
             }
 
             return false;
+        }
+
+        private static IntPtr FindBestTopLevelWindow(Process process)
+        {
+            IntPtr bestHandle = IntPtr.Zero;
+            int bestScore = int.MinValue;
+
+            try
+            {
+                process.Refresh();
+                IntPtr mainWindowHandle = process.MainWindowHandle;
+                uint targetProcessId = (uint)process.Id;
+
+                EnumWindows((windowHandle, _) =>
+                {
+                    GetWindowThreadProcessId(windowHandle, out uint windowProcessId);
+                    if (windowProcessId != targetProcessId)
+                        return true;
+
+                    if (!GetWindowRect(windowHandle, out NativeRect rectangle))
+                        return true;
+
+                    int width = rectangle.Right - rectangle.Left;
+                    int height = rectangle.Bottom - rectangle.Top;
+                    if (width < 160 || height < 120)
+                        return true;
+
+                    var titleBuilder = new StringBuilder(512);
+                    GetWindowText(windowHandle, titleBuilder, titleBuilder.Capacity);
+                    string title = titleBuilder.ToString();
+
+                    var classBuilder = new StringBuilder(256);
+                    GetClassName(windowHandle, classBuilder, classBuilder.Capacity);
+                    string className = classBuilder.ToString();
+
+                    bool looksLikeRiotWindow =
+                        title.Contains("Riot", StringComparison.OrdinalIgnoreCase) ||
+                        title.Contains("League of Legends", StringComparison.OrdinalIgnoreCase) ||
+                        className.Contains("Chrome_WidgetWin", StringComparison.OrdinalIgnoreCase);
+                    if (!looksLikeRiotWindow && windowHandle != mainWindowHandle)
+                        return true;
+
+                    int score = 0;
+                    if (windowHandle == mainWindowHandle)
+                        score += 1000;
+                    if (title.Contains("Riot Client", StringComparison.OrdinalIgnoreCase))
+                        score += 500;
+                    if (className.Contains("Chrome_WidgetWin", StringComparison.OrdinalIgnoreCase))
+                        score += 250;
+                    if (IsWindowVisible(windowHandle))
+                        score += 100;
+                    score += Math.Min((width * height) / 10000, 100);
+
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestHandle = windowHandle;
+                    }
+
+                    return true;
+                }, IntPtr.Zero);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Could not enumerate Riot Client windows: {ex.Message}");
+            }
+
+            return bestHandle;
+        }
+
+        private static void RestoreWindow(IntPtr windowHandle)
+        {
+            if (windowHandle == IntPtr.Zero)
+                return;
+
+            if (IsIconic(windowHandle))
+                ShowWindowAsync(windowHandle, SwRestore);
+            else if (!IsWindowVisible(windowHandle))
+                ShowWindowAsync(windowHandle, SwShow);
+
+            SetForegroundWindow(windowHandle);
         }
 
         private static IReadOnlyList<Process> GetRiotProcesses()

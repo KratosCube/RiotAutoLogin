@@ -1,6 +1,6 @@
-# 🎮 RiotAutoLogin v1.2.1
+# 🎮 RiotAutoLogin v1.4.0
 
-[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](https://github.com/KratosCube/RiotAutoLogin/releases)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/KratosCube/RiotAutoLogin/releases)
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -13,6 +13,7 @@ A modern, feature-rich application for automating Riot Client logins with secure
 - **Quick Login Popup:** Lightning-fast account switching with ESC to close
 - **Optimized Performance:** Login times reduced to ~2.5 seconds
 - **Smart UI Detection:** Reliable credential filling using UI automation
+- **Tray Recovery:** Restores a hidden Riot Client window before signing in
 
 ### 📱 **Enhanced User Interface**
 - **Modern Dark Theme:** Sleek, eye-friendly design
@@ -24,7 +25,8 @@ A modern, feature-rich application for automating Riot Client logins with secure
 - **GitHub Integration:** Automatic update detection from releases
 - **One-Click Updates:** Download and install with progress tracking
 - **Version Management:** Smart version comparison and notifications
-- **Background Checking:** Configurable update intervals
+- **Startup Checks:** Detects releases in the background when the app starts
+- **Notification Choice:** Release prompts can be disabled from the prompt or Settings
 
 ### ⚡ **Global Hotkeys** *(New in v1.1.0)*
 - **Quick Access:** Customizable keyboard shortcuts
@@ -38,3 +40,6 @@ A modern, feature-rich application for automating Riot Client logins with secure
 
 ### 🎯 **Champion Select Automation**
 - **Auto-Pick:** Automatically select your preferred champions
+- **Pick-Turn Alert:** Notifies you when your champion pick becomes active
+- **Per-Alert Sounds:** Assign a different MP4 or audio file to each alert
+- **Flash Warning:** Warns when Flash is on the opposite preferred spell slot
