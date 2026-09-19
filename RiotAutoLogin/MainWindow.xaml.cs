@@ -221,7 +221,11 @@ namespace RiotAutoLogin
             {
                 try
                 {
-                    var updateWindow = new UpdateNotificationWindow(updateInfo, _updateService);
+                    UpdateService? updateService = _updateService;
+                    if (updateService == null)
+                        return;
+
+                    var updateWindow = new UpdateNotificationWindow(updateInfo, updateService);
                     updateWindow.Owner = this;
                     updateWindow.Show();
                 }
@@ -240,6 +244,10 @@ namespace RiotAutoLogin
 
         private async void btnCheckUpdates_Click(object sender, RoutedEventArgs e)
         {
+            UpdateService? updateService = _updateService;
+            if (updateService == null)
+                return;
+
             try
             {
                 // Disable the button during check
@@ -247,7 +255,7 @@ namespace RiotAutoLogin
                 btnCheckUpdates.Content = "Checking...";
                 
                 Console.WriteLine("🔄 Manual update check requested...");
-                await _updateService.CheckForUpdatesAsync();
+                await updateService.CheckForUpdatesAsync();
                 
                 // Reset button
                 btnCheckUpdates.IsEnabled = true;
@@ -662,7 +670,8 @@ namespace RiotAutoLogin
             button.Click += async (sender, e) =>
             {
                 Console.WriteLine($"🎯 Quick login clicked: {account.GameName}");
-                _quickLoginPopup.IsOpen = false;
+                if (_quickLoginPopup != null)
+                    _quickLoginPopup.IsOpen = false;
                 await StartLoginAsync(account);
             };
 
@@ -675,7 +684,8 @@ namespace RiotAutoLogin
             this.WindowState = WindowState.Normal;
             this.Activate();
             SetForegroundWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle); // Bring to front
-            _notifyIcon.Visible = false;
+            if (_notifyIcon != null)
+                _notifyIcon.Visible = false;
         }
 
         private void ExitApplication()
@@ -1013,7 +1023,7 @@ namespace RiotAutoLogin
             _loginCts = new CancellationTokenSource();
             icLoginAccounts.IsEnabled = false;
             icLoginAccounts.Opacity = 0.72;
-            Mouse.OverrideCursor = Cursors.Wait;
+            Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
 
             try
             {
@@ -1023,7 +1033,7 @@ namespace RiotAutoLogin
                 if (string.IsNullOrEmpty(password))
                 {
                     SetLoginStatus("Could not decrypt this account", Color.FromRgb(255, 108, 117), Color.FromRgb(58, 29, 34));
-                    MessageBox.Show(
+                    System.Windows.MessageBox.Show(
                         "The saved password could not be decrypted. Update the account and save its password again.",
                         "Login Error",
                         MessageBoxButton.OK,
@@ -1054,7 +1064,7 @@ namespace RiotAutoLogin
                     SetLoginStatus("Login needs attention", Color.FromRgb(255, 108, 117), Color.FromRgb(58, 29, 34));
                     if (IsLoaded && !_loginCts.IsCancellationRequested)
                     {
-                        MessageBox.Show(result.Message, "Login Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        System.Windows.MessageBox.Show(result.Message, "Login Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                     }
                 }
             }
