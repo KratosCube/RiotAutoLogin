@@ -117,7 +117,6 @@ namespace RiotAutoLogin
         private void RefreshUI()
         {
             RefreshAccountLists();
-            UpdateQuickLoginViewport();
             UpdateTotalGameStats();
             UpdateHotkeyDisplay();
             UpdateRunOnStartupToggleUI();
@@ -889,7 +888,6 @@ namespace RiotAutoLogin
             _accounts.Add(newAccount);
             SaveAccounts();
             RefreshAccountLists();
-            UpdateQuickLoginViewport();
             UpdateTotalGameStats();
 
             System.Windows.MessageBox.Show("Account added successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -914,7 +912,6 @@ namespace RiotAutoLogin
                 }
                 SaveAccounts();
                 RefreshAccountLists();
-                UpdateQuickLoginViewport();
                 UpdateTotalGameStats();
             }
             else
@@ -930,7 +927,6 @@ namespace RiotAutoLogin
                 _accounts.Remove(selected);
                 SaveAccounts();
                 RefreshAccountLists();
-                UpdateQuickLoginViewport();
                 UpdateTotalGameStats();
             }
             else
@@ -1117,7 +1113,6 @@ namespace RiotAutoLogin
         {
             await UpdateAllAccountsAsync();
             RefreshAccountLists();
-            UpdateQuickLoginViewport();
             UpdateTotalGameStats();
             SaveAccounts();
         }
@@ -1133,7 +1128,6 @@ namespace RiotAutoLogin
             {
                 await UpdateAllAccountsAsync();
                 RefreshAccountLists();
-                UpdateQuickLoginViewport();
                 UpdateTotalGameStats();
                 SaveAccounts();
             }
@@ -1141,29 +1135,6 @@ namespace RiotAutoLogin
             {
                 btnRefreshQuickStats.IsEnabled = true;
             }
-        }
-        private void UpdateQuickLoginViewport()
-        {
-            if (svQuickLogin == null)
-                return;
-
-            int accountCount = _accounts?.Count ?? 0;
-
-            // Adjust these if you change the card template later
-            const int columns = 4;
-            const double cardHeight = 224;   // must match card Height in XAML
-            const double rowGap = 12;        // must match bottom margin between rows
-            const double safetyBottom = 16;  // prevents clipping at the bottom
-
-            int rows = Math.Min(2, Math.Max(1, (int)Math.Ceiling(accountCount / (double)columns)));
-
-            double visibleHeight = (rows * cardHeight)
-                                 + ((rows - 1) * rowGap)
-                                 + safetyBottom;
-
-            svQuickLogin.Height = visibleHeight;
-            svQuickLogin.VerticalScrollBarVisibility =
-                accountCount > 8 ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
         }
         private async Task UpdateAllAccountsAsync()
         {
