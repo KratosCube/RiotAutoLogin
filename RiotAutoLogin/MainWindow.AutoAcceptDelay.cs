@@ -24,6 +24,7 @@ namespace RiotAutoLogin
             btnCopyRemotePickLink.IsEnabled = false;
             UpdateRemotePickStatus("Stopped. Enable Remote Pick only when you want to use your phone.");
 
+            InitializeApplicationLocation();
             InitializeManualUpdateFeedback();
         }
 
