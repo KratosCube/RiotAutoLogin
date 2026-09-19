@@ -491,27 +491,21 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <Grid Grid.Row="0" Margin="2,0,2,14">
-                                    <StackPanel>
-                                        <TextBlock Text="Choose an account"
-                                                   FontSize="22"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{StaticResource TextColorBrush}"/>
-                                        <TextBlock Text="One click starts Riot Client when needed, waits for the login screen, and signs you in."
-                                                   Margin="0,4,0,0"
-                                                   FontSize="13"
-                                                   Foreground="{StaticResource MutedTextBrush}"/>
-                                    </StackPanel>
-                                </Grid>
+                                <TextBlock Grid.Row="0"
+                                           Text="Choose an account"
+                                           Margin="2,0,2,14"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextColorBrush}"/>
 
                                 <ScrollViewer x:Name="svQuickLogin"
               Grid.Row="1"
-              VerticalScrollBarVisibility="Disabled"
+              VerticalScrollBarVisibility="Auto"
               HorizontalScrollBarVisibility="Disabled"
               Style="{StaticResource DarkScrollViewerStyle}"
               ClipToBounds="True"
               CanContentScroll="False"
-              Padding="0,0,8,8">
+              Padding="0,0,8,16">
                                     <ItemsControl x:Name="icLoginAccounts"
                           ItemsSource="{Binding ElementName=lbLoginAccounts, Path=ItemsSource}">
                                         <ItemsControl.ItemsPanel>

@@ -125,7 +125,6 @@ namespace RiotAutoLogin
                 await Dispatcher.InvokeAsync(() =>
                 {
                     RefreshAccountLists();
-                    UpdateQuickLoginViewport();
                     UpdateTotalGameStats();
                     SaveAccounts();
                 });
