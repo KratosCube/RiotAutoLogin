@@ -1110,6 +1110,47 @@
                                             </StackPanel>
                                         </Border>
 
+                                        <!-- Application Location -->
+                                        <Border Style="{StaticResource SettingsCardStyle}">
+                                            <StackPanel>
+                                                <TextBlock Text="Application Location"
+                                                           FontSize="18"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock Text="The exact executable currently running on this PC."
+                                                           Margin="0,6,0,14"
+                                                           FontSize="13"
+                                                           Foreground="{StaticResource MutedTextBrush}"/>
+
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBox x:Name="txtExecutablePath"
+                                                             Grid.Column="0"
+                                                             Margin="0,0,10,0"
+                                                             IsReadOnly="True"
+                                                             Text="Locating application..."
+                                                             ToolTip="Path to the running Riot Auto Login executable"
+                                                             Style="{StaticResource ModernTextBox}"/>
+
+                                                    <Button Grid.Column="1"
+                                                            Content="Copy Path"
+                                                            Margin="0,0,10,0"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Click="btnCopyExecutablePath_Click"/>
+
+                                                    <Button Grid.Column="2"
+                                                            Content="Open Folder"
+                                                            Style="{StaticResource ModernButton}"
+                                                            Click="btnOpenExecutableFolder_Click"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
                                         <!-- Auto Accept -->
                                         <Border Style="{StaticResource SettingsCardStyle}">
                                             <StackPanel>
