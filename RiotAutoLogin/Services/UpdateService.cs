@@ -348,7 +348,7 @@ namespace RiotAutoLogin.Services
 
         public bool ShouldCheckForUpdates()
         {
-            if (!_settings.AutoCheckEnabled)
+            if (!_settings.AutoCheckEnabled || !_settings.NotificationsEnabled)
                 return false;
 
             var timeSinceLastCheck = DateTime.Now - _settings.LastCheckTime;
@@ -356,6 +356,18 @@ namespace RiotAutoLogin.Services
         }
 
         public UpdateSettings GetSettings() => _settings;
+
+        public bool NotificationsEnabled => _settings.NotificationsEnabled;
+
+        public void SetNotificationsEnabled(bool enabled)
+        {
+            if (_settings.NotificationsEnabled == enabled && _settings.AutoCheckEnabled == enabled)
+                return;
+
+            _settings.NotificationsEnabled = enabled;
+            _settings.AutoCheckEnabled = enabled;
+            SaveSettings();
+        }
 
         public void UpdateSettings(UpdateSettings newSettings)
         {

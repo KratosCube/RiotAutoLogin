@@ -1,0 +1,58 @@
+<UserControl x:Class="RiotAutoLogin.Controls.AlertSoundPicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinHeight="58">
+    <Grid Margin="0,5">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="170"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <TextBlock x:Name="txtAlertName"
+                   Grid.Column="0"
+                   Margin="0,0,12,0"
+                   FontSize="13"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextColorBrush}"
+                   VerticalAlignment="Center"/>
+
+        <Border Grid.Column="1"
+                Margin="0,0,10,0"
+                Padding="11,8"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="9">
+            <TextBlock x:Name="txtSelectedFile"
+                       FontSize="12"
+                       Foreground="{DynamicResource MutedTextBrush}"
+                       TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center"/>
+        </Border>
+
+        <Button Grid.Column="2"
+                Content="Choose file"
+                MinWidth="94"
+                Margin="0,0,8,0"
+                Style="{DynamicResource SecondaryButton}"
+                Click="BrowseSound_Click"/>
+
+        <Button x:Name="btnPreviewSound"
+                Grid.Column="3"
+                Content="Test"
+                MinWidth="64"
+                Margin="0,0,8,0"
+                Style="{DynamicResource SecondaryButton}"
+                Click="PreviewSound_Click"/>
+
+        <Button x:Name="btnDefaultSound"
+                Grid.Column="4"
+                Content="Default"
+                MinWidth="78"
+                Style="{DynamicResource SecondaryButton}"
+                Click="ClearSound_Click"/>
+    </Grid>
+</UserControl>

@@ -14,6 +14,8 @@ namespace RiotAutoLogin
         private string? _downloadedFilePath;
         private bool _installStarted;
 
+        public event Action<bool>? NotificationPreferenceChanged;
+
         public UpdateNotificationWindow(UpdateInfo updateInfo, UpdateService updateService)
         {
             InitializeComponent();
@@ -30,13 +32,15 @@ namespace RiotAutoLogin
         {
             // Update info text
             txtUpdateInfo.Text = $"A new version of Riot Auto Login is available!\n" +
-                               $"Current version: v{_updateInfo.CurrentVersion}\n" +
-                               $"Latest version: v{_updateInfo.LatestVersion}";
+                               $"Current version: v{FormatVersion(_updateInfo.CurrentVersion)}\n" +
+                               $"Latest version: v{FormatVersion(_updateInfo.LatestVersion)}";
 
             // Changelog
             txtChangelog.Text = string.IsNullOrEmpty(_updateInfo.Changelog)
                 ? "No changelog available."
                 : _updateInfo.Changelog;
+
+            chkFutureUpdateNotifications.IsChecked = _updateService.NotificationsEnabled;
 
             // File size
             if (_updateInfo.FileSize.HasValue)
@@ -140,6 +144,13 @@ namespace RiotAutoLogin
             Close();
         }
 
+        private void chkFutureUpdateNotifications_Click(object sender, RoutedEventArgs e)
+        {
+            bool enabled = chkFutureUpdateNotifications.IsChecked == true;
+            _updateService.SetNotificationsEnabled(enabled);
+            NotificationPreferenceChanged?.Invoke(enabled);
+        }
+
         private void OnUpdateProgressChanged(UpdateProgress progress)
         {
             // Update UI on the UI thread
@@ -162,6 +173,17 @@ namespace RiotAutoLogin
             btnDownload.Content = "Download Update";
             btnDownload.IsEnabled = true;
             progressPanel.Visibility = Visibility.Collapsed;
+        }
+
+        private static string FormatVersion(Version? version)
+        {
+            if (version == null)
+                return "unknown";
+
+            if (version.Revision > 0)
+                return $"{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}.{version.Revision}";
+
+            return $"{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}";
         }
 
         protected override void OnClosed(EventArgs e)
