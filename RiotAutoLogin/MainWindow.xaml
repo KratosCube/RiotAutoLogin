@@ -491,12 +491,12 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Row="0"
-                                           Text="Choose an account"
-                                           Margin="2,0,2,14"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextColorBrush}"/>
+                                <DockPanel Grid.Row="0" Margin="2,0,2,14" LastChildFill="True">
+                                    <controls:QueueSelector DockPanel.Dock="Right" SelectedQueue="{Binding SelectedStatsQueue, Mode=TwoWay}"
+                                                            VerticalAlignment="Center" ToolTip="Rank and time statistics queue"/>
+                                    <TextBlock Text="Choose an account" FontSize="22" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
+                                </DockPanel>
 
                                 <ScrollViewer x:Name="svQuickLogin"
               Grid.Row="1"
@@ -590,7 +590,7 @@
                     Padding="10,4"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
-                                                            <TextBlock Text="{Binding RankInfo, Converter={StaticResource RankInfoConverter}}"
+                                                            <TextBlock Text="{Binding DisplayRankInfo, Converter={StaticResource RankInfoConverter}}"
                            FontSize="11"
                            FontWeight="SemiBold"
                            Foreground="{StaticResource TextColorBrush}"
@@ -620,7 +620,7 @@
                                    Opacity="0.7"
                                    Foreground="{StaticResource TextColorBrush}"
                                    HorizontalAlignment="Center"/>
-                                                                    <TextBlock Text="{Binding LeaguePoints}"
+                                                                    <TextBlock Text="{Binding DisplayLeaguePoints}"
                                    FontSize="14"
                                    FontWeight="Bold"
                                    Foreground="{StaticResource TextColorBrush}"
@@ -635,7 +635,7 @@
                                    Opacity="0.7"
                                    Foreground="{StaticResource TextColorBrush}"
                                    HorizontalAlignment="Center"/>
-                                                                    <TextBlock Text="{Binding Wins}"
+                                                                    <TextBlock Text="{Binding DisplayWins}"
                                    FontSize="14"
                                    FontWeight="Bold"
                                    Foreground="#22BABB"
@@ -650,7 +650,7 @@
                                    Opacity="0.7"
                                    Foreground="{StaticResource TextColorBrush}"
                                    HorizontalAlignment="Center"/>
-                                                                    <TextBlock Text="{Binding Losses}"
+                                                                    <TextBlock Text="{Binding DisplayLosses}"
                                    FontSize="14"
                                    FontWeight="Bold"
                                    Foreground="#F24405"
@@ -669,18 +669,17 @@
                  Visibility="Collapsed"
                  MouseDoubleClick="lbLoginAccounts_MouseDoubleClick"/>
 
-                                <Border x:Name="statsPanel"
-        Grid.Row="2"
-        Background="Transparent"
-        Margin="0,14,0,0">
+                                <Border x:Name="statsPanel" Grid.Row="2" Background="Transparent" Margin="0,14,0,0">
                                     <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="82"/></Grid.ColumnDefinitions>
+                                        <Grid x:Name="statsViewport" Height="76" ClipToBounds="True">
+                                            <Grid x:Name="rankStatsPage">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
                                         <Border Grid.Column="0"
@@ -762,22 +761,64 @@
                                             </StackPanel>
                                         </Border>
 
-                                        <Button Grid.Column="5"
-                x:Name="btnRefreshQuickStats"
-                Style="{StaticResource GhostIconButton}"
-                Click="btnRefreshQuickStats_Click"
-                ToolTip="Refresh rank data"
-                VerticalAlignment="Stretch"
-                Margin="0,0,0,0">
-                                            <Path Data="M12,2 A10,10 0 1 1 4.2,5.7 M4,1.5 V6 H8.5"
-                  Stroke="#A8B3C7"
-                  StrokeThickness="1.8"
-                  StrokeStartLineCap="Round"
-                  StrokeEndLineCap="Round"
-                  Stretch="Uniform"
-                  Width="15"
-                  Height="15"/>
-                                        </Button>
+                                        </Grid>
+                                            <Grid x:Name="waitingStatsPage" Visibility="Collapsed">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/>
+                                                </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Style="{StaticResource MetricCardStyle}">
+                                                <StackPanel>
+                                                    <TextBlock Text="Queue" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    <TextBlock x:Name="txtQueueTimeValue" Text="0s" Margin="0,4,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#F4C95D"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Grid.Column="1" Style="{StaticResource MetricCardStyle}">
+                                                <StackPanel>
+                                                    <TextBlock Text="Champ select" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    <TextBlock x:Name="txtChampSelectTimeValue" Text="0s" Margin="0,4,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#22BABB"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Grid.Column="2" Style="{StaticResource MetricCardStyle}">
+                                                <StackPanel>
+                                                    <TextBlock Text="Loading" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    <TextBlock x:Name="txtLoadingTimeValue" Text="0s" Margin="0,4,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#B88AFF"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Grid.Column="3" Style="{StaticResource MetricCardStyle}">
+                                                <StackPanel>
+                                                    <TextBlock Text="Total waiting" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    <TextBlock x:Name="txtWaitingTimeValue" Text="0s" Margin="0,4,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#F5F7FA"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Grid.Column="4" Style="{StaticResource MetricCardStyle}">
+                                                <StackPanel>
+                                                    <TextBlock Text="In game" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    <TextBlock x:Name="txtInGameTimeValue" Text="0s" Margin="0,4,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#3DDC97"/>
+                                                </StackPanel>
+                                            </Border>
+                                            </Grid>
+                                        </Grid>
+                                        <Grid Grid.Column="1">
+                                            <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="30"/></Grid.RowDefinitions>
+                                            <Button x:Name="btnRefreshQuickStats" Style="{StaticResource GhostIconButton}"
+                                                    Click="btnRefreshQuickStats_Click" ToolTip="Refresh ranks for all three queues"
+                                                    HorizontalAlignment="Center">
+                                                <Path Data="M12,2 A10,10 0 1 1 4.2,5.7 M4,1.5 V6 H8.5" Stroke="#A8B3C7" StrokeThickness="1.8"
+                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="15" Height="15"/>
+                                            </Button>
+                                            <Button x:Name="btnStatsScope" Style="{StaticResource SecondaryButton}" Content="Today"
+                                                    FontSize="11" Padding="8,4" Height="30" Visibility="Collapsed"
+                                                    Click="StatisticsScope_Click" ToolTip="Switch between today and all recorded time"/>
+                                            <Grid Grid.Row="1">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="26"/><ColumnDefinition/><ColumnDefinition Width="26"/></Grid.ColumnDefinitions>
+                                                <Button Content="‹" FontSize="20" Width="26" Height="26" Style="{StaticResource GhostIconButton}"
+                                                        Click="PreviousStatistics_Click" ToolTip="Previous statistics page" AutomationProperties.Name="Previous statistics page"/>
+                                                <TextBlock x:Name="txtStatsPage" Grid.Column="1" Text="● ○" FontSize="10" Foreground="{StaticResource MutedTextBrush}"
+                                                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                                <Button Grid.Column="2" Content="›" FontSize="20" Width="26" Height="26" Style="{StaticResource GhostIconButton}"
+                                                        Click="NextStatistics_Click" ToolTip="Next statistics page" AutomationProperties.Name="Next statistics page"/>
+                                            </Grid>
+                                        </Grid>
                                     </Grid>
                                 </Border>
 
@@ -859,7 +900,7 @@
                                                Foreground="{StaticResource TextColorBrush}"
                                                TextTrimming="CharacterEllipsis"/>
 
-                                                                    <TextBlock Text="{Binding RankInfo, Converter={StaticResource RankInfoConverter}}"
+                                                                    <TextBlock Text="{Binding DisplayRankInfo, Converter={StaticResource RankInfoConverter}}"
                                                Margin="0,4,0,0"
                                                FontSize="13"
                                                Foreground="{StaticResource TextColorBrush}"
@@ -868,11 +909,11 @@
                                                                     <TextBlock Margin="0,6,0,0"
                                                FontSize="13"
                                                Foreground="{StaticResource TextColorBrush}">
-                                        <Run Text="{Binding LeaguePoints}"/>
+                                        <Run Text="{Binding DisplayLeaguePoints}"/>
                                         <Run Text=" LP  •  "/>
-                                        <Run Text="{Binding Wins}" Foreground="#22BABB"/>
+                                        <Run Text="{Binding DisplayWins}" Foreground="#22BABB"/>
                                         <Run Text="W / " Foreground="{StaticResource TextColorBrush}"/>
-                                        <Run Text="{Binding Losses}" Foreground="#F24405"/>
+                                        <Run Text="{Binding DisplayLosses}" Foreground="#F24405"/>
                                         <Run Text="L" Foreground="{StaticResource TextColorBrush}"/>
                                                                     </TextBlock>
                                                                 </StackPanel>

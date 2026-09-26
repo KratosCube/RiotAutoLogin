@@ -3,6 +3,7 @@ using FlaUI.UIA3;
 using RiotAutoLogin.Models;
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -20,6 +21,7 @@ namespace RiotAutoLogin.Services
     public static class RiotClientAutomationService
     {
         private static readonly HttpClient _httpClient = new();
+        private static readonly ConcurrentDictionary<string, string> PuuidCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly SemaphoreSlim LoginGate = new(1, 1);
         private static readonly string[] LoginProcessNames =
         {
@@ -408,59 +410,27 @@ namespace RiotAutoLogin.Services
 
         private sealed record LoginAttempt(bool Submitted, bool WindowFound, string Detail);
 
-        public static async Task<string> GetRankAsync(string gameName, string tagLine, string region)
+        public static async Task<Dictionary<RankedQueue, RankData>> GetRanksAsync(string gameName, string tagLine, string region)
         {
-            if (string.IsNullOrWhiteSpace(gameName) || string.IsNullOrWhiteSpace(tagLine))
+            if (string.IsNullOrWhiteSpace(gameName) || string.IsNullOrWhiteSpace(tagLine) || string.IsNullOrWhiteSpace(region))
+                throw new InvalidOperationException("A Riot ID and region are required.");
+
+            string apiKey = await GetApiKeyAsync();
+            if (string.IsNullOrWhiteSpace(apiKey))
+                throw new InvalidOperationException("Set your Riot API key in Settings to refresh ranks.");
+
+            string identity = $"{region}/{gameName}#{tagLine}";
+            if (!PuuidCache.TryGetValue(identity, out string? puuid))
             {
-                Debug.WriteLine("Invalid game name or tag line provided");
-                return "Error: Invalid game name or tag line";
+                puuid = await GetAccountPuuidByRiotIdAsync(gameName, tagLine, apiKey);
+                if (string.IsNullOrWhiteSpace(puuid)) throw new InvalidOperationException("Riot account not found.");
+                PuuidCache[identity] = puuid;
             }
 
-            if (string.IsNullOrWhiteSpace(region))
-            {
-                Debug.WriteLine("Invalid region provided");
-                return "Error: Invalid region";
-            }
-
-            try
-            {
-                Debug.WriteLine($"Starting rank lookup for {gameName}#{tagLine} in region {region}");
-
-                string apiKey = await GetApiKeyAsync();
-                if (string.IsNullOrWhiteSpace(apiKey))
-                {
-                    Debug.WriteLine("No API key available");
-                    return "Error: No API key available. Please set your Riot API key in Settings.";
-                }
-
-                Debug.WriteLine("API key found, proceeding with account lookup");
-
-                string? puuid = await GetAccountPuuidByRiotIdAsync(gameName, tagLine, apiKey);
-                if (string.IsNullOrWhiteSpace(puuid))
-                {
-                    Debug.WriteLine($"Account not found for {gameName}#{tagLine}");
-                    return $"Error: Account '{gameName}#{tagLine}' not found. Please check spelling and ensure the account exists.";
-                }
-
-                Debug.WriteLine($"Account found, getting rank info for region {region}");
-
-                RankData? rankInfo = await GetRankInfoAsync(puuid, region, apiKey);
-
-                if (rankInfo == null)
-                {
-                    Debug.WriteLine($"Rank lookup completed for {gameName}#{tagLine}: Unranked");
-                    return "Unranked";
-                }
-
-                string result = FormatRankInfo(rankInfo);
-                Debug.WriteLine($"Rank lookup completed for {gameName}#{tagLine}: {result}");
-                return result;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error getting rank for {gameName}#{tagLine}: {ex.Message}");
-                return $"Error: {ex.Message}";
-            }
+            string url = $"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{Uri.EscapeDataString(puuid)}";
+            string response = await SendRiotGetAsync(url, apiKey);
+            using var doc = JsonDocument.Parse(response);
+            return RankedQueues.ParseRanks(doc.RootElement);
         }
 
         private static Task<string> GetApiKeyAsync()
@@ -538,97 +508,6 @@ namespace RiotAutoLogin.Services
             {
                 Debug.WriteLine($"Account not found for Riot ID {gameName}#{tagLine}");
                 return null;
-            }
-        }
-
-        private static async Task<RankData?> GetRankInfoAsync(string puuid, string region, string apiKey)
-        {
-            try
-            {
-                Debug.WriteLine($"Getting rank info for PUUID in region: {region}");
-
-                // Use ranked entries directly by PUUID instead of resolving summonerId first
-                string leagueUrl =
-                    $"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{Uri.EscapeDataString(puuid)}";
-
-                Debug.WriteLine($"Making league API request by PUUID: {leagueUrl}");
-
-                string leagueResponse = await SendRiotGetAsync(leagueUrl, apiKey);
-
-                using var leagueDoc = JsonDocument.Parse(leagueResponse);
-
-                foreach (JsonElement entry in leagueDoc.RootElement.EnumerateArray())
-                {
-                    if (!entry.TryGetProperty("queueType", out JsonElement queueTypeProp))
-                        continue;
-
-                    if (queueTypeProp.GetString() != "RANKED_SOLO_5x5")
-                        continue;
-
-                    RankData rankData = new()
-                    {
-                        Tier = entry.TryGetProperty("tier", out JsonElement tierProp)
-                            ? tierProp.GetString() ?? string.Empty
-                            : string.Empty,
-
-                        Rank = entry.TryGetProperty("rank", out JsonElement rankProp)
-                            ? rankProp.GetString() ?? string.Empty
-                            : string.Empty,
-
-                        LeaguePoints = entry.TryGetProperty("leaguePoints", out JsonElement lpProp)
-                            ? lpProp.GetInt32()
-                            : 0,
-
-                        Wins = entry.TryGetProperty("wins", out JsonElement winsProp)
-                            ? winsProp.GetInt32()
-                            : 0,
-
-                        Losses = entry.TryGetProperty("losses", out JsonElement lossesProp)
-                            ? lossesProp.GetInt32()
-                            : 0
-                    };
-
-                    Debug.WriteLine($"Extracted rank data: {rankData.Tier} {rankData.Rank} {rankData.LeaguePoints} LP");
-                    return rankData;
-                }
-
-                Debug.WriteLine("No RANKED_SOLO_5x5 entry found - player is unranked");
-                return null;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error getting rank info: {ex.Message}");
-                throw;
-            }
-        }
-
-        private static string FormatRankInfo(RankData? rankInfo)
-        {
-            if (rankInfo == null)
-                return "Unranked";
-
-            try
-            {
-                string tier = rankInfo.Tier ?? "Unknown";
-                string rank = rankInfo.Rank ?? string.Empty;
-                int lp = rankInfo.LeaguePoints;
-                int wins = rankInfo.Wins;
-                int losses = rankInfo.Losses;
-
-                if (string.IsNullOrWhiteSpace(rank) ||
-                    tier.Equals("MASTER", StringComparison.OrdinalIgnoreCase) ||
-                    tier.Equals("GRANDMASTER", StringComparison.OrdinalIgnoreCase) ||
-                    tier.Equals("CHALLENGER", StringComparison.OrdinalIgnoreCase))
-                {
-                    return $"{tier} ({lp} LP, {wins}W/{losses}L)";
-                }
-
-                return $"{tier} {rank} ({lp} LP, {wins}W/{losses}L)";
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error formatting rank info: {ex.Message}");
-                return "Unranked";
             }
         }
 

@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using RiotAutoLogin.Models;
 using System.Diagnostics;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -15,6 +18,7 @@ namespace RiotAutoLogin.Services
         public int Greyscreens { get; set; }
         public long GreyscreenSeconds { get; set; }
         public string Source { get; set; } = string.Empty;
+        public Dictionary<RankedQueue, GreyscreenData> ByQueue { get; set; } = new();
     }
 
     public static class LcuGreyscreenStatsService
@@ -35,15 +39,9 @@ namespace RiotAutoLogin.Services
             if (string.IsNullOrWhiteSpace(summoner.puuid) && string.IsNullOrWhiteSpace(summoner.accountId) && string.IsNullOrWhiteSpace(summoner.summonerId))
                 return Error("LCU did not return a PUUID, accountId, or summonerId for the current summoner.");
 
-            if (TryReadMatchHistoryStats(summoner.puuid, summoner.accountId, summoner.summonerId, out int deaths, out long deadSeconds, out string source))
+            if (TryReadMatchHistoryStats(summoner.puuid, summoner.accountId, summoner.summonerId, out int deaths, out long deadSeconds, out string source, out var byQueue))
             {
-                bool estimated = false;
-                if (deadSeconds <= 0 && deaths > 0)
-                {
-                    deadSeconds = EstimateDeadSeconds(deaths);
-                    estimated = true;
-                    source += " + estimated death time";
-                }
+                bool estimated = byQueue.Values.Any(data => data.Estimated);
 
                 return new LcuGreyscreenStatsResult
                 {
@@ -54,6 +52,7 @@ namespace RiotAutoLogin.Services
                     Greyscreens = deaths,
                     GreyscreenSeconds = deadSeconds,
                     Source = source,
+                    ByQueue = byQueue,
                     Message = estimated
                         ? $"Estimated {FormatDuration(deadSeconds)} greyscreen time from {deaths} deaths because LCU did not expose exact timeSpentDead."
                         : $"Synced {FormatDuration(deadSeconds)} greyscreen time from LCU match history ({deaths} deaths)."
@@ -110,8 +109,9 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        private static bool TryReadMatchHistoryStats(string puuid, string accountId, string summonerId, out int deaths, out long deadSeconds, out string source)
+        private static bool TryReadMatchHistoryStats(string puuid, string accountId, string summonerId, out int deaths, out long deadSeconds, out string source, out Dictionary<RankedQueue, GreyscreenData> byQueue)
         {
+            byQueue = new();
             string lookupId = !string.IsNullOrWhiteSpace(puuid) ? puuid : !string.IsNullOrWhiteSpace(accountId) ? accountId : summonerId;
             source = $"lol-match-history/v1/products/lol/{lookupId}/matches?begIndex=0&endIndex=100";
             string[] result = LCUService.ClientRequest("GET", source);
@@ -125,7 +125,7 @@ namespace RiotAutoLogin.Services
             try
             {
                 using JsonDocument doc = JsonDocument.Parse(result[1]);
-                return TrySumStatsForCurrentPlayer(doc.RootElement, puuid, accountId, summonerId, out deaths, out deadSeconds);
+                return TrySumStatsForCurrentPlayer(doc.RootElement, puuid, accountId, summonerId, out deaths, out deadSeconds, out byQueue);
             }
             catch (Exception ex)
             {
@@ -136,63 +136,37 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        private static bool TrySumStatsForCurrentPlayer(JsonElement root, string puuid, string accountId, string summonerId, out int totalDeaths, out long totalDeadSeconds)
+        private static bool TrySumStatsForCurrentPlayer(JsonElement root, string puuid, string accountId, string summonerId,
+            out int totalDeaths, out long totalDeadSeconds, out Dictionary<RankedQueue, GreyscreenData> byQueue)
         {
             totalDeaths = 0;
             totalDeadSeconds = 0;
-
-            if (!TryFindGamesArray(root, out JsonElement games))
-                return false;
-
-            bool foundCurrentPlayerInAnyGame = false;
+            byQueue = new();
+            if (!TryFindGamesArray(root, out JsonElement games)) return false;
+            bool found = false;
             foreach (JsonElement game in games.EnumerateArray())
             {
-                if (!TryFindParticipantIdForCurrentPlayer(game, puuid, accountId, summonerId, out int participantId))
-                    continue;
+                if (!TryFindParticipantIdForCurrentPlayer(game, puuid, accountId, summonerId, out int participantId) ||
+                    !TryFindParticipantStats(game, participantId, out JsonElement stats)) continue;
+                found = true;
+                TryReadDeaths(stats, out int deaths);
+                bool exact = TryReadDeadSeconds(stats, out long seconds);
+                if (!exact) seconds = EstimateDeadSeconds(deaths);
+                totalDeaths += deaths;
+                totalDeadSeconds += seconds;
 
-                if (TryFindParticipantStats(game, participantId, out JsonElement stats))
+                if (game.TryGetProperty("queueId", out var id) && id.TryGetInt32(out int queueId) && RankedQueues.FromId(queueId) is { } queue)
                 {
-                    foundCurrentPlayerInAnyGame = true;
-                    if (TryReadDeaths(stats, out int deaths))
-                        totalDeaths += deaths;
-
-                    if (TryReadDeadSeconds(stats, out long seconds))
-                    {
-                        totalDeadSeconds += seconds;
-                    }
-                    else if (TryGetGameId(game, out long gameId) && TryReadDeadSecondsFromGameDetails(gameId, puuid, accountId, summonerId, out long detailedSeconds))
-                    {
-                        totalDeadSeconds += detailedSeconds;
-                    }
+                    if (!byQueue.TryGetValue(queue, out var data)) byQueue[queue] = data = new();
+                    data.Deaths += deaths;
+                    data.Seconds += seconds;
+                    data.Games++;
+                    data.Estimated |= !exact && deaths > 0;
                 }
             }
-
-            return foundCurrentPlayerInAnyGame;
-        }
-
-        private static bool TryReadDeadSecondsFromGameDetails(long gameId, string puuid, string accountId, string summonerId, out long seconds)
-        {
-            seconds = 0;
-            string[] result = LCUService.ClientRequest("GET", $"lol-match-history/v1/games/{gameId}");
-            if (!result[0].StartsWith("2") || string.IsNullOrWhiteSpace(result[1]))
-                return false;
-
-            try
-            {
-                using JsonDocument doc = JsonDocument.Parse(result[1]);
-                if (!TryFindParticipantIdForCurrentPlayer(doc.RootElement, puuid, accountId, summonerId, out int participantId))
-                    return false;
-
-                if (!TryFindParticipantStats(doc.RootElement, participantId, out JsonElement stats))
-                    return false;
-
-                return TryReadDeadSeconds(stats, out seconds);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Could not parse match detail {gameId} for greyscreen time: {ex.Message}");
-                return false;
-            }
+            // Do not fetch up to 100 match-detail documents on every refresh.
+            // Missing death time is explicitly marked as estimated in the UI.
+            return found;
         }
 
         private static bool TryFindGamesArray(JsonElement element, out JsonElement games)

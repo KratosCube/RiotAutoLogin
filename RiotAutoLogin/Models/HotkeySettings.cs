@@ -8,6 +8,7 @@ namespace RiotAutoLogin.Models
         public uint VirtualKey { get; set; } = GlobalHotkeyService.VK_L;
         public string DisplayName { get; set; } = "Ctrl + Alt + L";
         public bool RunOnStartup { get; set; } = false;
+        public RankedQueue SelectedStatsQueue { get; set; } = RankedQueue.SoloDuo;
 
         // New: persisted auto-accept preference
         public bool AutoAcceptEnabled { get; set; } = false;

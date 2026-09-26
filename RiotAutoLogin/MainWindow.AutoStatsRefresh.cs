@@ -18,9 +18,10 @@ namespace RiotAutoLogin
                 return;
 
             _autoStatsRefreshCts = new CancellationTokenSource();
+            CancellationToken token = _autoStatsRefreshCts.Token;
             Closed += (_, _) => StopAutomaticAccountInfoRefresh();
-            Task.Run(() => RefreshAccountInfoAfterStartupAsync(_autoStatsRefreshCts.Token));
-            Task.Run(() => MonitorAutomaticAccountInfoRefreshAsync(_autoStatsRefreshCts.Token));
+            Task.Run(() => RefreshAccountInfoAfterStartupAsync(token));
+            Task.Run(() => MonitorAutomaticAccountInfoRefreshAsync(token));
         }
 
         private void StopAutomaticAccountInfoRefresh()
@@ -71,7 +72,13 @@ namespace RiotAutoLogin
                         continue;
                     }
 
-                    string phase = await LCUService.GetCurrentGamePhaseAsync();
+                    string? json = await LCUService.GetGameflowSessionAsync(cancellationToken);
+                    if (json == null)
+                    {
+                        await Task.Delay(5000, cancellationToken);
+                        continue;
+                    }
+                    string phase = Models.GameflowSnapshot.Parse(json).Phase;
 
                     if (phase is "GameStart" or "InProgress")
                     {
@@ -80,6 +87,7 @@ namespace RiotAutoLogin
                     else if (_hasSeenActiveGameForStatsRefresh && IsPostGameStatsRefreshPhase(phase))
                     {
                         _hasSeenActiveGameForStatsRefresh = false;
+                        await Task.Delay(4000, cancellationToken);
                         await RefreshAccountInfoAutomaticallyAsync($"post-game phase {phase}");
                     }
 
@@ -99,7 +107,7 @@ namespace RiotAutoLogin
 
         private static bool IsPostGameStatsRefreshPhase(string phase)
         {
-            return phase is "PreEndOfGame" or "WaitingForStats" or "EndOfGame" or "Lobby" or "None";
+            return phase is "EndOfGame" or "Lobby" or "None";
         }
 
         private async Task RefreshAccountInfoAutomaticallyAsync(string reason)
@@ -107,7 +115,7 @@ namespace RiotAutoLogin
             if (_autoStatsRefreshRunning)
                 return;
 
-            if ((DateTime.UtcNow - _lastAutomaticStatsRefreshUtc).TotalMinutes < 2)
+            if ((DateTime.UtcNow - _lastAutomaticStatsRefreshUtc).TotalSeconds < 5)
                 return;
 
             if (_accounts == null || _accounts.Count == 0)
@@ -120,7 +128,12 @@ namespace RiotAutoLogin
             {
                 Console.WriteLine($"Automatic account info refresh started: {reason}");
 
-                await UpdateAllAccountsAsync();
+                await UpdateAllAccountsAsync(onlyStale: reason == "startup");
+                if (reason != "startup")
+                {
+                    var accounts = await Dispatcher.InvokeAsync(() => new System.Collections.Generic.List<Models.Account>(_accounts));
+                    await UIService.TrySyncGreyscreenStatsAsync(accounts);
+                }
 
                 await Dispatcher.InvokeAsync(() =>
                 {

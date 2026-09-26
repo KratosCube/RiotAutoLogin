@@ -259,8 +259,9 @@ namespace RiotAutoLogin
             if (_gameStartAlertShownForCurrentGame)
                 return;
 
-            if (!TryReadLiveGameTimeSeconds(out double gameTimeSeconds))
-                return;
+            double? gameTime = await LiveGameClockService.ReadAsync();
+            if (!gameTime.HasValue) return;
+            double gameTimeSeconds = gameTime.Value;
 
             if (gameTimeSeconds >= 1.0 && gameTimeSeconds <= 20.0)
             {
@@ -272,43 +273,6 @@ namespace RiotAutoLogin
                 // App was probably opened after the game had already started. Avoid late surprise sounds.
                 _gameStartAlertShownForCurrentGame = true;
             }
-        }
-
-        private static bool TryReadLiveGameTimeSeconds(out double seconds)
-        {
-            seconds = 0;
-
-            try
-            {
-                using var handler = new HttpClientHandler
-                {
-                    ServerCertificateCustomValidationCallback = (_, _, _, _) => true
-                };
-                using var client = new HttpClient(handler)
-                {
-                    Timeout = TimeSpan.FromMilliseconds(900)
-                };
-
-                string json = client.GetStringAsync("https://127.0.0.1:2999/liveclientdata/gamestats")
-                    .GetAwaiter()
-                    .GetResult();
-
-                using JsonDocument doc = JsonDocument.Parse(json);
-                if (!doc.RootElement.TryGetProperty("gameTime", out JsonElement gameTimeElement))
-                    return false;
-
-                if (gameTimeElement.ValueKind == JsonValueKind.Number && gameTimeElement.TryGetDouble(out seconds))
-                    return true;
-
-                if (gameTimeElement.ValueKind == JsonValueKind.String)
-                    return double.TryParse(gameTimeElement.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out seconds);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Live Client API game time is not available yet: {ex.Message}");
-            }
-
-            return false;
         }
 
         private async Task ShowGameStartAlertAsync()

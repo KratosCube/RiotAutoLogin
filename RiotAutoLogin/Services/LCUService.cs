@@ -21,6 +21,16 @@ namespace RiotAutoLogin.Services
         private static bool _isLeagueOpen;
         private static CancellationTokenSource? _autoAcceptCts;
         private static bool _isAutoAcceptActive;
+        private static readonly object AuthLock = new();
+        private static long _lastProcessCheck = long.MinValue;
+        private static readonly HttpClient Client = new(new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (_, _, _, _) => true,
+            UseProxy = false
+        }) { Timeout = TimeSpan.FromSeconds(4) };
+        private static readonly SemaphoreSlim GameflowGate = new(1, 1);
+        private static string? _gameflowJson;
+        private static long _gameflowCheckedAt = long.MinValue;
 
         public static bool IsLeagueOpen => _isLeagueOpen;
         public static bool IsAutoAcceptActive => _isAutoAcceptActive;
@@ -32,7 +42,8 @@ namespace RiotAutoLogin.Services
 
             _isAutoAcceptActive = true;
             _autoAcceptCts = new CancellationTokenSource();
-            Task.Run(() => AcceptQueueAsync(_autoAcceptCts.Token));
+            CancellationToken token = _autoAcceptCts.Token;
+            Task.Run(() => AcceptQueueAsync(token));
         }
 
         public static void StopAutoAccept()
@@ -45,29 +56,45 @@ namespace RiotAutoLogin.Services
 
         public static bool CheckIfLeagueClientIsOpen()
         {
-            try
+            lock (AuthLock)
             {
-                Process? client = Process.GetProcessesByName("LeagueClientUx").FirstOrDefault();
-                if (client == null)
+                long now = Environment.TickCount64;
+                if (_lastProcessCheck != long.MinValue && now - _lastProcessCheck < 1000)
+                    return _isLeagueOpen;
+                _lastProcessCheck = now;
+                try
                 {
+                    Process[] processes = Process.GetProcessesByName("LeagueClientUx");
+                    try
+                    {
+                        Process? client = processes.FirstOrDefault();
+                        if (client == null)
+                        {
+                            _leagueAuth = Array.Empty<string>();
+                            _lcuPid = 0;
+                            return _isLeagueOpen = false;
+                        }
+                        // The token/port are stable for a client process. WMI is only
+                        // needed on launch/restart, not on every monitor tick.
+                        if (_lcuPid != client.Id || _leagueAuth.Length != 2)
+                        {
+                            _leagueAuth = GetLeagueAuth(client);
+                            _lcuPid = client.Id;
+                            Debug.WriteLine($"League Client found. Process ID: {_lcuPid}");
+                        }
+                        return _isLeagueOpen = _leagueAuth.Length == 2;
+                    }
+                    finally
+                    {
+                        foreach (Process process in processes) process.Dispose();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error checking for League Client: {ex.Message}");
                     _isLeagueOpen = false;
                     return false;
                 }
-
-                _leagueAuth = GetLeagueAuth(client);
-                _isLeagueOpen = true;
-                if (_lcuPid != client.Id)
-                {
-                    _lcuPid = client.Id;
-                    Debug.WriteLine($"League Client found. Process ID: {_lcuPid}");
-                }
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error checking for League Client: {ex.Message}");
-                _isLeagueOpen = false;
-                return false;
             }
         }
 
@@ -146,35 +173,44 @@ namespace RiotAutoLogin.Services
             string commandLine = results.Cast<ManagementObject>().FirstOrDefault()?["CommandLine"]?.ToString() ?? string.Empty;
             string port = Regex.Match(commandLine, @"--app-port=""?(\d+)""?").Groups[1].Value;
             string authToken = Regex.Match(commandLine, @"--remoting-auth-token=([a-zA-Z0-9_-]+)").Groups[1].Value;
+            if (string.IsNullOrEmpty(port) || string.IsNullOrEmpty(authToken))
+                return Array.Empty<string>();
             string auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"riot:{authToken}"));
             return new[] { auth, port };
         }
 
         public static string[] ClientRequest(string method, string url, string? body = null)
+            => ClientRequestAsync(method, url, body).GetAwaiter().GetResult();
+
+        public static async Task<string[]> ClientRequestAsync(string method, string url, string? body = null, CancellationToken cancellationToken = default)
         {
             try
             {
-                if (_leagueAuth.Length < 2 || string.IsNullOrWhiteSpace(_leagueAuth[0]) || string.IsNullOrWhiteSpace(_leagueAuth[1]))
+                string[] auth;
+                lock (AuthLock) auth = _leagueAuth;
+                if (auth.Length < 2)
                     return new[] { "999", "League Client authentication is not available." };
-
-                using var handler = new HttpClientHandler
-                {
-                    ServerCertificateCustomValidationCallback = (_, _, _, _) => true
-                };
-                using var client = new HttpClient(handler)
-                {
-                    BaseAddress = new Uri($"https://127.0.0.1:{_leagueAuth[1]}/"),
-                    Timeout = TimeSpan.FromSeconds(4)
-                };
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", _leagueAuth[0]);
-
-                using var request = new HttpRequestMessage(new HttpMethod(method), url);
+                // All requests stay on loopback, even when callers pass a leading slash.
+                using var request = new HttpRequestMessage(new HttpMethod(method), $"https://127.0.0.1:{auth[1]}/{url.TrimStart('/')}");
+                request.Headers.Authorization = new AuthenticationHeaderValue("Basic", auth[0]);
                 if (!string.IsNullOrEmpty(body))
                     request.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
-                using HttpResponseMessage response = client.SendAsync(request).Result;
-                return new[] { ((int)response.StatusCode).ToString(), response.Content.ReadAsStringAsync().Result };
+                using HttpResponseMessage response = await Client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    lock (AuthLock)
+                    {
+                        if (ReferenceEquals(auth, _leagueAuth))
+                        {
+                            _leagueAuth = Array.Empty<string>();
+                            _lastProcessCheck = long.MinValue;
+                        }
+                    }
+                }
+                return new[] { ((int)response.StatusCode).ToString(), await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false) };
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error in ClientRequest: {ex.Message}");
@@ -189,11 +225,7 @@ namespace RiotAutoLogin.Services
                 if (!CheckIfLeagueClientIsOpen())
                     return new List<ChampionModel>();
 
-                string? currentSummonerId = await GetCurrentSummonerIdAsync();
-                if (string.IsNullOrEmpty(currentSummonerId))
-                    return new List<ChampionModel>();
-
-                string[] ownedChampionsResult = ClientRequest("GET", "lol-champions/v1/owned-champions-minimal");
+                string[] ownedChampionsResult = await ClientRequestAsync("GET", "lol-champions/v1/owned-champions-minimal");
                 if (ownedChampionsResult[0] != "200")
                     return new List<ChampionModel>();
 
@@ -232,7 +264,7 @@ namespace RiotAutoLogin.Services
                 if (!CheckIfLeagueClientIsOpen())
                     return GetHardcodedSpells();
 
-                string[] result = ClientRequest("GET", "lol-game-data/assets/v1/summoner-spells.json");
+                string[] result = await ClientRequestAsync("GET", "lol-game-data/assets/v1/summoner-spells.json");
                 if (result[0] != "200")
                     return GetHardcodedSpells();
 
@@ -276,25 +308,6 @@ namespace RiotAutoLogin.Services
             new() { Name = "Smite", Id = 11, Description = "Deals true damage to target monster or minion." }
         };
 
-        private static Task<string?> GetCurrentSummonerIdAsync()
-        {
-            try
-            {
-                string[] result = ClientRequest("GET", "lol-summoner/v1/current-summoner");
-                if (result[0] == "200")
-                {
-                    using JsonDocument doc = JsonDocument.Parse(result[1]);
-                    if (doc.RootElement.TryGetProperty("summonerId", out JsonElement idProp))
-                        return Task.FromResult<string?>(idProp.GetString());
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error getting current summoner ID: {ex.Message}");
-            }
-            return Task.FromResult<string?>(string.Empty);
-        }
-
         public static bool SelectChampion(int championId, string actId, bool complete = false)
         {
             try
@@ -333,17 +346,33 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        public static Task<string> GetCurrentGamePhaseAsync()
+        public static async Task<string?> GetGameflowSessionAsync(CancellationToken cancellationToken = default)
+        {
+            await GameflowGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                long now = Environment.TickCount64;
+                if (_gameflowCheckedAt != long.MinValue && now - _gameflowCheckedAt < 200)
+                    return _gameflowJson;
+                string[] result = await ClientRequestAsync("GET", "lol-gameflow/v1/session", cancellationToken: cancellationToken).ConfigureAwait(false);
+                _gameflowJson = result[0] == "200" ? result[1] : null;
+                _gameflowCheckedAt = Environment.TickCount64;
+                return _gameflowJson;
+            }
+            finally { GameflowGate.Release(); }
+        }
+
+        public static async Task<string> GetCurrentGamePhaseAsync()
         {
             try
             {
-                string[] result = ClientRequest("GET", "lol-gameflow/v1/session");
-                return Task.FromResult(result[0] == "200" && TryGetPhase(result[1], out string phase) ? phase : "None");
+                string? json = await GetGameflowSessionAsync().ConfigureAwait(false);
+                return json != null && TryGetPhase(json, out string phase) ? phase : "None";
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error getting game phase: {ex.Message}");
-                return Task.FromResult("None");
+                return "None";
             }
         }
 
@@ -351,12 +380,11 @@ namespace RiotAutoLogin.Services
         {
             try
             {
-                string[] result = ClientRequest("GET", "lol-champ-select/v1/session");
+                string[] result = await ClientRequestAsync("GET", "lol-champ-select/v1/session");
                 if (result[0] != "200")
                     return (false, string.Empty, string.Empty);
 
                 using JsonDocument doc = JsonDocument.Parse(result[1]);
-                _ = await GetCurrentSummonerIdAsync();
                 if (!doc.RootElement.TryGetProperty("actions", out JsonElement actionsArray))
                     return (false, string.Empty, string.Empty);
 
