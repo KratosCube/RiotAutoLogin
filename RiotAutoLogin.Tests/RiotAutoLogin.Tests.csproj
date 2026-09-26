@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../RiotAutoLogin/Models/Account.cs" Link="Account.cs" />
+    <Compile Include="../RiotAutoLogin/Models/RankedQueue.cs" Link="RankedQueue.cs" />
+    <Compile Include="../RiotAutoLogin/Models/GameflowSnapshot.cs" Link="GameflowSnapshot.cs" />
+    <Compile Include="../RiotAutoLogin/Services/WaitingTimeLedger.cs" Link="WaitingTimeLedger.cs" />
+  </ItemGroup>
+</Project>

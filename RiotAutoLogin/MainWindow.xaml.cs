@@ -22,7 +22,7 @@ using Path = System.IO.Path;
 
 namespace RiotAutoLogin
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, INotifyPropertyChanged
     {
         // DllImports to bring a window to the front.
         [DllImport("user32.dll")]
@@ -97,6 +97,7 @@ namespace RiotAutoLogin
 
             LoadAccounts();
             LoadHotkeySettings();
+            InitializeStatistics();
             InitializeUpdateService();
             RefreshUI();
             
@@ -663,11 +664,11 @@ namespace RiotAutoLogin
             textPanel.Children.Add(nameText);
 
             // Add rank info if available
-            if (!string.IsNullOrEmpty(account.RankInfo) && account.RankInfo != "Unranked")
+            if (account.DisplayRank != null && account.DisplayRankInfo != "Unranked")
             {
                 var rankText = new TextBlock
                 {
-                    Text = $"{account.RankInfo} - {account.LeaguePoints} LP",
+                    Text = account.DisplayRankInfo,
                     FontSize = 11,
                     Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 120)),
                     Margin = new Thickness(0, 2, 0, 0)
@@ -745,6 +746,7 @@ namespace RiotAutoLogin
             AutoAcceptDeclineGuardService.Start();
             _ = Task.Run(() => MonitorLeagueClientAsync(lifetimeToken), lifetimeToken);
             StartAutomaticAccountInfoRefresh();
+            StartWaitingTimeTracking();
 
             _ = PreloadGameDataSafelyAsync(lifetimeToken);
             _ = LoadApiKeyForDisplayAsync(lifetimeToken);
@@ -804,6 +806,7 @@ namespace RiotAutoLogin
                 {
                     UpdateTotalGameStats();
                     RefreshAccountLists();
+                    SaveAccounts();
                 }
             }
             catch (OperationCanceledException)
@@ -988,6 +991,12 @@ namespace RiotAutoLogin
 
         private void RefreshAccountLists()
         {
+            foreach (Account account in _accounts)
+            {
+                if (account.SelectedQueue == SelectedStatsQueue) continue;
+                account.SelectedQueue = SelectedStatsQueue;
+                account.RefreshRankDisplay();
+            }
             UIService.RefreshAccountLists(this, _accounts);
         }
 
@@ -1136,14 +1145,17 @@ namespace RiotAutoLogin
                 btnRefreshQuickStats.IsEnabled = true;
             }
         }
-        private async Task UpdateAllAccountsAsync()
+        private async Task UpdateAllAccountsAsync(bool onlyStale = false)
         {
-            await AccountService.UpdateAllAccountsAsync(_accounts);
+            var accounts = await Dispatcher.InvokeAsync(() => _accounts.ToList());
+            await AccountService.UpdateAllAccountsAsync(accounts, onlyStale);
         }
 
         private void UpdateTotalGameStats()
         {
-            UIService.UpdateTotalGameStats(this, _accounts);
+            UIService.UpdateTotalGameStats(this, _accounts, SelectedStatsQueue);
+            int synced = _accounts.Count(a => a.QueueRanks.ContainsKey(SelectedStatsQueue));
+            rankStatsPage.ToolTip = $"Selected ranked queue · {synced}/{_accounts.Count} accounts synced. Rank totals are for the current ranked period. Greyscreen uses recent client history.";
         }
 
         #endregion
@@ -1286,6 +1298,8 @@ namespace RiotAutoLogin
         {
             // This method is called when the window is truly closing (e.g., after Application.Shutdown() is called).
             // Ensure resources are released here.
+            _waitingStatsTimer?.Stop();
+            _waitingTimeMonitor?.Dispose();
             _loginCts?.Cancel();
             _loginCts?.Dispose();
             _lifetimeCts?.Cancel();

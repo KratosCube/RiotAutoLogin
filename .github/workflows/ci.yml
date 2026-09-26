@@ -27,3 +27,6 @@ jobs:
 
       - name: Build
         run: dotnet build RiotAutoLogin/RiotAutoLogin.csproj --configuration Release --no-restore /p:ContinuousIntegrationBuild=true
+
+      - name: Verify queue statistics and time tracking
+        run: dotnet run --project RiotAutoLogin.Tests/RiotAutoLogin.Tests.csproj --configuration Release

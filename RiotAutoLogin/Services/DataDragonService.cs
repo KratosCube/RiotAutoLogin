@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -16,7 +17,9 @@ namespace RiotAutoLogin.Services
     public static class DataDragonService
     {
         private static readonly HttpClient _httpClient = new();
-        private static readonly Dictionary<string, BitmapImage> _imageCache = new();
+        private static readonly ConcurrentDictionary<string, BitmapImage> _imageCache = new();
+        private static readonly SemaphoreSlim VersionGate = new(1, 1);
+        private static DateTime _nextVersionCheckUtc;
         private static readonly Dictionary<string, string> _championNameMap = new(StringComparer.OrdinalIgnoreCase)
         {
             { "Nunu & Willump", "Nunu" },
@@ -58,18 +61,25 @@ namespace RiotAutoLogin.Services
 
         public static async Task<string> GetLatestVersionAsync()
         {
+            await VersionGate.WaitAsync().ConfigureAwait(false);
             try
             {
-                var response = await _httpClient.GetStringAsync("https://ddragon.leagueoflegends.com/api/versions.json");
-                using var doc = JsonDocument.Parse(response);
-                _currentVersion = doc.RootElement[0].GetString() ?? _currentVersion;
-                    return _currentVersion;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error getting latest version: {ex.Message}");
+                if (DateTime.UtcNow < _nextVersionCheckUtc) return _currentVersion;
+                try
+                {
+                    string response = await _httpClient.GetStringAsync("https://ddragon.leagueoflegends.com/api/versions.json").ConfigureAwait(false);
+                    using var doc = JsonDocument.Parse(response);
+                    _currentVersion = doc.RootElement[0].GetString() ?? _currentVersion;
+                    _nextVersionCheckUtc = DateTime.UtcNow.AddHours(1);
+                }
+                catch (Exception ex)
+                {
+                    _nextVersionCheckUtc = DateTime.UtcNow.AddMinutes(1);
+                    Debug.WriteLine($"Data Dragon version check failed: {ex.Message}");
+                }
                 return _currentVersion;
             }
+            finally { VersionGate.Release(); }
         }
 
         public static async Task<BitmapImage> DownloadImageAsync(string imageUrl)
@@ -117,11 +127,11 @@ namespace RiotAutoLogin.Services
         public static async Task<Dictionary<string, BitmapImage>> BatchDownloadImagesAsync(
             List<string> imageUrls, Action<int, int>? progressCallback = null)
         {
-            var results = new Dictionary<string, BitmapImage>();
-            var semaphore = new SemaphoreSlim(5); // Limit concurrent downloads
+            var results = new ConcurrentDictionary<string, BitmapImage>();
+            using var semaphore = new SemaphoreSlim(5); // Limit concurrent downloads
             var completed = 0;
 
-            var tasks = imageUrls.Where(url => !string.IsNullOrEmpty(url)).Select(async url =>
+            var tasks = imageUrls.Where(url => !string.IsNullOrEmpty(url)).Distinct().Select(async url =>
             {
                     // Check memory cache first
                 if (_imageCache.TryGetValue(url, out var cached))
@@ -149,7 +159,7 @@ namespace RiotAutoLogin.Services
             });
 
             await Task.WhenAll(tasks);
-            return results;
+            return results.ToDictionary(pair => pair.Key, pair => pair.Value);
         }
 
         public static string GetChampionImageUrl(string championName, string? version = null)

@@ -1,5 +1,8 @@
 using System;
 using System.Linq;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using RiotAutoLogin.Models;
 using System.Windows;
 using System.Windows.Controls;
 using System.Threading;
@@ -12,46 +15,47 @@ namespace RiotAutoLogin.Services
         private static readonly SemaphoreSlim GreyscreenSyncGate = new(1, 1);
         private static DateTime _lastGreyscreenSyncUtc = DateTime.MinValue;
 
-        public static void RefreshAccountLists(Window window, System.Collections.Generic.List<Models.Account> accounts)
+        private static readonly ConditionalWeakTable<ItemsControl, List<Account>> BoundAccounts = new();
+
+        public static void RefreshAccountLists(Window window, List<Account> accounts)
         {
-            if (window.FindName("lbAccounts") is ListBox lbAccounts)
+            foreach (string name in new[] { "lbAccounts", "lbLoginAccounts", "icLoginAccounts" })
             {
-                lbAccounts.ItemsSource = null;
-                lbAccounts.ItemsSource = accounts;
-            }
-
-            if (window.FindName("lbLoginAccounts") is ListBox lbLoginAccounts)
-            {
-                lbLoginAccounts.ItemsSource = null;
-                lbLoginAccounts.ItemsSource = accounts;
-            }
-
-            if (window.FindName("icLoginAccounts") is ItemsControl icLoginAccounts)
-            {
-                icLoginAccounts.ItemsSource = null;
-                icLoginAccounts.ItemsSource = accounts;
+                if (window.FindName(name) is not ItemsControl control) continue;
+                if (BoundAccounts.TryGetValue(control, out var previous) && previous.SequenceEqual(accounts)) continue;
+                if (!ReferenceEquals(control.ItemsSource, accounts)) control.ItemsSource = accounts;
+                else control.Items.Refresh();
+                BoundAccounts.Remove(control);
+                BoundAccounts.Add(control, accounts.ToList());
             }
         }
 
-        public static void UpdateTotalGameStats(Window window, System.Collections.Generic.List<Models.Account> accounts)
+        public static void UpdateTotalGameStats(Window window, System.Collections.Generic.List<Models.Account> accounts, RankedQueue queue = RankedQueue.SoloDuo)
         {
-            var (totalGames, totalWins, totalLosses, winRate, totalGreyscreens, totalGreyscreenSeconds) = AccountService.CalculateStats(accounts);
+            var (totalGames, totalWins, totalLosses, winRate, totalGreyscreens, totalGreyscreenSeconds) = AccountService.CalculateStats(accounts, queue);
+            bool anyRank = accounts.Any(a => a.QueueRanks.ContainsKey(queue));
 
             if (window.FindName("txtStatsGamesValue") is TextBlock txtStatsGamesValue)
-                txtStatsGamesValue.Text = totalGames.ToString();
+                txtStatsGamesValue.Text = anyRank ? totalGames.ToString() : "—";
 
             if (window.FindName("txtStatsWinsValue") is TextBlock txtStatsWinsValue)
-                txtStatsWinsValue.Text = totalWins.ToString();
+                txtStatsWinsValue.Text = anyRank ? totalWins.ToString() : "—";
 
             if (window.FindName("txtStatsLossesValue") is TextBlock txtStatsLossesValue)
-                txtStatsLossesValue.Text = totalLosses.ToString();
+                txtStatsLossesValue.Text = anyRank ? totalLosses.ToString() : "—";
 
             if (window.FindName("txtStatsWinRateValue") is TextBlock txtStatsWinRateValue)
-                txtStatsWinRateValue.Text = $"{winRate:F1}%";
+                txtStatsWinRateValue.Text = anyRank ? $"{winRate:F1}%" : "—";
 
             TextBlock? txtStatsGreyscreensValue = window.FindName("txtStatsGreyscreenTimeValue") as TextBlock;
             if (txtStatsGreyscreensValue != null)
-                txtStatsGreyscreensValue.Text = FormatGreyscreenDuration(totalGreyscreenSeconds);
+            {
+                var data = accounts.Select(a => a.QueueGreyscreens.GetValueOrDefault(queue)).Where(g => g != null).ToArray();
+                bool estimated = data.Any(g => g!.Estimated);
+                txtStatsGreyscreensValue.Text = data.Length == 0 ? "—" : (estimated ? "~" : "") + FormatGreyscreenDuration(totalGreyscreenSeconds);
+                txtStatsGreyscreensValue.ToolTip = $"Recent client history · {data.Sum(g => g!.Games)} games in this queue. " +
+                    (estimated ? "Missing death time is estimated at 30 seconds per death." : "Reported time spent dead.");
+            }
 
             if (window.FindName("txtTotalGames") is TextBlock txtTotalGames)
                 txtTotalGames.Text = $"Total Games: {totalGames} | Wins: {totalWins} | Losses: {totalLosses} | Win Rate: {winRate:F1}% | Greyscreen Time: {FormatGreyscreenDuration(totalGreyscreenSeconds)} | Deaths: {totalGreyscreens}";
@@ -82,10 +86,10 @@ namespace RiotAutoLogin.Services
                 if (account == null)
                     return false;
 
+                account.QueueGreyscreens = result.ByQueue;
                 account.Greyscreens = result.Greyscreens;
                 account.GreyscreenSeconds = result.GreyscreenSeconds;
                 account.GreyscreensLastUpdatedUtc = DateTime.UtcNow.ToString("O");
-                AccountService.SaveAccounts(accounts);
                 return true;
             }
             catch

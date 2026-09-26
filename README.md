@@ -43,3 +43,17 @@ A modern, feature-rich application for automating Riot Client logins with secure
 - **Pick-Turn Alert:** Notifies you when your champion pick becomes active
 - **Per-Alert Sounds:** Assign a different MP4 or audio file to each alert
 - **Flash Warning:** Warns when Flash is on the opposite preferred spell slot
+
+### 📊 **Queue Statistics & Waiting Time**
+- **Queue switch:** Solo/Duo, Ranked 5s (the separate weekend ladder), and Flex have their own rank, LP, wins and losses. One refresh retrieves all three; switching uses saved data immediately.
+- **Sliding statistics:** Use the arrows beside the bottom metrics to slide between ranked totals and Queue / Champ select / Loading / Total waiting / In game. No extra tab or taller footer.
+- **Today or all time:** On the time page, click Today / All time. Totals cover the selected ranked queue across accounts on this PC.
+- **Local history:** Time is recorded while this app runs, including in the tray. It starts with this version's observations, cannot be backfilled from match history, and excludes sleep, client outages and time with the app closed.
+- **Loading detection:** LCU game phases are combined with the Live Client game clock, so a mid-game attach or reconnect is not counted as an initial loading screen. Loading is saved once the game clock confirms the start; delayed clock reads subtract gameplay already elapsed. Unconfirmed loading spans are discarded on outages or shutdown. Queue time includes ready checks and time from dodged drafts is retained.
+- **Greyscreen:** The selected queue's recent client history is shown separately from ranked-period W/L. A `~` marks estimates where Riot omits death duration; the tooltip explains the sample and estimate.
+
+Ranked queues map to `RANKED_SOLO_5x5` / 420, `RANKED_TEAM_5x5` / 710 and `RANKED_FLEX_SR` / 440. Ranked 5s is separate from Clash / 700 and the retired team queue / 42. The client's queue type takes priority when present. See [Riot's Ranked 5s announcement](https://www.leagueoflegends.com/en-us/news/dev/dev-the-return-of-ranked-5s/) and [current queue mapping in Scout](https://github.com/shepherdjerred/monorepo/blob/main/packages/scout-for-lol/packages/data/src/model/core/state.ts).
+
+Performance changes reuse local HTTP connections and per-process authentication, coalesce short gameflow reads, cache Data Dragon versions, bound concurrent rank updates, and avoid recreating account cards for value-only updates. Greyscreen refresh uses one match-history response rather than fetching each match separately.
+
+Run the dependency-free behavioral checks with `dotnet run --project RiotAutoLogin.Tests/RiotAutoLogin.Tests.csproj`. The Windows CI workflow also compiles the WPF app. Live Riot-client timing and animation still need a Windows smoke test.
