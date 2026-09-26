@@ -81,6 +81,7 @@ The installed version keeps the previous package and applies binary deltas. Unch
 4. Run the workflow. It builds the exact existing tag, or creates the new tag from the selected branch after all packages are ready.
 
 Quiet means **no automatic prompt**, not automatic installation. Downloads and installation still require the user's actions. Disabling release notifications in Settings suppresses all startup prompts; manual checks always work.
+Startup checks run at most once per day by default. Manual checks bypass that interval.
 
 For tag pushes, `release-policy.json` supplies the default. For releases created through GitHub's release editor, this marker in the release description overrides that default:
 

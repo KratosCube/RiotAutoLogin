@@ -67,10 +67,10 @@ namespace RiotAutoLogin.Services
                     ?? throw new InvalidDataException("GitHub returned an invalid release list.");
                 var release = ReleasePolicy.Select(releases, info.CurrentVersion, manual, SupportsDeltaUpdates,
                     allowMigration && !SupportsDeltaUpdates);
-                _settings.LastCheckTime = DateTime.Now;
-                SaveSettings();
                 if (release == null)
                 {
+                    _settings.LastCheckTime = DateTime.Now;
+                    SaveSettings();
                     ReportProgress(new() { Status = UpdateStatus.NoUpdateAvailable,
                         Message = manual ? "You have the latest available version." : "No announced updates available." });
                     return info;
@@ -106,6 +106,8 @@ namespace RiotAutoLogin.Services
                         throw new InvalidDataException("The installer checksum is not available yet. Please try again later.");
                 }
 
+                _settings.LastCheckTime = DateTime.Now;
+                SaveSettings();
                 if (manual || (_settings.NotificationsEnabled &&
                     _settings.LastNotifiedVersion != info.LatestVersion.ToString()))
                 {
@@ -216,6 +218,8 @@ namespace RiotAutoLogin.Services
                     var installer = await Task.Run(() => UpdateDownloadVerifier.ExtractInstaller(downloadPath, directory));
                     if (Process.Start(new ProcessStartInfo(installer) { UseShellExecute = true }) == null)
                         throw new IOException("Could not start the installer.");
+                    // Setup runs from its extracted copy; the downloaded ZIP is no longer needed.
+                    try { File.Delete(downloadPath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
                 }
                 Application.Current.Shutdown();
                 return true;
