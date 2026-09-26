@@ -1416,7 +1416,7 @@
                                                            FontSize="18"
                                                            FontWeight="SemiBold"
                                                            Foreground="{StaticResource TextColorBrush}"/>
-                                                <TextBlock Text="Check for new versions of the application."
+                                                <TextBlock Text="Check for all available updates, including minor releases."
                                                            Margin="0,6,0,14"
                                                            FontSize="13"
                                                            Foreground="{StaticResource TextColorBrush}"
@@ -1441,6 +1441,22 @@
                                                             Style="{StaticResource ModernButton}"
                                                             Click="btnCheckUpdates_Click"/>
                                                 </Grid>
+
+                                                <TextBlock x:Name="txtUpdateCheckStatus" Margin="0,8,0,0"
+                                                           FontSize="12" TextWrapping="Wrap"
+                                                           Foreground="{StaticResource MutedTextBrush}"/>
+
+                                                <Border Margin="0,14,0,0" Padding="12" CornerRadius="8"
+                                                        Background="{StaticResource SecondaryBackgroundBrush}">
+                                                    <StackPanel>
+                                                        <TextBlock x:Name="txtUpdateDelivery" FontSize="12" TextWrapping="Wrap"
+                                                                   Foreground="{StaticResource MutedTextBrush}"/>
+                                                        <Button x:Name="btnEnableSmallerUpdates" Content="Enable smaller updates"
+                                                                HorizontalAlignment="Left" Margin="0,10,0,0"
+                                                                Style="{StaticResource ModernButton}"
+                                                                Click="btnEnableSmallerUpdates_Click"/>
+                                                    </StackPanel>
+                                                </Border>
 
                                                 <Grid Margin="0,16,0,0">
                                                     <Grid.ColumnDefinitions>

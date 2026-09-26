@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using RiotAutoLogin.Models;
@@ -10,215 +14,220 @@ using Newtonsoft.Json;
 
 namespace RiotAutoLogin.Services
 {
-    public class UpdateService
+    public sealed class UpdateService : IDisposable
     {
-        private readonly string _owner;
-        private readonly string _repo;
-        private readonly HttpClient _httpClient;
-        private UpdateSettings _settings = new UpdateSettings();
+        private readonly HttpClient _httpClient = new() { Timeout = Timeout.InfiniteTimeSpan };
+        private readonly SemaphoreSlim _checkGate = new(1, 1);
+        private readonly ConditionalWeakTable<UpdateInfo, PackageSession> _packages = new();
+        private readonly string _repoUrl;
         private readonly string _githubApiUrl;
         private readonly string _settingsFilePath;
+        private UpdateSettings _settings = new();
+        public bool SupportsDeltaUpdates { get; }
+        public bool NotificationsEnabled => _settings.NotificationsEnabled;
 
-        // Events
         public event Action<UpdateProgress>? UpdateProgressChanged;
         public event Action<UpdateInfo>? UpdateAvailable;
 
+        private sealed record PackageSession(Velopack.UpdateManager Manager, Velopack.UpdateInfo Plan)
+        {
+            public bool Downloaded { get; set; }
+        }
+
         public UpdateService(string githubOwner, string githubRepo)
         {
-            _owner = githubOwner;
-            _repo = githubRepo;
-            _githubApiUrl = $"https://api.github.com/repos/{githubOwner}/{githubRepo}/releases/latest";
+            _repoUrl = $"https://github.com/{githubOwner}/{githubRepo}";
+            _githubApiUrl = $"https://api.github.com/repos/{githubOwner}/{githubRepo}/releases?per_page=100";
             _settingsFilePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "RiotClientAutoLogin", "update_settings.json");
-
-            _httpClient = new HttpClient();
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "RiotAutoLogin-UpdateChecker");
-
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("RiotAutoLogin-UpdateChecker");
             LoadSettings();
+            SupportsDeltaUpdates = new Velopack.UpdateManager(
+                new Velopack.Sources.GithubSource(_repoUrl, null, false)).IsInstalled;
         }
 
-        public async Task<UpdateInfo> CheckForUpdatesAsync()
+        public async Task<UpdateInfo> CheckForUpdatesAsync(bool manual = true, bool allowMigration = false,
+            CancellationToken cancellationToken = default)
         {
-            var updateInfo = new UpdateInfo
+            var info = new UpdateInfo { CurrentVersion = GetCurrentVersion(), LastChecked = DateTime.Now };
+            if (!manual && !ShouldCheckForUpdates()) return info;
+            if (!await _checkGate.WaitAsync(0, cancellationToken))
             {
-                CurrentVersion = GetCurrentVersion(),
-                LastChecked = DateTime.Now
-            };
-
+                info.ErrorMessage = "Another update check is already running.";
+                return info;
+            }
             try
             {
-                ReportProgress(new UpdateProgress
-                {
-                    Status = UpdateStatus.Checking,
-                    Message = "Checking for updates..."
-                });
-
-                var response = await _httpClient.GetStringAsync(_githubApiUrl);
-                var release = JsonConvert.DeserializeObject<GitHubRelease>(response);
-
-                if (release != null && !release.Draft)
-                {
-                    // Skip prereleases unless enabled
-                    if (release.Prerelease && !_settings.IncludePrereleases)
-                    {
-                        updateInfo.LatestVersion = updateInfo.CurrentVersion;
-                        ReportProgress(new UpdateProgress
-                        {
-                            Status = UpdateStatus.NoUpdateAvailable,
-                            Message = "No updates available (prerelease skipped)"
-                        });
-                        return updateInfo;
-                    }
-
-                    // Parse version from tag (remove 'v' prefix if present)
-                    var versionString = release.TagName.TrimStart('v');
-                    if (Version.TryParse(versionString, out var latestVersion))
-                    {
-                        updateInfo.LatestVersion = latestVersion;
-                        updateInfo.LatestRelease = release;
-                        updateInfo.Changelog = release.Body;
-
-                        // Find the executable asset
-                        foreach (var asset in release.Assets)
-                        {
-                            if (asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                            {
-                                updateInfo.DownloadUrl = asset.BrowserDownloadUrl;
-                                updateInfo.FileSize = asset.Size;
-                                break;
-                            }
-                        }
-
-                        if (updateInfo.IsUpdateAvailable)
-                        {
-                            if (string.IsNullOrWhiteSpace(updateInfo.DownloadUrl))
-                            {
-                                ReportProgress(new UpdateProgress
-                                {
-                                    Status = UpdateStatus.Error,
-                                    Message = "Update found, but no .exe asset is attached to the latest GitHub release."
-                                });
-
-                                return updateInfo;
-                            }
-
-                            ReportProgress(new UpdateProgress
-                            {
-                                Status = UpdateStatus.UpdateAvailable,
-                                Message = $"Update available: v{latestVersion}"
-                            });
-
-                            UpdateAvailable?.Invoke(updateInfo);
-                        }
-                        else
-                        {
-                            ReportProgress(new UpdateProgress
-                            {
-                                Status = UpdateStatus.NoUpdateAvailable,
-                                Message = "You have the latest version"
-                            });
-                        }
-                    }
-                }
-
+                ReportProgress(new() { Status = UpdateStatus.Checking, Message = "Checking for updates..." });
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(TimeSpan.FromSeconds(20));
+                var json = await _httpClient.GetStringAsync(_githubApiUrl, timeout.Token);
+                var releases = JsonConvert.DeserializeObject<List<GitHubRelease>>(json)
+                    ?? throw new InvalidDataException("GitHub returned an invalid release list.");
+                var release = ReleasePolicy.Select(releases, info.CurrentVersion, manual, SupportsDeltaUpdates,
+                    allowMigration && !SupportsDeltaUpdates);
                 _settings.LastCheckTime = DateTime.Now;
                 SaveSettings();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error checking for updates: {ex.Message}");
-                ReportProgress(new UpdateProgress
+                if (release == null)
                 {
-                    Status = UpdateStatus.Error,
-                    Message = $"Update check failed: {ex.Message}",
-                    Error = ex
-                });
-            }
-
-            return updateInfo;
-        }
-
-        public async Task<bool> DownloadUpdateAsync(UpdateInfo updateInfo, string downloadPath)
-        {
-            if (string.IsNullOrEmpty(updateInfo.DownloadUrl))
-                return false;
-
-            try
-            {
-                ReportProgress(new UpdateProgress
-                {
-                    Status = UpdateStatus.Downloading,
-                    Message = "Downloading update...",
-                    TotalBytes = updateInfo.FileSize ?? 0
-                });
-
-                string? downloadDirectory = Path.GetDirectoryName(downloadPath);
-                if (!string.IsNullOrWhiteSpace(downloadDirectory))
-                    Directory.CreateDirectory(downloadDirectory);
-
-                string tempDownloadPath = downloadPath + ".download";
-                if (File.Exists(tempDownloadPath))
-                    File.Delete(tempDownloadPath);
-
-                using var response = await _httpClient.GetAsync(updateInfo.DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
-                response.EnsureSuccessStatusCode();
-
-                var totalBytes = response.Content.Headers.ContentLength ?? 0;
-                var downloadedBytes = 0L;
-
-                using var contentStream = await response.Content.ReadAsStreamAsync();
-                using (var fileStream = new FileStream(tempDownloadPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                {
-                    var buffer = new byte[8192];
-                    int bytesRead;
-
-                    while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
-                    {
-                        await fileStream.WriteAsync(buffer, 0, bytesRead);
-                        downloadedBytes += bytesRead;
-
-                        var progressPercentage = totalBytes > 0 ? (int)((downloadedBytes * 100) / totalBytes) : 0;
-
-                        ReportProgress(new UpdateProgress
-                        {
-                            Status = UpdateStatus.Downloading,
-                            Message = $"Downloading... {progressPercentage}%",
-                            ProgressPercentage = progressPercentage,
-                            BytesDownloaded = downloadedBytes,
-                            TotalBytes = totalBytes
-                        });
-                    }
+                    ReportProgress(new() { Status = UpdateStatus.NoUpdateAvailable,
+                        Message = manual ? "You have the latest available version." : "No announced updates available." });
+                    return info;
                 }
 
-                if (File.Exists(downloadPath))
-                    File.Delete(downloadPath);
-
-                File.Move(tempDownloadPath, downloadPath);
-
-                ReportProgress(new UpdateProgress
+                info.LatestVersion = ReleasePolicy.ParseVersion(release.TagName)!;
+                info.LatestRelease = release;
+                info.Changelog = ReleasePolicy.CleanNotes(release.Body);
+                if (SupportsDeltaUpdates)
                 {
-                    Status = UpdateStatus.Downloaded,
-                    Message = "Download completed",
-                    ProgressPercentage = 100
-                });
+                    var manager = new Velopack.UpdateManager(new ReleaseSnapshotSource(
+                        _repoUrl, releases, info.CurrentVersion, info.LatestVersion));
+                    var plan = await manager.CheckForUpdatesAsync().WaitAsync(timeout.Token);
+                    if (plan == null || plan.IsDowngrade ||
+                        ReleasePolicy.ParseVersion(plan.TargetFullRelease.Version.ToString()) != info.LatestVersion)
+                        throw new InvalidDataException("The update packages are not ready yet. Please try again later.");
+                    _packages.Add(info, new PackageSession(manager, plan));
+                    info.Delivery = UpdateDelivery.Package;
+                    info.UsesDelta = plan.DeltasToTarget.Length is > 0 and <= 10 &&
+                        plan.DeltasToTarget.Sum(a => a.Size) <= plan.TargetFullRelease.Size;
+                    info.FullDownloadSize = plan.TargetFullRelease.Size;
+                    info.FileSize = info.UsesDelta ? plan.DeltasToTarget.Sum(a => a.Size) : plan.TargetFullRelease.Size;
+                }
+                else
+                {
+                    var installer = ReleasePolicy.FindInstaller(release);
+                    var asset = installer ?? ReleasePolicy.FindStandaloneAsset(release)!;
+                    info.Delivery = installer != null ? UpdateDelivery.Installer : UpdateDelivery.Standalone;
+                    info.DownloadUrl = asset.BrowserDownloadUrl;
+                    info.DownloadDigest = asset.Digest;
+                    info.FileSize = asset.Size;
+                    if (installer != null && string.IsNullOrWhiteSpace(asset.Digest))
+                        throw new InvalidDataException("The installer checksum is not available yet. Please try again later.");
+                }
 
+                if (manual || (_settings.NotificationsEnabled &&
+                    _settings.LastNotifiedVersion != info.LatestVersion.ToString()))
+                {
+                    ReportProgress(new() { Status = UpdateStatus.UpdateAvailable,
+                        Message = $"Update available: v{info.LatestVersion.ToString(3)}" });
+                    UpdateAvailable?.Invoke(info);
+                    if (!manual)
+                    {
+                        _settings.LastNotifiedVersion = info.LatestVersion.ToString();
+                        SaveSettings();
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                info.ErrorMessage = $"Update check failed: {ex.Message}";
+                ReportProgress(new() { Status = UpdateStatus.Error, Message = info.ErrorMessage, Error = ex });
+            }
+            finally { _checkGate.Release(); }
+            return info;
+        }
+
+        public async Task<bool> DownloadUpdateAsync(UpdateInfo info, string downloadPath,
+            CancellationToken cancellationToken = default)
+        {
+            string partial = downloadPath + ".download";
+            try
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(TimeSpan.FromMinutes(15));
+                ReportProgress(new() { Status = UpdateStatus.Downloading, Message = "Downloading update..." });
+                if (info.Delivery == UpdateDelivery.Package)
+                {
+                    if (!_packages.TryGetValue(info, out var session))
+                        throw new InvalidOperationException("Please check for updates again.");
+                    await session.Manager.DownloadUpdatesAsync(session.Plan, percent => ReportProgress(new()
+                    {
+                        Status = UpdateStatus.Downloading, ProgressPercentage = percent,
+                        Message = $"Downloading and preparing update... {percent}%"
+                    }), timeout.Token);
+                    session.Downloaded = true;
+                }
+                else
+                {
+                    if (!Uri.TryCreate(info.DownloadUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https")
+                        throw new InvalidDataException("The update download URL is invalid.");
+                    Directory.CreateDirectory(Path.GetDirectoryName(downloadPath)!);
+                    using var response = await _httpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+                    response.EnsureSuccessStatusCode();
+                    long total = response.Content.Headers.ContentLength ?? info.FileSize ?? 0;
+                    long downloaded = 0;
+                    using var content = await response.Content.ReadAsStreamAsync(timeout.Token);
+                    await using (var file = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None,
+                        81920, useAsync: true))
+                    {
+                        var buffer = new byte[81920];
+                        int count, lastPercent = -1;
+                        while ((count = await content.ReadAsync(buffer, timeout.Token)) > 0)
+                        {
+                            await file.WriteAsync(buffer.AsMemory(0, count), timeout.Token);
+                            downloaded += count;
+                            if (info.FileSize is > 0 && downloaded > info.FileSize)
+                                throw new InvalidDataException("The update is larger than the published asset.");
+                            int percent = total > 0 ? (int)(downloaded * 100 / total) : 0;
+                            if (percent == lastPercent) continue;
+                            lastPercent = percent;
+                            ReportProgress(new() { Status = UpdateStatus.Downloading, ProgressPercentage = percent,
+                                BytesDownloaded = downloaded, TotalBytes = total, Message = $"Downloading... {percent}%" });
+                        }
+                    }
+                    await UpdateDownloadVerifier.VerifyAsync(partial, info.FileSize, info.DownloadDigest, timeout.Token);
+                    File.Move(partial, downloadPath, overwrite: true);
+                }
+                ReportProgress(new() { Status = UpdateStatus.Downloaded, ProgressPercentage = 100,
+                    Message = "Update ready. Install when you are ready to restart." });
+                return true;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                ReportProgress(new() { Status = UpdateStatus.Error, Message = $"Download failed: {ex.Message}", Error = ex });
+                return false;
+            }
+            finally
+            {
+                try { if (File.Exists(partial)) File.Delete(partial); } catch (IOException) { }
+            }
+        }
+
+        public async Task<bool> InstallUpdateAsync(UpdateInfo info, string downloadPath)
+        {
+            try
+            {
+                if (info.Delivery == UpdateDelivery.Package)
+                {
+                    if (!_packages.TryGetValue(info, out var session) || !session.Downloaded)
+                        throw new InvalidOperationException("Download the update before installing it.");
+                    // Let WPF save tracking history and close monitors before replacing files.
+                    session.Manager.WaitExitThenApplyUpdates(session.Plan.TargetFullRelease, restart: true);
+                }
+                else
+                {
+                    await UpdateDownloadVerifier.VerifyAsync(downloadPath, info.FileSize, info.DownloadDigest, CancellationToken.None);
+                    if (info.Delivery == UpdateDelivery.Standalone)
+                        return InstallLegacyUpdate(downloadPath);
+                    var directory = Path.Combine(Path.GetTempPath(), "RiotAutoLogin", "Setup", Guid.NewGuid().ToString("N"));
+                    var installer = await Task.Run(() => UpdateDownloadVerifier.ExtractInstaller(downloadPath, directory));
+                    if (Process.Start(new ProcessStartInfo(installer) { UseShellExecute = true }) == null)
+                        throw new IOException("Could not start the installer.");
+                }
+                Application.Current.Shutdown();
                 return true;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error downloading update: {ex.Message}");
-                ReportProgress(new UpdateProgress
-                {
-                    Status = UpdateStatus.Error,
-                    Message = $"Download failed: {ex.Message}",
-                    Error = ex
-                });
+                ReportProgress(new() { Status = UpdateStatus.Error, Message = $"Installation failed: {ex.Message}", Error = ex });
                 return false;
             }
         }
 
-        public bool InstallUpdate(string updateFilePath, bool restartApp = true)
+        private bool InstallLegacyUpdate(string updateFilePath, bool restartApp = true)
         {
             try
             {
@@ -346,32 +355,16 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        public bool ShouldCheckForUpdates()
-        {
-            if (!_settings.AutoCheckEnabled || !_settings.NotificationsEnabled)
-                return false;
 
-            var timeSinceLastCheck = DateTime.Now - _settings.LastCheckTime;
-            return timeSinceLastCheck.TotalHours >= _settings.CheckIntervalHours;
-        }
-
-        public UpdateSettings GetSettings() => _settings;
-
-        public bool NotificationsEnabled => _settings.NotificationsEnabled;
+        public bool ShouldCheckForUpdates() => _settings.AutoCheckEnabled && _settings.NotificationsEnabled &&
+            (DateTime.Now - _settings.LastCheckTime).TotalHours >= Math.Max(1, _settings.CheckIntervalHours);
 
         public void SetNotificationsEnabled(bool enabled)
         {
-            if (_settings.NotificationsEnabled == enabled && _settings.AutoCheckEnabled == enabled)
-                return;
-
+            if (_settings.NotificationsEnabled == enabled && _settings.AutoCheckEnabled == enabled) return;
             _settings.NotificationsEnabled = enabled;
             _settings.AutoCheckEnabled = enabled;
-            SaveSettings();
-        }
-
-        public void UpdateSettings(UpdateSettings newSettings)
-        {
-            _settings = newSettings;
+            if (enabled) _settings.LastCheckTime = DateTime.MinValue;
             SaveSettings();
         }
 
@@ -424,9 +417,9 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        private void ReportProgress(UpdateProgress progress)
-        {
-            UpdateProgressChanged?.Invoke(progress);
-        }
+
+        private void ReportProgress(UpdateProgress progress) => UpdateProgressChanged?.Invoke(progress);
+
+        public void Dispose() => _httpClient.Dispose();
     }
 }

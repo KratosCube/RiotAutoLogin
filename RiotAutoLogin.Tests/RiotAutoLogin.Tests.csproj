@@ -10,5 +10,11 @@
     <Compile Include="../RiotAutoLogin/Models/RankedQueue.cs" Link="RankedQueue.cs" />
     <Compile Include="../RiotAutoLogin/Models/GameflowSnapshot.cs" Link="GameflowSnapshot.cs" />
     <Compile Include="../RiotAutoLogin/Services/WaitingTimeLedger.cs" Link="WaitingTimeLedger.cs" />
+    <Compile Include="../RiotAutoLogin/Models/UpdateModels.cs" Link="UpdateModels.cs" />
+    <Compile Include="../RiotAutoLogin/Services/ReleasePolicy.cs" Link="ReleasePolicy.cs" />
+    <Compile Include="../RiotAutoLogin/Services/ReleaseSnapshotSource.cs" Link="ReleaseSnapshotSource.cs" />
+    <Compile Include="../RiotAutoLogin/Services/UpdateDownloadVerifier.cs" Link="UpdateDownloadVerifier.cs" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
 </Project>

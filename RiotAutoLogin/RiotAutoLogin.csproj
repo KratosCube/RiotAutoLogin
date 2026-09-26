@@ -6,15 +6,16 @@
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
+    <StartupObject>RiotAutoLogin.App</StartupObject>
     <!-- Compression saves download size but noticeably hurts cold start for a self-contained WPF app. -->
     <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
     <TrimMode>partial</TrimMode>
     <DebugType>embedded</DebugType>
     
     <!-- Version Information -->
-    <Version>1.4.0</Version>
-    <AssemblyVersion>1.4.0.0</AssemblyVersion>
-    <FileVersion>1.4.0.0</FileVersion>
+    <Version>1.5.0</Version>
+    <AssemblyVersion>1.5.0.0</AssemblyVersion>
+    <FileVersion>1.5.0.0</FileVersion>
     
     <!-- Application Information -->
     <AssemblyTitle>Riot Auto Login</AssemblyTitle>
@@ -31,9 +32,12 @@
     <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml" />
     <Resource Include="resources\logoAcc.ico" />
   </ItemGroup>
 

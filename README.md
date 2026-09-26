@@ -1,6 +1,6 @@
 # 🎮 RiotAutoLogin v1.4.0
 
-[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/KratosCube/RiotAutoLogin/releases)
+[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/KratosCube/RiotAutoLogin/releases)
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -27,6 +27,8 @@ A modern, feature-rich application for automating Riot Client logins with secure
 - **Version Management:** Smart version comparison and notifications
 - **Startup Checks:** Detects releases in the background when the app starts
 - **Notification Choice:** Release prompts can be disabled from the prompt or Settings
+- **Quiet Releases:** Minor updates remain available through manual checks without startup prompts
+- **Smaller Downloads:** Installed versions use compressed packages and binary deltas when possible
 
 ### ⚡ **Global Hotkeys** *(New in v1.1.0)*
 - **Quick Access:** Customizable keyboard shortcuts
@@ -57,3 +59,43 @@ Ranked queues map to `RANKED_SOLO_5x5` / 420, `RANKED_TEAM_5x5` / 710 and `RANKE
 Performance changes reuse local HTTP connections and per-process authentication, coalesce short gameflow reads, cache Data Dragon versions, bound concurrent rank updates, and avoid recreating account cards for value-only updates. Greyscreen refresh uses one match-history response rather than fetching each match separately.
 
 Run the dependency-free behavioral checks with `dotnet run --project RiotAutoLogin.Tests/RiotAutoLogin.Tests.csproj`. The Windows CI workflow also compiles the WPF app. Live Riot-client timing and animation still need a Windows smoke test.
+
+
+## Smaller updates and release notifications
+
+For a new installation, download **RiotAutoLogin-Setup.zip**, extract it and run **RiotAutoLogin-Setup.exe**. Setup installs for the current Windows user, including the required .NET runtime. There is no separate runtime installation. Accounts, settings and statistics remain in the existing `%AppData%\\RiotClientAutoLogin` directory.
+
+Existing standalone users can first update their EXE normally, then choose **Settings → Enable smaller updates**. This performs a one-time setup, including when the installed version already matches the release. Use the new Riot Auto Login shortcut afterwards; the old standalone file is left in place. An existing Windows startup opt-in is moved to the new application location.
+
+The installed version keeps the previous package and applies binary deltas. Unchanged runtime files do not need to be downloaded again. A missing base, an unavailable/corrupt delta, or a large gap between versions can require a full download. Actual sizes are reported in the release workflow summary. Packages are compressed for transport and extracted during installation, so the installed app does not decompress a giant EXE on every startup.
+
+**RiotAutoLogin-Portable.zip** also supports the updater. Its first update may need a full package to seed the local cache. Keep the entire extracted directory. The versioned standalone `.exe` remains a compressed compatibility download for old updaters; it does not support deltas until migrated.
+
+### Publishing an announced or quiet release
+
+1. Merge the changes to `master`.
+2. Open **Actions → Build release packages → Run workflow**.
+3. Select `master`, enter a new stable tag such as `v1.5.0`, and set **Show an update notification to users**:
+   - checked: show a startup prompt once for this version;
+   - unchecked: publish a quiet maintenance release, available through **Check for Updates**.
+4. Run the workflow. It builds the exact existing tag, or creates the new tag from the selected branch after all packages are ready.
+
+Quiet means **no automatic prompt**, not automatic installation. Downloads and installation still require the user's actions. Disabling release notifications in Settings suppresses all startup prompts; manual checks always work.
+
+For tag pushes, `release-policy.json` supplies the default. For releases created through GitHub's release editor, this marker in the release description overrides that default:
+
+```html
+<!-- riotautologin:notify=false -->
+```
+
+Use `true` for an announced release, or omit the marker to use the configured default. The marker is hidden in the app's changelog. Quiet releases are also marked as not-latest on GitHub to help older clients that only query `/releases/latest`. The per-release prompt policy itself requires this updater version.
+
+The workflow downloads the previous stable package to generate a delta, publishes a full fallback and the new delta, and uploads the update feed last. Do not delete old full/delta assets if you want users who skip versions to retain smaller updates. The first packaged release cannot have a delta.
+
+Setup is deliberately wrapped in a ZIP: old versions select the first `.exe` release asset and would otherwise overwrite themselves with the installer. Do not upload a separate Setup.exe alongside the compatibility EXE.
+
+### Validating the updater
+
+CI builds two real Windows packages, verifies that the delta reconstructs the full payload without downloading the full package, and checks damaged-delta fallback, missing-base fallback, cached-download reuse and cancellation. It also exercises notification selection, version ordering, same-version migration, checksums and safe installer extraction.
+
+Before shipping, also smoke-test the one-time migration, Windows startup and **Install & Restart** on Windows. CI prepares packages but does not exercise an interactive installation or a running Riot Client.
