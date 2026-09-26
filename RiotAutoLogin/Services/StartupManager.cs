@@ -61,6 +61,21 @@ namespace RiotAutoLogin.Services
             }
         }
 
+        public static void RebindExistingStartup()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, false);
+                // Preserve an existing opt-in when moving from the standalone EXE to setup.
+                if (!string.IsNullOrWhiteSpace(key?.GetValue(AppName)?.ToString()))
+                    AddToStartup();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Startup migration failed: {ex.Message}");
+            }
+        }
+
         public static bool RemoveFromStartup()
         {
             if (string.IsNullOrEmpty(AppName))

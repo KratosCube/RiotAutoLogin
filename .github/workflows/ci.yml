@@ -30,3 +30,21 @@ jobs:
 
       - name: Verify queue statistics and time tracking
         run: dotnet run --project RiotAutoLogin.Tests/RiotAutoLogin.Tests.csproj --configuration Release
+
+      - name: Restore packaging tool
+        run: dotnet tool restore
+
+      - name: Build two versions and verify incremental updates
+        shell: pwsh
+        run: |
+          ./scripts/Build-Release.ps1 -Version 1.5.0 -AssetDir build/assets-base -SkipCompatibilityExe
+          ./scripts/Build-Release.ps1 -Version 1.5.1 -AssetDir build/assets-new
+          dotnet run --project RiotAutoLogin.Tests/RiotAutoLogin.Tests.csproj -c Release -- --packages build/packages
+
+      - name: Retain packaging diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-feed
+          path: build/packages/releases.win.json
+          retention-days: 7

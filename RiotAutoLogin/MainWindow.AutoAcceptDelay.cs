@@ -9,8 +9,6 @@ namespace RiotAutoLogin
 {
     public partial class MainWindow
     {
-        private bool _manualUpdateCheckRequested;
-        private bool _manualUpdateFeedbackInitialized;
         private readonly RemotePickServerService _remotePickServerService = new();
 
         private void InitializeSettingsExtras()
@@ -25,7 +23,6 @@ namespace RiotAutoLogin
             UpdateRemotePickStatus("Stopped. Enable Remote Pick only when you want to use your phone.");
 
             InitializeApplicationLocation();
-            InitializeManualUpdateFeedback();
         }
 
         private async void RemotePickToggle_Checked(object sender, RoutedEventArgs e)
@@ -134,51 +131,6 @@ namespace RiotAutoLogin
 
             host = uri.Host;
             return !string.IsNullOrWhiteSpace(host);
-        }
-
-        private void InitializeManualUpdateFeedback()
-        {
-            if (_manualUpdateFeedbackInitialized || _updateService == null)
-                return;
-
-            _manualUpdateFeedbackInitialized = true;
-            btnCheckUpdates.PreviewMouseLeftButtonDown += (_, _) => _manualUpdateCheckRequested = true;
-            btnCheckUpdates.KeyDown += (_, e) =>
-            {
-                if (e.Key is Key.Enter or Key.Space)
-                    _manualUpdateCheckRequested = true;
-            };
-
-            _updateService.UpdateProgressChanged += OnManualUpdateProgressChanged;
-        }
-
-        private void OnManualUpdateProgressChanged(UpdateProgress progress)
-        {
-            if (!_manualUpdateCheckRequested)
-                return;
-
-            if (progress.Status == UpdateStatus.NoUpdateAvailable)
-            {
-                _manualUpdateCheckRequested = false;
-                Dispatcher.Invoke(() => MessageBox.Show(
-                    progress.Message,
-                    "No Updates Available",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information));
-            }
-            else if (progress.Status == UpdateStatus.Error)
-            {
-                _manualUpdateCheckRequested = false;
-                Dispatcher.Invoke(() => MessageBox.Show(
-                    progress.Message,
-                    "Update Check Failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning));
-            }
-            else if (progress.Status == UpdateStatus.UpdateAvailable)
-            {
-                _manualUpdateCheckRequested = false;
-            }
         }
 
         private void AutoAcceptDelaySecondsTextBox_KeyDown(object sender, KeyEventArgs e)

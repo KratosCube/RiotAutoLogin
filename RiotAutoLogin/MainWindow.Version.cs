@@ -53,12 +53,36 @@ namespace RiotAutoLogin
                 tglUpdateNotifications.IsChecked = enabled;
                 tglUpdateNotifications.Content = enabled ? "ON" : "OFF";
                 txtUpdateNotificationsHint.Text = enabled
-                    ? "A new release is checked at startup and shown when one is available."
+                    ? "Announced releases are shown once. Minor releases are available through Check for Updates."
                     : "Startup release notifications are disabled. Manual checks still work.";
+                txtUpdateDelivery.Text = _updateService.SupportsDeltaUpdates
+                    ? "Smaller updates enabled. Existing files are reused when a delta is available."
+                    : "Standalone version. One-time setup enables smaller future updates and keeps your accounts and settings.";
+                btnEnableSmallerUpdates.Visibility = _updateService.SupportsDeltaUpdates
+                    ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
             }
             finally
             {
                 _suppressUpdateNotificationEvents = false;
+            }
+        }
+
+        private async void btnEnableSmallerUpdates_Click(object sender, System.Windows.RoutedEventArgs e)
+        {
+            if (_updateService == null) return;
+            btnEnableSmallerUpdates.IsEnabled = false;
+            btnCheckUpdates.IsEnabled = false;
+            try
+            {
+                var info = await _updateService.CheckForUpdatesAsync(manual: true, allowMigration: true);
+                txtUpdateCheckStatus.Text = info.ErrorMessage ?? (info.CanInstall
+                    ? "One-time setup is ready in the update window."
+                    : "The setup package has not been published for this version yet.");
+            }
+            finally
+            {
+                btnEnableSmallerUpdates.IsEnabled = true;
+                btnCheckUpdates.IsEnabled = true;
             }
         }
 
