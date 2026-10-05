@@ -119,7 +119,15 @@ public static class StandaloneUpdater
 
             if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw 'The original executable is missing.' }
             if (-not (Test-Path -LiteralPath $pending -PathType Leaf)) { throw 'The staged update is missing.' }
-            if ((Get-FileHash -LiteralPath $pending -Algorithm SHA256).Hash -ne $env:RAL_EXPECTED_SHA256) {
+            $stream = [System.IO.File]::OpenRead($pending)
+            $sha256 = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $actualHash = [System.BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '')
+            } finally {
+                $sha256.Dispose()
+                $stream.Dispose()
+            }
+            if ($actualHash -ne $env:RAL_EXPECTED_SHA256) {
                 throw 'The staged update failed its checksum check.'
             }
             # pending and target are siblings, so replacement is on the same volume.
