@@ -96,13 +96,14 @@ namespace RiotAutoLogin.Services
                 }
                 else
                 {
-                    var installer = ReleasePolicy.FindInstaller(release);
-                    var asset = installer ?? ReleasePolicy.FindStandaloneAsset(release)!;
-                    info.Delivery = installer != null ? UpdateDelivery.Installer : UpdateDelivery.Standalone;
+                    // A normal update keeps the executable at its existing path. Only the
+                    // explicit "Enable smaller updates" action migrates to the installer.
+                    var asset = allowMigration ? ReleasePolicy.FindInstaller(release)! : ReleasePolicy.FindStandaloneAsset(release)!;
+                    info.Delivery = allowMigration ? UpdateDelivery.Installer : UpdateDelivery.Standalone;
                     info.DownloadUrl = asset.BrowserDownloadUrl;
                     info.DownloadDigest = asset.Digest;
                     info.FileSize = asset.Size;
-                    if (installer != null && string.IsNullOrWhiteSpace(asset.Digest))
+                    if (info.Delivery == UpdateDelivery.Installer && string.IsNullOrWhiteSpace(asset.Digest))
                         throw new InvalidDataException("The installer checksum is not available yet. Please try again later.");
                 }
 
@@ -183,7 +184,7 @@ namespace RiotAutoLogin.Services
                     File.Move(partial, downloadPath, overwrite: true);
                 }
                 ReportProgress(new() { Status = UpdateStatus.Downloaded, ProgressPercentage = 100,
-                    Message = "Update ready. Install when you are ready to restart." });
+                    Message = "Download complete. Preparing installation..." });
                 return true;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
@@ -213,13 +214,26 @@ namespace RiotAutoLogin.Services
                 {
                     await UpdateDownloadVerifier.VerifyAsync(downloadPath, info.FileSize, info.DownloadDigest, CancellationToken.None);
                     if (info.Delivery == UpdateDelivery.Standalone)
-                        return InstallLegacyUpdate(downloadPath);
-                    var directory = Path.Combine(Path.GetTempPath(), "RiotAutoLogin", "Setup", Guid.NewGuid().ToString("N"));
-                    var installer = await Task.Run(() => UpdateDownloadVerifier.ExtractInstaller(downloadPath, directory));
-                    if (Process.Start(new ProcessStartInfo(installer) { UseShellExecute = true }) == null)
-                        throw new IOException("Could not start the installer.");
-                    // Setup runs from its extracted copy; the downloaded ZIP is no longer needed.
-                    try { File.Delete(downloadPath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                    {
+                        using var runningProcess = Process.GetCurrentProcess();
+                        var target = runningProcess.MainModule?.FileName
+                            ?? throw new IOException("Could not find the running application executable.");
+                        using var updater = await StandaloneUpdater.LaunchAsync(downloadPath, target,
+                            runningProcess.Id, runningProcess.StartTime.ToUniversalTime().Ticks);
+                        // A helper that fails to start must not make us close the working app.
+                        await Task.Delay(300);
+                        if (updater.HasExited)
+                            throw new IOException($"The update helper exited before the application closed ({updater.ExitCode}).");
+                    }
+                    else
+                    {
+                        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "RiotClientAutoLogin", "Updates", "Setup", Guid.NewGuid().ToString("N"));
+                        var installer = await Task.Run(() => UpdateDownloadVerifier.ExtractInstaller(downloadPath, directory));
+                        if (Process.Start(new ProcessStartInfo(installer) { UseShellExecute = true }) == null)
+                            throw new IOException("Could not start the installer.");
+                        try { File.Delete(downloadPath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                    }
                 }
                 Application.Current.Shutdown();
                 return true;
@@ -230,135 +244,6 @@ namespace RiotAutoLogin.Services
                 return false;
             }
         }
-
-        private bool InstallLegacyUpdate(string updateFilePath, bool restartApp = true)
-        {
-            try
-            {
-                ReportProgress(new UpdateProgress
-                {
-                    Status = UpdateStatus.Installing,
-                    Message = "Installing update..."
-                });
-
-                if (string.IsNullOrWhiteSpace(updateFilePath) || !File.Exists(updateFilePath))
-                {
-                    ReportProgress(new UpdateProgress
-                    {
-                        Status = UpdateStatus.Error,
-                        Message = "Installation failed: downloaded update file was not found."
-                    });
-                    return false;
-                }
-
-                var currentProcess = Process.GetCurrentProcess();
-                var currentExePath = currentProcess.MainModule?.FileName;
-                if (string.IsNullOrWhiteSpace(currentExePath) || !File.Exists(currentExePath))
-                {
-                    ReportProgress(new UpdateProgress
-                    {
-                        Status = UpdateStatus.Error,
-                        Message = "Installation failed: could not locate the running application executable."
-                    });
-                    return false;
-                }
-
-                string? currentExeDirectory = Path.GetDirectoryName(currentExePath);
-                if (string.IsNullOrWhiteSpace(currentExeDirectory))
-                {
-                    ReportProgress(new UpdateProgress
-                    {
-                        Status = UpdateStatus.Error,
-                        Message = "Installation failed: could not locate the application directory."
-                    });
-                    return false;
-                }
-
-                var updaterDirectory = Path.Combine(Path.GetTempPath(), "RiotAutoLogin", "Updater");
-                Directory.CreateDirectory(updaterDirectory);
-
-                var batchPath = Path.Combine(updaterDirectory, $"RiotAutoLoginUpdate-{Guid.NewGuid():N}.bat");
-                var logPath = Path.Combine(updaterDirectory, "RiotAutoLoginUpdate.log");
-                var restartCommand = restartApp ? $"start \"\" /D \"{currentExeDirectory}\" \"{currentExePath}\"" : "rem Restart disabled";
-
-                var batchLines = new[]
-                {
-                    "@echo off",
-                    "setlocal",
-                    $"set \"SOURCE={updateFilePath}\"",
-                    $"set \"TARGET={currentExePath}\"",
-                    $"set \"TARGET_DIR={currentExeDirectory}\"",
-                    $"set \"APP_PID={currentProcess.Id}\"",
-                    $"set \"LOG={logPath}\"",
-                    string.Empty,
-                    "echo [%date% %time%] RiotAutoLogin updater started. > \"%LOG%\"",
-                    "echo Waiting for RiotAutoLogin process %APP_PID% to exit... >> \"%LOG%\"",
-                    string.Empty,
-                    "for /L %%i in (1,1,60) do (",
-                    "    tasklist /FI \"PID eq %APP_PID%\" 2>NUL | find \"%APP_PID%\" >NUL",
-                    "    if errorlevel 1 goto replace",
-                    "    timeout /t 1 /nobreak >NUL",
-                    ")",
-                    string.Empty,
-                    "echo Process did not exit in time. Trying replacement anyway. >> \"%LOG%\"",
-                    string.Empty,
-                    ":replace",
-                    "if not exist \"%SOURCE%\" (",
-                    "    echo Update file not found: %SOURCE% >> \"%LOG%\"",
-                    "    goto end",
-                    ")",
-                    string.Empty,
-                    "copy /Y \"%SOURCE%\" \"%TARGET%\" >> \"%LOG%\" 2>&1",
-                    "if errorlevel 1 (",
-                    "    echo Failed to copy update to target. >> \"%LOG%\"",
-                    "    goto end",
-                    ")",
-                    string.Empty,
-                    "del \"%SOURCE%\" >NUL 2>&1",
-                    "echo Update installed successfully. >> \"%LOG%\"",
-                    restartCommand,
-                    string.Empty,
-                    ":end",
-                    "endlocal",
-                    "del \"%~f0\" >NUL 2>&1"
-                };
-
-                var batchContent = string.Join(Environment.NewLine, batchLines) + Environment.NewLine;
-                File.WriteAllText(batchPath, batchContent);
-
-                var processInfo = new ProcessStartInfo
-                {
-                    FileName = batchPath,
-                    WorkingDirectory = updaterDirectory,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    UseShellExecute = true,
-                    CreateNoWindow = true
-                };
-
-                Process.Start(processInfo);
-
-                ReportProgress(new UpdateProgress
-                {
-                    Status = UpdateStatus.Installed,
-                    Message = "Updater started. The application will close and restart."
-                });
-
-                Application.Current.Shutdown();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error installing update: {ex.Message}");
-                ReportProgress(new UpdateProgress
-                {
-                    Status = UpdateStatus.Error,
-                    Message = $"Installation failed: {ex.Message}",
-                    Error = ex
-                });
-                return false;
-            }
-        }
-
 
         public bool ShouldCheckForUpdates() => _settings.AutoCheckEnabled && _settings.NotificationsEnabled &&
             (DateTime.Now - _settings.LastCheckTime).TotalHours >= Math.Max(1, _settings.CheckIntervalHours);

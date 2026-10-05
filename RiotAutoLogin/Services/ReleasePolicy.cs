@@ -41,7 +41,8 @@ public static class ReleasePolicy
         .Where(r => !r.Draft && !r.Prerelease && ParseVersion(r.TagName) is { } v &&
             (v > current || (allowMigration && v == current && FindInstaller(r) != null)))
         .Where(r => manual || ShouldAnnounce(r))
-        .Where(r => packaged ? HasPackage(r) : FindInstaller(r) != null || FindStandaloneAsset(r) != null)
+        .Where(r => packaged ? HasPackage(r) : allowMigration
+            ? FindInstaller(r) != null : FindStandaloneAsset(r) != null)
         .OrderByDescending(r => ParseVersion(r.TagName))
         .FirstOrDefault();
 }

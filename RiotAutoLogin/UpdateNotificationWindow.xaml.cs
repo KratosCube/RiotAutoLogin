@@ -34,7 +34,7 @@ namespace RiotAutoLogin
                 UpdateDelivery.Installer => "One-time setup enables smaller future updates. Your accounts and settings are kept. Use the new Riot Auto Login shortcut afterwards.",
                 UpdateDelivery.Package when updateInfo.UsesDelta => "Only changes are downloaded when possible. If a patch cannot be applied, the full package is used.",
                 UpdateDelivery.Package => "A full package is needed for this update. Future updates can reuse it.",
-                _ => "This release uses the standalone updater."
+                _ => "The app will close, replace this EXE at its current location, and restart. No copy is saved to Downloads."
             };
             if (updateInfo.FileSize is { } size)
                 txtFileSize.Text = $"{(updateInfo.UsesDelta ? "Estimated download" : "Download")}: {size / 1048576.0:F1} MB";
@@ -45,52 +45,63 @@ namespace RiotAutoLogin
 
         private async void btnDownload_Click(object sender, RoutedEventArgs e)
         {
-            if (_downloaded)
+            if (_downloading || _installStarted) return;
+            if (!_downloaded)
             {
-                _installStarted = true;
+                _downloading = true;
                 btnDownload.IsEnabled = false;
-                btnLater.IsEnabled = false;
-                btnClose.IsEnabled = false;
-                btnDownload.Content = "Installing...";
-                bool started = await _updateService.InstallUpdateAsync(_updateInfo, _downloadedFilePath!);
-                if (!started)
+                btnDownload.Content = "Downloading...";
+                btnLater.Content = "Cancel";
+                progressPanel.Visibility = Visibility.Visible;
+                try
                 {
-                    _installStarted = false;
-                    btnDownload.Content = "Install & Restart";
-                    btnDownload.IsEnabled = btnLater.IsEnabled = btnClose.IsEnabled = true;
+                    var directory = Path.Combine(StandaloneUpdater.UpdatesDirectory,
+                        Guid.NewGuid().ToString("N"));
+                    _downloadedFilePath = Path.Combine(directory,
+                        _updateInfo.Delivery == UpdateDelivery.Installer ? "setup.zip" : "update.exe");
+                    _downloaded = await _updateService.DownloadUpdateAsync(_updateInfo, _downloadedFilePath, _downloadCts.Token);
+                    if (_closed || !_downloaded)
+                    {
+                        if (!_closed) btnDownload.Content = "Retry update";
+                        return;
+                    }
                 }
-                return;
+                catch (OperationCanceledException) when (_downloadCts.IsCancellationRequested) { return; }
+                catch (Exception ex)
+                {
+                    if (!_closed) txtProgress.Text = ex.Message;
+                    return;
+                }
+                finally
+                {
+                    _downloading = false;
+                    if (_closed) Cleanup();
+                    else
+                    {
+                        btnLater.Content = "Later";
+                        btnDownload.IsEnabled = true;
+                        if (!_downloaded) btnDownload.Content = "Retry update";
+                    }
+                }
             }
 
-            _downloading = true;
+            if (_closed) return;
+            _installStarted = true;
             btnDownload.IsEnabled = false;
-            btnDownload.Content = "Downloading...";
-            btnLater.Content = "Cancel";
+            btnLater.IsEnabled = false;
+            btnClose.IsEnabled = false;
+            btnDownload.Content = "Installing...";
             progressPanel.Visibility = Visibility.Visible;
-            try
+            bool started = await _updateService.InstallUpdateAsync(_updateInfo, _downloadedFilePath!);
+            if (!started)
             {
-                var directory = Path.Combine(Path.GetTempPath(), "RiotAutoLogin", "Updates", Guid.NewGuid().ToString("N"));
-                _downloadedFilePath = Path.Combine(directory, _updateInfo.Delivery == UpdateDelivery.Installer ? "setup.zip" : "update.exe");
-                _downloaded = await _updateService.DownloadUpdateAsync(_updateInfo, _downloadedFilePath, _downloadCts.Token);
-                if (_closed) return;
-                btnDownload.Content = _downloaded ? "Install & Restart" : "Retry download";
-                btnDownload.IsEnabled = true;
-                btnLater.Content = "Later";
-            }
-            catch (OperationCanceledException) when (_downloadCts.IsCancellationRequested) { }
-            catch (Exception ex)
-            {
-                if (!_closed)
-                {
-                    txtProgress.Text = ex.Message;
-                    btnDownload.Content = "Retry download";
-                    btnDownload.IsEnabled = true;
-                }
-            }
-            finally
-            {
-                _downloading = false;
+                _installStarted = false;
                 if (_closed) Cleanup();
+                else
+                {
+                    btnDownload.Content = "Retry update";
+                    btnDownload.IsEnabled = btnLater.IsEnabled = btnClose.IsEnabled = true;
+                }
             }
         }
 
