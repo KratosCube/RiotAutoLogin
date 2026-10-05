@@ -65,7 +65,9 @@ Run the dependency-free behavioral checks with `dotnet run --project RiotAutoLog
 
 For a new installation, download **RiotAutoLogin-Setup.zip**, extract it and run **RiotAutoLogin-Setup.exe**. Setup installs for the current Windows user, including the required .NET runtime. There is no separate runtime installation. Accounts, settings and statistics remain in the existing `%AppData%\\RiotClientAutoLogin` directory.
 
-Existing standalone users can first update their EXE normally, then choose **Settings → Enable smaller updates**. This performs a one-time setup, including when the installed version already matches the release. Use the new Riot Auto Login shortcut afterwards; the old standalone file is left in place. An existing Windows startup opt-in is moved to the new application location.
+For an existing standalone EXE, **Update & Restart** downloads to a temporary folder under `%LocalAppData%\RiotClientAutoLogin\Updates`, checks its size and SHA-256 digest when provided, then closes the app and replaces the EXE at the exact path it was launched from. The helper restarts the updated app and deletes the staged download. It does not leave an additional copy in Downloads. If the original directory is not writable, the app reports that before closing; if replacement fails afterwards, it preserves the old EXE, restarts it and reports the error at next launch. Downloading an EXE manually in a browser still uses the browser's Downloads folder.
+
+To use smaller future updates, choose **Settings → Enable smaller updates** separately. This performs a one-time setup, including when the version already matches the release. Use the new Riot Auto Login shortcut afterwards; the old standalone file is left in place because the user explicitly opted into a different install location. An existing Windows startup opt-in is moved to the new application location.
 
 The installed version keeps the previous package and applies binary deltas. Unchanged runtime files do not need to be downloaded again. A missing base, an unavailable/corrupt delta, or a large gap between versions can require a full download. Actual sizes are reported in the release workflow summary. Packages are compressed for transport and extracted during installation, so the installed app does not decompress a giant EXE on every startup.
 
@@ -99,4 +101,4 @@ Setup is deliberately wrapped in a ZIP: old versions select the first `.exe` rel
 
 CI builds two real Windows packages, verifies that the delta reconstructs the full payload without downloading the full package, and checks damaged-delta fallback, missing-base fallback, cached-download reuse and cancellation. It also exercises notification selection, version ordering, same-version migration, checksums and safe installer extraction.
 
-Before shipping, also smoke-test the one-time migration, Windows startup and **Install & Restart** on Windows. CI prepares packages but does not exercise an interactive installation or a running Riot Client.
+CI also checks the in-place EXE replacement, cleanup and failure recovery on Windows. Before shipping, smoke-test the one-time migration, Windows startup and **Update & Restart** in the app. CI does not exercise an interactive installation or a running Riot Client.

@@ -134,7 +134,7 @@
                 <TextBlock Grid.Column="0" x:Name="txtFileSize" FontSize="11" Margin="0,0,10,0" TextWrapping="Wrap"
                            Foreground="#FF9CA3AF" VerticalAlignment="Center"/>
                 
-                <Button Grid.Column="1" x:Name="btnDownload" Content="Download Update" 
+                <Button Grid.Column="1" x:Name="btnDownload" Content="Update &amp; Restart"
                         Style="{StaticResource ModernButton}" Click="btnDownload_Click"/>
                         
                 <Button Grid.Column="3" x:Name="btnLater" Content="Later" 

@@ -212,6 +212,10 @@ namespace RiotAutoLogin
             _updateService.UpdateAvailable += OnUpdateAvailable;
             _updateService.UpdateProgressChanged += OnUpdateProgressChanged;
             UpdateUpdateNotificationUi();
+            var previousFailure = StandaloneUpdater.TakeFailureMessage();
+            if (!string.IsNullOrWhiteSpace(previousFailure))
+                Dispatcher.BeginInvoke(new Action(() => System.Windows.MessageBox.Show(this, previousFailure,
+                    "Update failed", MessageBoxButton.OK, MessageBoxImage.Warning)));
             
             Console.WriteLine("Update service initialized");
         }
