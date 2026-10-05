@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using System.Threading.Tasks;
+using System.Threading;
 using System.Windows;
 using RiotAutoLogin.Models;
 using RiotAutoLogin.Services;
@@ -11,8 +11,12 @@ namespace RiotAutoLogin
     {
         private readonly UpdateInfo _updateInfo;
         private readonly UpdateService _updateService;
+        private readonly CancellationTokenSource _downloadCts = new();
         private string? _downloadedFilePath;
+        private bool _downloaded;
+        private bool _downloading;
         private bool _installStarted;
+        private bool _closed;
 
         public event Action<bool>? NotificationPreferenceChanged;
 
@@ -21,128 +25,77 @@ namespace RiotAutoLogin
             InitializeComponent();
             _updateInfo = updateInfo;
             _updateService = updateService;
-
-            InitializeUI();
-
-            // Subscribe to update progress
-            _updateService.UpdateProgressChanged += OnUpdateProgressChanged;
-        }
-
-        private void InitializeUI()
-        {
-            // Update info text
-            txtUpdateInfo.Text = $"A new version of Riot Auto Login is available!\n" +
-                               $"Current version: v{FormatVersion(_updateInfo.CurrentVersion)}\n" +
-                               $"Latest version: v{FormatVersion(_updateInfo.LatestVersion)}";
-
-            // Changelog
-            txtChangelog.Text = string.IsNullOrEmpty(_updateInfo.Changelog)
-                ? "No changelog available."
-                : _updateInfo.Changelog;
-
-            chkFutureUpdateNotifications.IsChecked = _updateService.NotificationsEnabled;
-
-            // File size
-            if (_updateInfo.FileSize.HasValue)
+            txtUpdateInfo.Text = $"Current version: v{FormatVersion(updateInfo.CurrentVersion)}\n" +
+                $"Available version: v{FormatVersion(updateInfo.LatestVersion)}";
+            txtChangelog.Text = string.IsNullOrWhiteSpace(updateInfo.Changelog) ? "No changelog available." : updateInfo.Changelog;
+            chkFutureUpdateNotifications.IsChecked = updateService.NotificationsEnabled;
+            txtDeliveryInfo.Text = updateInfo.Delivery switch
             {
-                var sizeInMB = _updateInfo.FileSize.Value / (1024.0 * 1024.0);
-                txtFileSize.Text = $"Download size: {sizeInMB:F1} MB";
-            }
+                UpdateDelivery.Installer => "One-time setup enables smaller future updates. Your accounts and settings are kept. Use the new Riot Auto Login shortcut afterwards.",
+                UpdateDelivery.Package when updateInfo.UsesDelta => "Only changes are downloaded when possible. If a patch cannot be applied, the full package is used.",
+                UpdateDelivery.Package => "A full package is needed for this update. Future updates can reuse it.",
+                _ => "This release uses the standalone updater."
+            };
+            if (updateInfo.FileSize is { } size)
+                txtFileSize.Text = $"{(updateInfo.UsesDelta ? "Estimated download" : "Download")}: {size / 1048576.0:F1} MB";
+            if (updateInfo.UsesDelta && updateInfo.FullDownloadSize is { } full)
+                txtFileSize.ToolTip = $"Full fallback: {full / 1048576.0:F1} MB";
+            _updateService.UpdateProgressChanged += OnUpdateProgressChanged;
         }
 
         private async void btnDownload_Click(object sender, RoutedEventArgs e)
         {
-            try
+            if (_downloaded)
             {
-                // Show progress panel
-                progressPanel.Visibility = Visibility.Visible;
+                _installStarted = true;
                 btnDownload.IsEnabled = false;
-                btnDownload.Content = "Downloading...";
-
-                // Create download path
-                var tempDir = Path.Combine(Path.GetTempPath(), "RiotAutoLogin", "Updates");
-                Directory.CreateDirectory(tempDir);
-
-                var fileName = $"RiotAutoLogin-v{_updateInfo.LatestVersion}.exe";
-                _downloadedFilePath = Path.Combine(tempDir, fileName);
-
-                // Download the update
-                bool downloadSuccess = await _updateService.DownloadUpdateAsync(_updateInfo, _downloadedFilePath);
-
-                if (downloadSuccess)
+                btnLater.IsEnabled = false;
+                btnClose.IsEnabled = false;
+                btnDownload.Content = "Installing...";
+                bool started = await _updateService.InstallUpdateAsync(_updateInfo, _downloadedFilePath!);
+                if (!started)
                 {
-                    // Change button to install
+                    _installStarted = false;
                     btnDownload.Content = "Install & Restart";
-                    btnDownload.IsEnabled = true;
-                    btnDownload.Click -= btnDownload_Click;
-                    btnDownload.Click += btnInstall_Click;
-
-                    txtProgress.Text = "Download completed! Click 'Install & Restart' to update.";
+                    btnDownload.IsEnabled = btnLater.IsEnabled = btnClose.IsEnabled = true;
                 }
-                else
-                {
-                    MessageBox.Show("Failed to download the update. Please try again later.",
-                        "Download Failed", MessageBoxButton.OK, MessageBoxImage.Error);
-                    ResetDownloadButton();
-                }
+                return;
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error downloading update: {ex.Message}",
-                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                ResetDownloadButton();
-            }
-        }
 
-        private void btnInstall_Click(object sender, RoutedEventArgs e)
-        {
+            _downloading = true;
+            btnDownload.IsEnabled = false;
+            btnDownload.Content = "Downloading...";
+            btnLater.Content = "Cancel";
+            progressPanel.Visibility = Visibility.Visible;
             try
             {
-                if (string.IsNullOrEmpty(_downloadedFilePath) || !File.Exists(_downloadedFilePath))
-                {
-                    MessageBox.Show("Downloaded file not found. Please download again.",
-                        "Installation Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                var result = MessageBox.Show(
-                    "The application will now close and restart with the new version. Continue?",
-                    "Install Update", MessageBoxButton.YesNo, MessageBoxImage.Question);
-
-                if (result == MessageBoxResult.Yes)
-                {
-                    btnDownload.IsEnabled = false;
-                    btnDownload.Content = "Installing...";
-                    _installStarted = true;
-
-                    // Install the update. The updater batch needs the downloaded file after this window closes,
-                    // so OnClosed must not delete it once installation has started.
-                    bool started = _updateService.InstallUpdate(_downloadedFilePath, restartApp: true);
-                    if (!started)
-                    {
-                        _installStarted = false;
-                        btnDownload.IsEnabled = true;
-                        btnDownload.Content = "Install & Restart";
-                    }
-                }
+                var directory = Path.Combine(Path.GetTempPath(), "RiotAutoLogin", "Updates", Guid.NewGuid().ToString("N"));
+                _downloadedFilePath = Path.Combine(directory, _updateInfo.Delivery == UpdateDelivery.Installer ? "setup.zip" : "update.exe");
+                _downloaded = await _updateService.DownloadUpdateAsync(_updateInfo, _downloadedFilePath, _downloadCts.Token);
+                if (_closed) return;
+                btnDownload.Content = _downloaded ? "Install & Restart" : "Retry download";
+                btnDownload.IsEnabled = true;
+                btnLater.Content = "Later";
             }
+            catch (OperationCanceledException) when (_downloadCts.IsCancellationRequested) { }
             catch (Exception ex)
             {
-                _installStarted = false;
-                MessageBox.Show($"Error installing update: {ex.Message}",
-                    "Installation Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                if (!_closed)
+                {
+                    txtProgress.Text = ex.Message;
+                    btnDownload.Content = "Retry download";
+                    btnDownload.IsEnabled = true;
+                }
+            }
+            finally
+            {
+                _downloading = false;
+                if (_closed) Cleanup();
             }
         }
 
-        private void btnLater_Click(object sender, RoutedEventArgs e)
-        {
-            Close();
-        }
-
-        private void btnClose_Click(object sender, RoutedEventArgs e)
-        {
-            Close();
-        }
+        private void btnLater_Click(object sender, RoutedEventArgs e) => Close();
+        private void btnClose_Click(object sender, RoutedEventArgs e) => Close();
 
         private void chkFutureUpdateNotifications_Click(object sender, RoutedEventArgs e)
         {
@@ -153,58 +106,42 @@ namespace RiotAutoLogin
 
         private void OnUpdateProgressChanged(UpdateProgress progress)
         {
-            // Update UI on the UI thread
-            Dispatcher.Invoke(() =>
+            if (_closed) return;
+            Dispatcher.BeginInvoke(new Action(() =>
             {
+                if (_closed) return;
                 txtProgress.Text = progress.Message;
                 progressBar.Value = progress.ProgressPercentage;
+                if (progress.Status == UpdateStatus.Error) progressPanel.Visibility = Visibility.Visible;
+            }));
+        }
 
-                if (progress.Status == UpdateStatus.Error)
+        private static string FormatVersion(Version? version) => version == null ? "unknown" :
+            version.Revision > 0 ? version.ToString(4) : $"{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}";
+
+        private void Cleanup()
+        {
+            _downloadCts.Dispose();
+            // Packaged downloads stay cached for a later retry. Startup never installs them automatically.
+            if (!_installStarted && _downloadedFilePath != null && _updateInfo.Delivery != UpdateDelivery.Package)
+            {
+                try
                 {
-                    MessageBox.Show($"Update error: {progress.Message}",
-                        "Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    ResetDownloadButton();
+                    if (File.Exists(_downloadedFilePath)) File.Delete(_downloadedFilePath);
+                    var directory = Path.GetDirectoryName(_downloadedFilePath);
+                    if (Directory.Exists(directory)) Directory.Delete(directory);
                 }
-            });
-        }
-
-        private void ResetDownloadButton()
-        {
-            btnDownload.Content = "Download Update";
-            btnDownload.IsEnabled = true;
-            progressPanel.Visibility = Visibility.Collapsed;
-        }
-
-        private static string FormatVersion(Version? version)
-        {
-            if (version == null)
-                return "unknown";
-
-            if (version.Revision > 0)
-                return $"{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}.{version.Revision}";
-
-            return $"{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}";
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            // Unsubscribe from events
+            _closed = true;
+            _downloadCts.Cancel();
             _updateService.UpdateProgressChanged -= OnUpdateProgressChanged;
-
-            // Clean up downloaded file only when the user closes/cancels the updater.
-            // During installation, the external batch file still needs this file after the app exits.
-            if (!_installStarted && !string.IsNullOrEmpty(_downloadedFilePath) && File.Exists(_downloadedFilePath))
-            {
-                try
-                {
-                    File.Delete(_downloadedFilePath);
-                }
-                catch
-                {
-                    // Ignore cleanup errors
-                }
-            }
-
+            if (!_downloading) Cleanup();
             base.OnClosed(e);
         }
     }

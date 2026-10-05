@@ -1,109 +1,87 @@
-name: Build release executable
+name: Build release packages
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    tags: ['v*.*.*']
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to create or update, for example v1.2.0
+        description: 'Release tag, for example v1.5.0 (new tags use the selected branch)'
         required: true
-        default: v1.2.0
         type: string
+      notify_users:
+        description: Show an update notification to users
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   build-and-upload:
-    name: Build and upload Windows executable
     runs-on: windows-latest
-
-    env:
-      PROJECT_PATH: RiotAutoLogin/RiotAutoLogin.csproj
-      PUBLISH_DIR: publish
-      ARTIFACT_DIR: artifact
-
     steps:
-      - name: Resolve release tag and version
+      - name: Resolve release tag and source
         id: release_info
-        shell: pwsh
-        run: |
-          if ('${{ github.event_name }}' -eq 'release') {
-            $tag = '${{ github.event.release.tag_name }}'
-          } elseif ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            $tag = '${{ inputs.tag }}'
-          } else {
-            $tag = '${{ github.ref_name }}'
-          }
+        uses: actions/github-script@v7
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        with:
+          script: |
+            const raw = context.payload.release?.tag_name || process.env.INPUT_TAG || context.ref.split('/').pop();
+            const tag = raw.startsWith('v') ? raw : 'v' + raw;
+            if (!/^v\d+\.\d+\.\d+$/.test(tag)) throw new Error('Use a stable tag such as v1.5.0.');
+            let ref = context.sha;
+            try {
+              const result = await github.rest.git.getRef({...context.repo, ref: 'tags/' + tag});
+              ref = result.data.object.sha;
+            } catch (error) {
+              if (error.status !== 404 || context.eventName !== 'workflow_dispatch') throw error;
+            }
+            core.setOutput('tag', tag);
+            core.setOutput('version', tag.substring(1));
+            core.setOutput('ref', ref);
 
-          if ([string]::IsNullOrWhiteSpace($tag)) {
-            throw 'Release tag could not be resolved.'
-          }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release_info.outputs.ref }}
 
-          if (!$tag.StartsWith('v')) {
-            $tag = "v$tag"
-          }
-
-          $version = $tag.TrimStart('v')
-          "tag=$tag" >> $env:GITHUB_OUTPUT
-          "version=$version" >> $env:GITHUB_OUTPUT
-          Write-Host "Release tag: $tag"
-          Write-Host "Release version: $version"
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      - name: Restore dependencies
-        run: dotnet restore $env:PROJECT_PATH
+      - name: Restore packaging tool
+        run: dotnet tool restore
 
-      - name: Build
-        run: dotnet build $env:PROJECT_PATH --configuration Release --no-restore
+      - name: Run behavioral checks
+        run: dotnet run --project RiotAutoLogin.Tests/RiotAutoLogin.Tests.csproj -c Release
 
-      - name: Publish self-contained single-file exe
-        run: >
-          dotnet publish $env:PROJECT_PATH
-          --configuration Release
-          --runtime win-x64
-          --self-contained true
-          --output $env:PUBLISH_DIR
-          /p:PublishSingleFile=true
-          /p:IncludeNativeLibrariesForSelfExtract=true
-          /p:EnableCompressionInSingleFile=false
-          /p:PublishReadyToRun=true
-          /p:DebugType=None
-          /p:Version=${{ steps.release_info.outputs.version }}
-          /p:AssemblyVersion=${{ steps.release_info.outputs.version }}.0
-          /p:FileVersion=${{ steps.release_info.outputs.version }}.0
-
-      - name: Prepare release asset
+      - name: Download previous package for delta generation
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.release_info.outputs.version }}
+        run: ./scripts/Get-PreviousPackage.ps1 -Repository $env:GITHUB_REPOSITORY -Version $env:RELEASE_VERSION
+
+      - name: Build compressed packages and compatibility executable
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.release_info.outputs.version }}
+        run: ./scripts/Build-Release.ps1 -Version $env:RELEASE_VERSION
+
+      - name: Publish assets and notification policy
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release_info.outputs.tag }}
+          NOTIFY_USERS: ${{ github.event_name == 'workflow_dispatch' && inputs.notify_users && 'true' || github.event_name == 'workflow_dispatch' && 'false' || 'preserve' }}
         run: |
-          New-Item -ItemType Directory -Force -Path $env:ARTIFACT_DIR | Out-Null
-          $source = Join-Path $env:PUBLISH_DIR "RiotAutoLogin.exe"
-          $assetName = "RiotAutoLogin-${{ steps.release_info.outputs.tag }}-win-x64.exe"
-          $destination = Join-Path $env:ARTIFACT_DIR $assetName
-
-          if (!(Test-Path $source)) {
-            throw "Published executable was not found at $source"
-          }
-
-          Copy-Item $source $destination -Force
-          Write-Host "Prepared release asset: $destination"
-
-      - name: Create or update GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.release_info.outputs.tag }}
-          name: RiotAutoLogin ${{ steps.release_info.outputs.tag }}
-          generate_release_notes: true
-          files: artifact/*.exe
-          fail_on_unmatched_files: true
+          $commit = git rev-parse HEAD
+          ./scripts/Publish-Release.ps1 -Repository $env:GITHUB_REPOSITORY -Tag $env:RELEASE_TAG -Commit $commit -NotifyUsers $env:NOTIFY_USERS

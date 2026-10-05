@@ -2,6 +2,12 @@ using RiotAutoLogin.Models;
 using RiotAutoLogin.Services;
 using System.Text.Json;
 
+if (args.Length == 2 && args[0] == "--packages")
+{
+    await UpdatePackageChecks.RunAsync(args[1]);
+    return;
+}
+
 int checks = 0;
 void Equal<T>(T expected, T actual, string reason)
 {
@@ -126,6 +132,7 @@ try
     File.WriteAllText(broken, "broken history");
     _ = new WaitingTimeLedger(broken);
     Equal("broken history", File.ReadAllText(Directory.GetFiles(directory, "broken.json.recovery-*").Single()), "Corrupt history is retained for recovery");
+    checks += await UpdateChecks.RunAsync(directory);
     Console.WriteLine($"Passed {checks} behavioral checks.");
 }
 finally { Directory.Delete(directory, true); }

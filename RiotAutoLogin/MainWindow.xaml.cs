@@ -270,7 +270,13 @@ namespace RiotAutoLogin
                 btnCheckUpdates.Content = "Checking...";
                 
                 Console.WriteLine("🔄 Manual update check requested...");
-                await updateService.CheckForUpdatesAsync();
+                var info = await updateService.CheckForUpdatesAsync(manual: true);
+                if (!string.IsNullOrEmpty(info.ErrorMessage))
+                    txtUpdateCheckStatus.Text = info.ErrorMessage;
+                else if (!info.CanInstall)
+                    txtUpdateCheckStatus.Text = "You have the latest available version, including minor updates.";
+                else
+                    txtUpdateCheckStatus.Text = "An update is available. See the update window.";
                 
                 // Reset button
                 btnCheckUpdates.IsEnabled = true;
@@ -823,8 +829,8 @@ namespace RiotAutoLogin
             try
             {
                 await Task.Delay(1500, cancellationToken);
-                if (_updateService?.NotificationsEnabled == true)
-                    await _updateService.CheckForUpdatesAsync();
+                if (_updateService?.ShouldCheckForUpdates() == true)
+                    await _updateService.CheckForUpdatesAsync(manual: false, cancellationToken: cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -1312,7 +1318,7 @@ namespace RiotAutoLogin
             {
                 _updateService.UpdateAvailable -= OnUpdateAvailable;
                 _updateService.UpdateProgressChanged -= OnUpdateProgressChanged;
-                _updateService.UpdateProgressChanged -= OnManualUpdateProgressChanged;
+                _updateService.Dispose();
             }
             
             LCUService.StopAutoAccept();

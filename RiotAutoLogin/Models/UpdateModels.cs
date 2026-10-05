@@ -14,7 +14,15 @@ namespace RiotAutoLogin.Models
         public string? DownloadUrl { get; set; }
         public long? FileSize { get; set; }
         public string? Changelog { get; set; }
+        public UpdateDelivery Delivery { get; set; }
+        public string? DownloadDigest { get; set; }
+        public bool UsesDelta { get; set; }
+        public long? FullDownloadSize { get; set; }
+        public string? ErrorMessage { get; set; }
+        public bool CanInstall => IsUpdateAvailable || Delivery == UpdateDelivery.Installer;
     }
+
+    public enum UpdateDelivery { Standalone, Installer, Package }
 
     public class GitHubRelease
     {
@@ -56,6 +64,9 @@ namespace RiotAutoLogin.Models
 
         [JsonProperty("content_type")]
         public string ContentType { get; set; } = string.Empty;
+
+        [JsonProperty("digest")]
+        public string? Digest { get; set; }
     }
 
     public class UpdateSettings
@@ -67,6 +78,7 @@ namespace RiotAutoLogin.Models
         public int CheckIntervalHours { get; set; } = 24; // Check daily by default
         public DateTime LastCheckTime { get; set; } = DateTime.MinValue;
         public bool NotificationsEnabled { get; set; } = true;
+        public string? LastNotifiedVersion { get; set; }
     }
 
     public enum UpdateStatus
@@ -91,4 +103,4 @@ namespace RiotAutoLogin.Models
         public long TotalBytes { get; set; }
         public Exception? Error { get; set; }
     }
-} 
+}
