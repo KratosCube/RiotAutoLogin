@@ -143,7 +143,7 @@ public static class StandaloneUpdater
             }
             Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue
-            Remove-Item -LiteralPath (Split-Path -Parent $source) -ErrorAction SilentlyContinue
+            try { [System.IO.Directory]::Delete((Split-Path -Parent $source), $false) } catch {}
             if ($env:RAL_RESTART -eq '1') {
                 Start-Process -FilePath $target -WorkingDirectory (Split-Path -Parent $target)
             }
