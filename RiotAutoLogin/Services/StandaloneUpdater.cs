@@ -41,6 +41,7 @@ public static class StandaloneUpdater
 
         var targetDirectory = Path.GetDirectoryName(target)!;
         var directory = helperDirectory ?? UpdatesDirectory;
+        Directory.CreateDirectory(UpdatesDirectory);
         Directory.CreateDirectory(directory);
         var operation = Guid.NewGuid().ToString("N");
         var pending = Path.Combine(targetDirectory, $".{Path.GetFileName(target)}.{operation}.pending");
@@ -62,6 +63,7 @@ public static class StandaloneUpdater
                 WorkingDirectory = directory,
                 UseShellExecute = false,
                 CreateNoWindow = true,
+                RedirectStandardError = !restart,
                 WindowStyle = ProcessWindowStyle.Hidden
             };
             start.ArgumentList.Add("-NoProfile");

@@ -136,7 +136,8 @@ internal static class UpdateChecks
                     "The replacement waits for the exact old process to exit.");
                 await helper.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
                 if (helper.ExitCode != 0)
-                    throw new Exception($"EXE replacement helper exited {helper.ExitCode}: {StandaloneUpdater.TakeFailureMessage()}");
+                    throw new Exception($"EXE replacement helper exited {helper.ExitCode}: " +
+                        $"{StandaloneUpdater.TakeFailureMessage()} {await helper.StandardError.ReadToEndAsync()}");
                 checks++;
             }
             Check(await File.ReadAllTextAsync(target) == "verified new EXE", "The original EXE path holds the update.");
