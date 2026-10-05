@@ -114,9 +114,9 @@ internal static class UpdateChecks
             Directory.CreateDirectory(targetDirectory);
             Directory.CreateDirectory(updateDirectory);
             var target = Path.Combine(targetDirectory, "Riot App & Co.exe");
-            var source = Path.Combine(updateDirectory, "download.exe");
+            var updateFile = Path.Combine(updateDirectory, "download.exe");
             await File.WriteAllTextAsync(target, "previous EXE");
-            await File.WriteAllTextAsync(source, "verified new EXE");
+            await File.WriteAllTextAsync(updateFile, "verified new EXE");
             var waitProcess = new ProcessStartInfo
             {
                 FileName = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
@@ -127,7 +127,7 @@ internal static class UpdateChecks
             waitProcess.ArgumentList.Add("-Command");
             waitProcess.ArgumentList.Add("Start-Sleep -Seconds 3");
             using (var previous = Process.Start(waitProcess) ?? throw new Exception("Could not start an old-process stand-in."))
-            using (var helper = await StandaloneUpdater.LaunchAsync(source, target,
+            using (var helper = await StandaloneUpdater.LaunchAsync(updateFile, target,
                 previous.Id, previous.StartTime.ToUniversalTime().Ticks,
                 restart: false, helperDirectory: updateDirectory))
             {
@@ -138,18 +138,18 @@ internal static class UpdateChecks
                 Check(helper.ExitCode == 0, "The helper replaces the EXE and exits successfully.");
             }
             Check(await File.ReadAllTextAsync(target) == "verified new EXE", "The original EXE path holds the update.");
-            Check(!File.Exists(source), "A successful update removes the staged download.");
+            Check(!File.Exists(updateFile), "A successful update removes the staged download.");
 
-            await File.WriteAllTextAsync(source, "another update");
+            await File.WriteAllTextAsync(updateFile, "another update");
             using (var lockedTarget = File.Open(target, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
             {
-                using var helper = await StandaloneUpdater.LaunchAsync(source, target, 0, 0,
+                using var helper = await StandaloneUpdater.LaunchAsync(updateFile, target, 0, 0,
                     restart: false, helperDirectory: updateDirectory);
                 await helper.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
                 Check(helper.ExitCode != 0, "The helper reports a failed replacement.");
             }
             Check(await File.ReadAllTextAsync(target) == "verified new EXE", "A failed replacement preserves the old EXE.");
-            Check(File.Exists(source), "A failed replacement keeps the verified download for inspection.");
+            Check(File.Exists(updateFile), "A failed replacement keeps the verified download for inspection.");
             Check(StandaloneUpdater.TakeFailureMessage()?.Contains("could not replace", StringComparison.OrdinalIgnoreCase) == true,
                 "The next launch can explain a failed replacement.");
         }
