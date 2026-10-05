@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using RiotAutoLogin.Models;
@@ -51,6 +52,18 @@ internal static class UpdateChecks
         var incomplete = Release("v2.0.0"); incomplete.Assets.Clear();
         incomplete.Assets.Add(new() { Name = "RiotAutoLogin-Setup.exe" });
         Check(ReleasePolicy.Select(new[] { incomplete }, current, true, false) == null, "Never replace the running EXE with an arbitrarily named installer.");
+        var installerOnly = Release("v2.1.0");
+        installerOnly.Assets.RemoveAll(a => a.Name.EndsWith("-win-x64.exe", StringComparison.OrdinalIgnoreCase));
+        Check(ReleasePolicy.Select(new[] { installerOnly }, current, true, false) == null,
+            "A normal standalone update must never switch to an installer and strand the old EXE.");
+        Check(ReleasePolicy.Select(new[] { installerOnly }, current, true, false, true) == installerOnly,
+            "The installer is available only when the user explicitly enables smaller updates.");
+        var exeOnly = Release("v2.2.0");
+        exeOnly.Assets.RemoveAll(a => a.Name == ReleasePolicy.InstallerAssetName);
+        Check(ReleasePolicy.Select(new[] { exeOnly }, current, true, false) == exeOnly,
+            "An ordinary update can replace the standalone EXE without the setup ZIP.");
+        Check(ReleasePolicy.Select(new[] { exeOnly }, current, true, false, true) == null,
+            "Explicit migration must have a real installer.");
         incomplete.Assets.Add(new() { Name = ReleasePolicy.FeedAssetName });
         Check(!ReleasePolicy.HasPackage(incomplete), "A feed without a full package is not installable.");
         Check(ReleasePolicy.Select(new[] { Release("v1.4.9"), Release("v1.4.10") }, current, true, false)?.TagName == "v1.4.10", "Versions sort numerically.");
@@ -94,6 +107,55 @@ internal static class UpdateChecks
         using (var archive = ZipFile.Open(wrongZip, ZipArchiveMode.Create)) archive.CreateEntry("nested/RiotAutoLogin-Setup.exe");
         await Reject(() => Task.Run(() => UpdateDownloadVerifier.ExtractInstaller(wrongZip, Path.Combine(directory, "wrong"))),
             "Only the exact root installer entry is accepted.");
+        if (OperatingSystem.IsWindows())
+        {
+            var targetDirectory = Path.Combine(directory, "App [folder] & tests");
+            var updateDirectory = Path.Combine(directory, "Staging [folder] & tests");
+            Directory.CreateDirectory(targetDirectory);
+            Directory.CreateDirectory(updateDirectory);
+            var target = Path.Combine(targetDirectory, "Riot App & Co.exe");
+            var updateFile = Path.Combine(updateDirectory, "download.exe");
+            await File.WriteAllTextAsync(target, "previous EXE");
+            await File.WriteAllTextAsync(updateFile, "verified new EXE");
+            var waitProcess = new ProcessStartInfo
+            {
+                FileName = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            waitProcess.ArgumentList.Add("-NoProfile");
+            waitProcess.ArgumentList.Add("-Command");
+            waitProcess.ArgumentList.Add("Start-Sleep -Seconds 3");
+            using (var previous = Process.Start(waitProcess) ?? throw new Exception("Could not start an old-process stand-in."))
+            using (var helper = await StandaloneUpdater.LaunchAsync(updateFile, target,
+                previous.Id, previous.StartTime.ToUniversalTime().Ticks,
+                restart: false, helperDirectory: updateDirectory))
+            {
+                await Task.Delay(500);
+                Check(await File.ReadAllTextAsync(target) == "previous EXE" && !previous.HasExited,
+                    "The replacement waits for the exact old process to exit.");
+                await helper.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+                if (helper.ExitCode != 0)
+                    throw new Exception($"EXE replacement helper exited {helper.ExitCode}: " +
+                        $"{StandaloneUpdater.TakeFailureMessage()} {await helper.StandardError.ReadToEndAsync()}");
+                checks++;
+            }
+            Check(await File.ReadAllTextAsync(target) == "verified new EXE", "The original EXE path holds the update.");
+            Check(!File.Exists(updateFile), "A successful update removes the staged download.");
+
+            await File.WriteAllTextAsync(updateFile, "another update");
+            using (var lockedTarget = File.Open(target, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                using var helper = await StandaloneUpdater.LaunchAsync(updateFile, target, 0, 0,
+                    restart: false, helperDirectory: updateDirectory);
+                await helper.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+                Check(helper.ExitCode != 0, "The helper reports a failed replacement.");
+            }
+            Check(await File.ReadAllTextAsync(target) == "verified new EXE", "A failed replacement preserves the old EXE.");
+            Check(File.Exists(updateFile), "A failed replacement keeps the verified download for inspection.");
+            Check(StandaloneUpdater.TakeFailureMessage()?.Contains("could not replace", StringComparison.OrdinalIgnoreCase) == true,
+                "The next launch can explain a failed replacement.");
+        }
         return checks;
     }
 

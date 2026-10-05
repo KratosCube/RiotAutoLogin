@@ -14,7 +14,7 @@ namespace RiotAutoLogin
         private static void Main()
         {
             // Handle updater hooks before constructing WPF or starting client monitors.
-            // A downloaded update must still wait for the user's Install & Restart action.
+            // A downloaded update still waits for the user's Update & Restart action.
             VelopackApp.Build()
                 .SetAutoApplyOnStartup(false)
                 .OnFirstRun(_ => StartupManager.RebindExistingStartup())

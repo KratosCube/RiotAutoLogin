@@ -57,7 +57,7 @@ namespace RiotAutoLogin
                     : "Startup release notifications are disabled. Manual checks still work.";
                 txtUpdateDelivery.Text = _updateService.SupportsDeltaUpdates
                     ? "Smaller updates enabled. Existing files are reused when a delta is available."
-                    : "Standalone version. One-time setup enables smaller future updates and keeps your accounts and settings.";
+                    : "Normal updates replace this EXE here. Enable smaller updates once to install a managed copy, then use its new shortcut.";
                 btnEnableSmallerUpdates.Visibility = _updateService.SupportsDeltaUpdates
                     ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
             }
