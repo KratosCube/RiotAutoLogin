@@ -133,6 +133,7 @@ try
     _ = new WaitingTimeLedger(broken);
     Equal("broken history", File.ReadAllText(Directory.GetFiles(directory, "broken.json.recovery-*").Single()), "Corrupt history is retained for recovery");
     checks += await UpdateChecks.RunAsync(directory);
+    checks += LeagueConfigChecks.Run(directory);
     Console.WriteLine($"Passed {checks} behavioral checks.");
 }
 finally { Directory.Delete(directory, true); }

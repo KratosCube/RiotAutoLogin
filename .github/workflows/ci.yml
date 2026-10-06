@@ -31,6 +31,9 @@ jobs:
       - name: Verify queue statistics and time tracking
         run: dotnet run --project RiotAutoLogin.Tests/RiotAutoLogin.Tests.csproj --configuration Release
 
+      - name: Open Accounts tab on Windows
+        run: dotnet run --project RiotAutoLogin.UiChecks/RiotAutoLogin.UiChecks.csproj --configuration Release
+
       - name: Restore packaging tool
         run: dotnet tool restore
 
