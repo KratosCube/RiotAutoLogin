@@ -747,6 +747,8 @@ namespace RiotAutoLogin
 
             InitializeDeferredServices();
             InitializeSettingsExtras();
+            if (_leagueConfigSettings.Enabled)
+                _ = RefreshPersistentSettingsAsync();
             LoadAutoPickSettings();
             UpdateCurrentVersionDisplay();
 
