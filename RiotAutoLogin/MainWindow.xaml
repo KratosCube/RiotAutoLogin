@@ -909,11 +909,11 @@
                                                                     <TextBlock Margin="0,6,0,0"
                                                FontSize="13"
                                                Foreground="{StaticResource TextColorBrush}">
-                                        <Run Text="{Binding DisplayLeaguePoints}"/>
+                                        <Run Text="{Binding DisplayLeaguePoints, Mode=OneWay}"/>
                                         <Run Text=" LP  •  "/>
-                                        <Run Text="{Binding DisplayWins}" Foreground="#22BABB"/>
+                                        <Run Text="{Binding DisplayWins, Mode=OneWay}" Foreground="#22BABB"/>
                                         <Run Text="W / " Foreground="{StaticResource TextColorBrush}"/>
-                                        <Run Text="{Binding DisplayLosses}" Foreground="#F24405"/>
+                                        <Run Text="{Binding DisplayLosses, Mode=OneWay}" Foreground="#F24405"/>
                                         <Run Text="L" Foreground="{StaticResource TextColorBrush}"/>
                                                                     </TextBlock>
                                                                 </StackPanel>
