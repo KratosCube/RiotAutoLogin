@@ -113,7 +113,9 @@ namespace RiotAutoLogin.Services
                     _settings.LastNotifiedVersion != info.LatestVersion.ToString()))
                 {
                     ReportProgress(new() { Status = UpdateStatus.UpdateAvailable,
-                        Message = $"Update available: v{info.LatestVersion.ToString(3)}" });
+                        Message = info.Delivery == UpdateDelivery.Installer
+                            ? $"Setup for smaller updates: v{info.LatestVersion.ToString(3)}"
+                            : $"Update available: v{info.LatestVersion.ToString(3)}" });
                     UpdateAvailable?.Invoke(info);
                     if (!manual)
                     {

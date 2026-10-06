@@ -471,7 +471,7 @@
 
                 <!-- Main Content -->
                 <Grid Grid.Row="1">
-                    <TabControl Grid.Row="1"
+                    <TabControl x:Name="mainTabs" Grid.Row="1"
                                 Margin="16,14,16,16"
                                 Background="Transparent"
                                 BorderThickness="0"
@@ -827,7 +827,7 @@
                         </TabItem>
 
                         <!-- ACCOUNTS -->
-                        <TabItem Header="Accounts" Style="{StaticResource TabItemStyle}">
+                        <TabItem x:Name="AccountsTab" Header="Accounts" Style="{StaticResource TabItemStyle}">
                             <Grid Margin="0,16,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="1.15*"/>
@@ -1151,47 +1151,6 @@
                                             </StackPanel>
                                         </Border>
 
-                                        <!-- Application Location -->
-                                        <Border Style="{StaticResource SettingsCardStyle}">
-                                            <StackPanel>
-                                                <TextBlock Text="Application Location"
-                                                           FontSize="18"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="{StaticResource TextColorBrush}"/>
-                                                <TextBlock Text="The exact executable currently running on this PC."
-                                                           Margin="0,6,0,14"
-                                                           FontSize="13"
-                                                           Foreground="{StaticResource MutedTextBrush}"/>
-
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-
-                                                    <TextBox x:Name="txtExecutablePath"
-                                                             Grid.Column="0"
-                                                             Margin="0,0,10,0"
-                                                             IsReadOnly="True"
-                                                             Text="Locating application..."
-                                                             ToolTip="Path to the running Riot Auto Login executable"
-                                                             Style="{StaticResource ModernTextBox}"/>
-
-                                                    <Button Grid.Column="1"
-                                                            Content="Copy Path"
-                                                            Margin="0,0,10,0"
-                                                            Style="{StaticResource SecondaryButton}"
-                                                            Click="btnCopyExecutablePath_Click"/>
-
-                                                    <Button Grid.Column="2"
-                                                            Content="Open Folder"
-                                                            Style="{StaticResource ModernButton}"
-                                                            Click="btnOpenExecutableFolder_Click"/>
-                                                </Grid>
-                                            </StackPanel>
-                                        </Border>
-
                                         <!-- Auto Accept -->
                                         <Border Style="{StaticResource SettingsCardStyle}">
                                             <StackPanel>
@@ -1296,6 +1255,44 @@
                                                                    VerticalAlignment="Center"/>
                                                     </Grid>
                                                 </Border>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- League player settings -->
+                                        <Border Style="{StaticResource SettingsCardStyle}">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                                        <TextBlock Text="Persistent Settings" Style="{StaticResource SectionTitleStyle}"/>
+                                                        <TextBlock Text="Keep local League settings by marking existing Config files read-only. Turn this off before changing settings in the game."
+                                                                   Style="{StaticResource SectionDescriptionStyle}"/>
+                                                    </StackPanel>
+                                                    <ToggleButton x:Name="tglPersistentSettings" Grid.Column="1" Width="100"
+                                                                  Content="OFF" IsEnabled="False"
+                                                                  Style="{StaticResource ModernToggleButton}"
+                                                                  Checked="tglPersistentSettings_Checked"
+                                                                  Unchecked="tglPersistentSettings_Unchecked"/>
+                                                </Grid>
+                                                <Grid Margin="0,4,0,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBox x:Name="txtLeagueConfigPath" Grid.Column="0" IsReadOnly="True"
+                                                             Text="Looking for League Config..." Margin="0,0,10,0"
+                                                             Style="{StaticResource ModernTextBox}"/>
+                                                    <Button Grid.Column="1" Content="Choose Folder"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Click="btnChooseLeagueConfig_Click"/>
+                                                </Grid>
+                                                <TextBlock x:Name="txtPersistentSettingsStatus" Margin="0,8,0,0"
+                                                           FontSize="12" TextWrapping="Wrap"
+                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Text="The app checks PersistedSettings.json, game.cfg and input.ini when they exist."/>
                                             </StackPanel>
                                         </Border>
 
@@ -1488,6 +1485,47 @@
                                                 </Grid>
                                             </StackPanel>
                                         </Border>
+                                        <!-- Application Location -->
+                                        <Border Style="{StaticResource SettingsCardStyle}">
+                                            <StackPanel>
+                                                <TextBlock Text="Application Location"
+                                                           FontSize="18"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextColorBrush}"/>
+                                                <TextBlock Text="The exact executable currently running on this PC."
+                                                           Margin="0,6,0,14"
+                                                           FontSize="13"
+                                                           Foreground="{StaticResource MutedTextBrush}"/>
+
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBox x:Name="txtExecutablePath"
+                                                             Grid.Column="0"
+                                                             Margin="0,0,10,0"
+                                                             IsReadOnly="True"
+                                                             Text="Locating application..."
+                                                             ToolTip="Path to the running Riot Auto Login executable"
+                                                             Style="{StaticResource ModernTextBox}"/>
+
+                                                    <Button Grid.Column="1"
+                                                            Content="Copy Path"
+                                                            Margin="0,0,10,0"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Click="btnCopyExecutablePath_Click"/>
+
+                                                    <Button Grid.Column="2"
+                                                            Content="Open Folder"
+                                                            Style="{StaticResource ModernButton}"
+                                                            Click="btnOpenExecutableFolder_Click"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
                                     </StackPanel>
                                 </ScrollViewer>
                             </Grid>

@@ -72,7 +72,7 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="20,15">
                     <Path Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" 
                           Fill="White" Width="24" Height="24" Stretch="Uniform" Margin="0,0,10,0"/>
-                    <TextBlock Text="Update Available" FontSize="18" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="txtDialogTitle" Text="Update Available" FontSize="18" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                 </StackPanel>
                 
                 <Button Grid.Column="1" x:Name="btnClose" Content="×" 

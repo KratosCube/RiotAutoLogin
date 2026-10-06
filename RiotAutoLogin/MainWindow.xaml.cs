@@ -1203,6 +1203,7 @@ namespace RiotAutoLogin
                     LoadHotkeySettings(); // This now also loads RunOnStartup setting
                     UpdateHotkeyDisplay(); 
                     UpdateRunOnStartupToggleUI(); // Update the new toggle
+                    _ = RefreshPersistentSettingsAsync();
                 }
             }
         }
@@ -1237,7 +1238,6 @@ namespace RiotAutoLogin
         private void btnEUW_Checked(object sender, RoutedEventArgs e)
         {
             _selectedRegion = "euw1";
-            btnEUW.IsChecked = true;
             if (btnEUNE != null)
                 btnEUNE.IsChecked = false;
         }
@@ -1245,7 +1245,6 @@ namespace RiotAutoLogin
         private void btnEUNE_Checked(object sender, RoutedEventArgs e)
         {
             _selectedRegion = "eun1";
-            btnEUNE.IsChecked = true;
             if (btnEUW != null)
                 btnEUW.IsChecked = false;
         }

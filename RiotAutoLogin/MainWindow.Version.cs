@@ -76,7 +76,9 @@ namespace RiotAutoLogin
             {
                 var info = await _updateService.CheckForUpdatesAsync(manual: true, allowMigration: true);
                 txtUpdateCheckStatus.Text = info.ErrorMessage ?? (info.CanInstall
-                    ? "One-time setup is ready in the update window."
+                    ? info.IsUpdateAvailable
+                        ? "Setup for smaller updates is ready in the installation window."
+                        : "You already have this version. The window offers a one-time move to a managed installation."
                     : "The setup package has not been published for this version yet.");
             }
             finally

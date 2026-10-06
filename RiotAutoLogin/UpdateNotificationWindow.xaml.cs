@@ -17,6 +17,7 @@ namespace RiotAutoLogin
         private bool _downloading;
         private bool _installStarted;
         private bool _closed;
+        private string RetryLabel => _updateInfo.Delivery == UpdateDelivery.Installer ? "Retry setup" : "Retry update";
 
         public event Action<bool>? NotificationPreferenceChanged;
 
@@ -25,13 +26,21 @@ namespace RiotAutoLogin
             InitializeComponent();
             _updateInfo = updateInfo;
             _updateService = updateService;
-            txtUpdateInfo.Text = $"Current version: v{FormatVersion(updateInfo.CurrentVersion)}\n" +
-                $"Available version: v{FormatVersion(updateInfo.LatestVersion)}";
+            bool migration = updateInfo.Delivery == UpdateDelivery.Installer;
+            Title = migration ? "Enable Smaller Updates - Riot Auto Login" : Title;
+            txtDialogTitle.Text = migration ? "Enable Smaller Updates" : "Update Available";
+            btnDownload.Content = migration ? "Install & Restart" : "Update & Restart";
+            txtUpdateInfo.Text = migration
+                ? $"Current version: v{FormatVersion(updateInfo.CurrentVersion)}\n" +
+                  $"Setup version: v{FormatVersion(updateInfo.LatestVersion)}" +
+                  (updateInfo.IsUpdateAvailable ? "" : " (already installed)")
+                : $"Current version: v{FormatVersion(updateInfo.CurrentVersion)}\n" +
+                  $"Available version: v{FormatVersion(updateInfo.LatestVersion)}";
             txtChangelog.Text = string.IsNullOrWhiteSpace(updateInfo.Changelog) ? "No changelog available." : updateInfo.Changelog;
             chkFutureUpdateNotifications.IsChecked = updateService.NotificationsEnabled;
             txtDeliveryInfo.Text = updateInfo.Delivery switch
             {
-                UpdateDelivery.Installer => "One-time setup enables smaller future updates. Your accounts and settings are kept. Use the new Riot Auto Login shortcut afterwards.",
+                UpdateDelivery.Installer => "This is a one-time move to a managed installation, even when the version number is unchanged. Your accounts and settings are kept. Use the new shortcut afterwards; the old standalone EXE remains where it is.",
                 UpdateDelivery.Package when updateInfo.UsesDelta => "Only changes are downloaded when possible. If a patch cannot be applied, the full package is used.",
                 UpdateDelivery.Package => "A full package is needed for this update. Future updates can reuse it.",
                 _ => "The app will close, replace this EXE at its current location, and restart. No copy is saved to Downloads."
@@ -62,7 +71,7 @@ namespace RiotAutoLogin
                     _downloaded = await _updateService.DownloadUpdateAsync(_updateInfo, _downloadedFilePath, _downloadCts.Token);
                     if (_closed || !_downloaded)
                     {
-                        if (!_closed) btnDownload.Content = "Retry update";
+                        if (!_closed) btnDownload.Content = RetryLabel;
                         return;
                     }
                 }
@@ -80,7 +89,7 @@ namespace RiotAutoLogin
                     {
                         btnLater.Content = "Later";
                         btnDownload.IsEnabled = true;
-                        if (!_downloaded) btnDownload.Content = "Retry update";
+                        if (!_downloaded) btnDownload.Content = RetryLabel;
                     }
                 }
             }
@@ -99,7 +108,7 @@ namespace RiotAutoLogin
                 if (_closed) Cleanup();
                 else
                 {
-                    btnDownload.Content = "Retry update";
+                    btnDownload.Content = RetryLabel;
                     btnDownload.IsEnabled = btnLater.IsEnabled = btnClose.IsEnabled = true;
                 }
             }
