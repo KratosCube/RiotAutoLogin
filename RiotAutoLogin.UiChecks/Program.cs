@@ -2,12 +2,14 @@ using System.Windows;
 using System.Windows.Controls;
 using RiotAutoLogin;
 using RiotAutoLogin.Models;
+using Velopack;
 
 internal static class Program
 {
     [STAThread]
     private static void Main()
     {
+        VelopackApp.Build().SetAutoApplyOnStartup(false).Run();
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         var window = new MainWindow();
         try
