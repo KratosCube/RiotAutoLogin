@@ -70,7 +70,30 @@ try
     classifier.Classify(session, null);
     Equal(TimedActivity.Loading, classifier.Classify(session with { Phase = "GameStart" }, null), "Observed launch begins initial loading");
     Equal(TimedActivity.InGame, classifier.Classify(session with { Phase = "InProgress" }, 1), "Loading ends at the running game clock");
+    classifier.Classify(session with { Phase = "Reconnect" }, null);
+    Equal(TimedActivity.InGame, classifier.Classify(session with { Phase = "InProgress" }, null), "Reconnect cannot resume initial loading after the live API drops");
     Equal(TimedActivity.None, classifier.Classify(inProgress with { IsSpectator = true }, 30), "Spectating is excluded");
+
+    var queueTracker = new GameflowQueueTracker();
+    Equal<RankedQueue?>(RankedQueue.RankedFives, queueTracker.Observe(session), "Capture the ranked queue in champion select");
+    Equal<RankedQueue?>(RankedQueue.RankedFives, queueTracker.Observe(session with { Phase = "GameStart", Queue = null }), "Missing launch queue keeps the known ranked queue");
+    Equal<RankedQueue?>(null, queueTracker.Observe(session with { Phase = "WaitingForStats", Queue = null }), "Finished matches clear the queue before the next game");
+
+    var loadingAttempt = new LoadingAttemptTracker();
+    var loadingStart = new DateTimeOffset(2026, 9, 25, 12, 0, 0, TimeSpan.Zero);
+    loadingAttempt.Observe(loadingStart, 0, "a", RankedQueue.SoloDuo, 1, TimedActivity.Loading, null);
+    loadingAttempt.Observe(loadingStart.AddSeconds(5), 5000, "a", null, 1, TimedActivity.Loading, null);
+    var resumed = loadingAttempt.Observe(loadingStart.AddSeconds(20), 20000, "a", null, 1, TimedActivity.InGame, 8);
+    Equal<DateTimeOffset?>(loadingStart, resumed?.StartedUtc, "Brief LCU outage retains the observed loading start");
+    Equal<RankedQueue?>(RankedQueue.SoloDuo, resumed?.Queue, "Transient missing queue does not hide loading from the selected ranked queue");
+    loadingAttempt.Observe(loadingStart, 0, "a", RankedQueue.SoloDuo, 1, TimedActivity.Loading, null);
+    Equal<LoadingAttempt?>(null, loadingAttempt.Observe(loadingStart.AddSeconds(61), 61000, "a", RankedQueue.SoloDuo, 1, TimedActivity.InGame, 60), "Long poll gap cannot invent loading time");
+    loadingAttempt.Observe(loadingStart, 0, "a", RankedQueue.SoloDuo, 1, TimedActivity.Loading, null);
+    Equal<LoadingAttempt?>(null, loadingAttempt.Observe(loadingStart.AddSeconds(3), 3000, "a", RankedQueue.SoloDuo, 2, TimedActivity.InGame, 1), "Another game cannot confirm the previous loading attempt");
+    loadingAttempt.Observe(loadingStart, 0, "a", RankedQueue.SoloDuo, 1, TimedActivity.Loading, null);
+    Equal<LoadingAttempt?>(null, loadingAttempt.Observe(loadingStart.AddMinutes(5), 1000, "a", RankedQueue.SoloDuo, 1, TimedActivity.InGame, 1), "A wall clock jump cannot fabricate loading time");
+    Equal(new PixelLocation(-1190, 355), ScreenPlacement.Center(-1920, 0, 1920, 1040, 460, 330), "A monitor left of primary has a negative X origin");
+    Equal(new PixelLocation(730, -705), ScreenPlacement.Center(0, -1080, 1920, 1080, 460, 330), "A monitor above primary has a negative Y origin");
 
     string path = Path.Combine(directory, "history.json");
     var ledger = new WaitingTimeLedger(path);

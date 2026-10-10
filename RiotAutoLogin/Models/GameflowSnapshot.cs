@@ -28,6 +28,25 @@ namespace RiotAutoLogin.Models
 
     public enum TimedActivity { None, Queue, ChampSelect, Loading, InGame }
 
+    // LCU may omit gameData.queue while moving from champion select to the game.
+    // Keep the last known ranked queue for this attempt, without carrying it into
+    // another lobby or a completed match.
+    public sealed class GameflowQueueTracker
+    {
+        private RankedQueue? _queue;
+
+        public RankedQueue? Observe(GameflowSnapshot snapshot)
+        {
+            if (snapshot.Phase is "None" or "Lobby" or "WaitingForStats" or "PreEndOfGame" or "EndOfGame")
+                _queue = null;
+            else if (snapshot.Queue.HasValue)
+                _queue = snapshot.Queue;
+            return _queue;
+        }
+
+        public void Reset() => _queue = null;
+    }
+
     // The LCU's InProgress phase includes loading. A positive Live Client game
     // clock confirms play; a missing endpoint on a mid-game attach proves nothing.
     public sealed class GameflowTimeClassifier
@@ -48,6 +67,13 @@ namespace RiotAutoLogin.Models
                 _gameStarted = false;
             }
             if (active && (_previousPhase == "ChampSelect" || snapshot.Phase == "GameStart")) _observedLaunch = true;
+            // A reconnect means the match has already started. If the live API
+            // is temporarily unavailable afterwards, do not call it loading.
+            if (snapshot.Phase == "Reconnect")
+            {
+                _observedLaunch = false;
+                _gameStarted = true;
+            }
             if (active && gameTime > 0) _gameStarted = true;
             if (snapshot.GameId != 0) _gameId = snapshot.GameId;
             _previousPhase = snapshot.Phase;

@@ -12,9 +12,10 @@ namespace RiotAutoLogin.Services
     {
         private readonly CancellationTokenSource _cts = new();
         private readonly GameflowTimeClassifier _classifier = new();
+        private readonly GameflowQueueTracker _queueTracker = new();
+        private readonly LoadingAttemptTracker _loadingAttempt = new();
         private Task? _task;
         private WaitingTimeLedger? _ledger;
-        private (DateTimeOffset utc, long tick, long lastTick, string account, RankedQueue? queue)? _pendingLoading;
         public string Status { get; private set; } = "Starting time tracking…";
         public string? PersistenceError => _ledger?.PersistenceError;
         public DateTimeOffset? FirstRecordedUtc => _ledger?.FirstRecordedUtc;
@@ -32,7 +33,7 @@ namespace RiotAutoLogin.Services
         {
             string account = "";
             string previousPhase = "None";
-            long identityCheckedAt = 0, savedAt = 0;
+            long identityCheckedAt = 0, lastIdentityConfirmedAt = long.MinValue, savedAt = 0;
             try
             {
                 _ledger = new WaitingTimeLedger(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RiotClientAutoLogin", "waiting-times.json"));
@@ -45,7 +46,8 @@ namespace RiotAutoLogin.Services
                         {
                             _ledger.Pause();
                             _classifier.Reset();
-                            _pendingLoading = null;
+                            _queueTracker.Reset();
+                            _loadingAttempt.Reset();
                             account = "";
                             previousPhase = "None";
                             Status = "Waiting for League Client";
@@ -57,7 +59,9 @@ namespace RiotAutoLogin.Services
                             if (json == null)
                             {
                                 _ledger.Pause();
-                                _pendingLoading = null;
+                                // LCU can briefly disappear as the game launches.
+                                // The pending attempt expires on a long gap or a
+                                // different account/game once data returns.
                                 Status = "Tracking paused · client unavailable";
                             }
                             else
@@ -72,16 +76,23 @@ namespace RiotAutoLogin.Services
                                     {
                                         using var doc = JsonDocument.Parse(identity[1]);
                                         if (doc.RootElement.TryGetProperty("puuid", out var id)) nextAccount = id.GetString() ?? "";
+                                        lastIdentityConfirmedAt = now;
                                     }
+                                    else if (identity[0] != "404" && account.Length > 0 &&
+                                             session.Phase is "GameStart" or "InProgress" or "Reconnect" &&
+                                             now - lastIdentityConfirmedAt < 30000)
+                                        nextAccount = account;
                                     if (account != nextAccount)
                                     {
                                         _ledger.Pause();
                                         _classifier.Reset();
-                                        _pendingLoading = null;
+                                        _queueTracker.Reset();
+                                        _loadingAttempt.Reset();
                                     }
                                     account = nextAccount;
-                                    identityCheckedAt = now;
+                                    identityCheckedAt = identity[0] == "200" ? now : now - 14000;
                                 }
+                                RankedQueue? queue = _queueTracker.Observe(session);
                                 double? gameTime = null;
                                 if (session.Phase is "GameStart" or "InProgress" && _classifier.NeedsGameClock)
                                     gameTime = await LiveGameClockService.ReadAsync(token).ConfigureAwait(false);
@@ -89,11 +100,14 @@ namespace RiotAutoLogin.Services
                                 if (account.Length == 0)
                                 {
                                     _ledger.Pause();
+                                    _classifier.Reset();
+                                    _queueTracker.Reset();
+                                    _loadingAttempt.Reset();
                                     Status = "Tracking paused · waiting for your account";
                                 }
                                 else
                                 {
-                                    RecordObservation(account, session.Queue, activity, gameTime);
+                                    RecordObservation(account, queue, session.GameId, activity, gameTime);
                                     Status = activity switch
                                     {
                                         TimedActivity.Queue => "Tracking · Queue (including ready check)",
@@ -117,7 +131,6 @@ namespace RiotAutoLogin.Services
                     catch (Exception ex)
                     {
                         _ledger.Pause();
-                        _pendingLoading = null;
                         Status = "Tracking paused · waiting for client data";
                         Debug.WriteLine($"Time tracking: {ex.Message}");
                         delay = 5000;
@@ -134,28 +147,22 @@ namespace RiotAutoLogin.Services
             finally { _ledger?.Save(); }
         }
 
-        private void RecordObservation(string account, RankedQueue? queue, TimedActivity activity, double? gameTime)
+        private void RecordObservation(string account, RankedQueue? queue, long gameId,
+            TimedActivity activity, double? gameTime)
         {
             DateTimeOffset utc = DateTimeOffset.UtcNow;
             long tick = Environment.TickCount64;
-            if (_pendingLoading is { } previous &&
-                (account != previous.account || queue != previous.queue || tick - previous.lastTick > 10000 ||
-                 Math.Abs((utc - previous.utc).TotalSeconds - (tick - previous.tick) / 1000.0) >= 2))
-                _pendingLoading = null;
-
+            var confirmed = _loadingAttempt.Observe(utc, tick, account, queue, gameId, activity, gameTime);
             if (activity == TimedActivity.Loading)
             {
                 // Keep loading provisional until the clock confirms when play
                 // actually began. An inaccessible Live Client API must not turn
                 // an entire match into a fabricated loading-screen statistic.
-                var start = _pendingLoading ?? (utc, tick, tick, account, queue);
-                _pendingLoading = (start.Item1, start.Item2, tick, account, queue);
                 _ledger!.Observe(utc, tick, account, queue, TimedActivity.None);
                 return;
             }
-            if (_pendingLoading is { } pending && activity == TimedActivity.InGame && gameTime.HasValue)
-                _ledger!.RecordConfirmedGameStart(pending.utc, utc, account, pending.queue, gameTime.Value);
-            _pendingLoading = null;
+            if (confirmed is { } pending && gameTime.HasValue)
+                _ledger!.RecordConfirmedGameStart(pending.StartedUtc, utc, account, pending.Queue, gameTime.Value);
             _ledger!.Observe(utc, tick, account, queue, activity);
         }
 

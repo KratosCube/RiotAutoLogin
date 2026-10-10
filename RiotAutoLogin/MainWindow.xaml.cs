@@ -28,41 +28,6 @@ namespace RiotAutoLogin
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
         
-        // DllImports for cursor position and screen detection
-        [DllImport("user32.dll")]
-        private static extern bool GetCursorPos(out POINT lpPoint);
-        [DllImport("user32.dll")]
-        private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
-        [DllImport("user32.dll")]
-        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct POINT
-        {
-            public int X;
-            public int Y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct RECT
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct MONITORINFO
-        {
-            public uint cbSize;
-            public RECT rcMonitor;
-            public RECT rcWork;
-            public uint dwFlags;
-        }
-
-        private const uint MONITOR_DEFAULTTONEAREST = 2;
-
         // Data and configuration fields.
         private List<Account> _accounts = new List<Account>();
         // System Tray Icon
@@ -82,7 +47,7 @@ namespace RiotAutoLogin
         private bool _suppressAutoAcceptEvents = false;
         private string _selectedAvatarPath = string.Empty;
         private string _selectedRegion = "eun1";
-        private System.Windows.Controls.Primitives.Popup? _quickLoginPopup;
+        private QuickLoginWindow? _quickLoginWindow;
         private CancellationTokenSource? _lifetimeCts;
         private CancellationTokenSource? _loginCts;
         private bool _startupInitialized;
@@ -300,407 +265,27 @@ namespace RiotAutoLogin
 
         private void OnHotkeyPressed()
         {
-            Console.WriteLine("Hotkey pressed!");
-            
-            // Toggle popup behavior: if already open, close it; if closed, open it
-            if (_quickLoginPopup != null && _quickLoginPopup.IsOpen)
+            if (_quickLoginWindow is { IsVisible: true })
             {
-                Console.WriteLine("QuickLoginPopup already visible - closing it");
-                _quickLoginPopup.IsOpen = false;
-                _quickLoginPopup = null;
+                _quickLoginWindow.Close();
                 return;
             }
-            
-            // Show the popup regardless of main window state (this is the whole point of global hotkey!)
             ShowQuickLoginPopup();
         }
 
         private void ShowQuickLoginPopup()
         {
-            Console.WriteLine("🔧 ShowQuickLoginPopup called");
-            
-            // Ensure accounts are loaded.
-            if (_accounts == null || !_accounts.Any())
-            {
-                Console.WriteLine("No accounts loaded for QuickLoginPopup.");
-                return;
-            }
+            if (_accounts.Count == 0) return;
 
-            // Close any existing popup
-            if (_quickLoginPopup != null)
+            _quickLoginWindow?.Close();
+            var chooser = new QuickLoginWindow(_accounts);
+            _quickLoginWindow = chooser;
+            chooser.Closed += (_, _) =>
             {
-                _quickLoginPopup.IsOpen = false;
-                _quickLoginPopup = null;
-            }
-
-            // Get the center of the screen where the mouse is located
-            Point mouseScreenCenter = GetMouseScreenCenter();
-
-            // Create a simple popup with StaysOpen = true for manual control
-            _quickLoginPopup = new System.Windows.Controls.Primitives.Popup
-            {
-                IsOpen = false, // Start closed, we'll open it after setup
-                StaysOpen = true, // We'll handle closing manually
-                Placement = System.Windows.Controls.Primitives.PlacementMode.Absolute,
-                AllowsTransparency = true,
-                PopupAnimation = System.Windows.Controls.Primitives.PopupAnimation.Fade,
-                Focusable = true // Allow the popup to receive focus for keyboard events
+                if (ReferenceEquals(_quickLoginWindow, chooser)) _quickLoginWindow = null;
             };
-
-            // Create main border for the popup with dynamic sizing
-            var screenHeight = SystemParameters.WorkArea.Height;
-            var maxPopupHeight = Math.Min(screenHeight * 0.8, _accounts.Count * 100 + 150); // Dynamic height based on accounts
-            var popupWidth = Math.Max(450, Math.Min(600, _accounts.Count > 3 ? 600 : 450)); // Wider for better content display
-            
-            var mainBorder = new Border
-            {
-                Background = new SolidColorBrush(Color.FromRgb(35, 35, 47)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(85, 85, 92)),
-                BorderThickness = new Thickness(2),
-                CornerRadius = new CornerRadius(10),
-                Padding = new Thickness(20),
-                MaxWidth = popupWidth,
-                MaxHeight = maxPopupHeight,
-                MinWidth = 400,
-                MinHeight = 200,
-                Focusable = true, // Allow border to receive focus
-                Effect = new System.Windows.Media.Effects.DropShadowEffect
-                {
-                    Color = Colors.Black,
-                    ShadowDepth = 5,
-                    BlurRadius = 15,
-                    Opacity = 0.3
-                }
-            };
-
-            // Add keyboard event handler for Escape key
-            mainBorder.KeyDown += (sender, e) =>
-            {
-                if (e.Key == Key.Escape)
-                {
-                    Console.WriteLine("Escape key pressed on mainBorder - closing popup");
-                    if (_quickLoginPopup != null && _quickLoginPopup.IsOpen)
-                    {
-                        _quickLoginPopup.IsOpen = false;
-                    }
-                    e.Handled = true;
-                }
-            };
-
-            // Also add PreviewKeyDown for earlier capture
-            mainBorder.PreviewKeyDown += (sender, e) =>
-            {
-                if (e.Key == Key.Escape)
-                {
-                    Console.WriteLine("Escape key preview on mainBorder - closing popup");
-                    if (_quickLoginPopup != null && _quickLoginPopup.IsOpen)
-                    {
-                        _quickLoginPopup.IsOpen = false;
-                    }
-                    e.Handled = true;
-                }
-            };
-
-            var stackPanel = new StackPanel
-            {
-                Orientation = System.Windows.Controls.Orientation.Vertical
-            };
-
-            // Add title with instruction text
-            var titleText = new TextBlock
-            {
-                Text = "Quick Login - Press ESC to close",
-                FontSize = 16,
-                FontWeight = FontWeights.Bold,
-                Foreground = Brushes.White,
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 15)
-            };
-            stackPanel.Children.Add(titleText);
-
-            // Add account buttons with ScrollViewer for better scaling
-            var scrollViewer = new ScrollViewer
-            {
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                MaxHeight = maxPopupHeight - 100, // Leave space for title and padding
-                Margin = new Thickness(0)
-            };
-            
-            var accountPanel = new StackPanel
-            {
-                Orientation = System.Windows.Controls.Orientation.Vertical
-            };
-
-            foreach (var account in _accounts)
-            {
-                var button = CreateQuickLoginButton(account);
-                accountPanel.Children.Add(button);
-            }
-
-            scrollViewer.Content = accountPanel;
-            stackPanel.Children.Add(scrollViewer);
-
-            mainBorder.Child = stackPanel;
-            _quickLoginPopup.Child = mainBorder;
-            
-            // Add keyboard event handler to the popup itself as well
-            _quickLoginPopup.KeyDown += (sender, e) =>
-            {
-                if (e.Key == Key.Escape)
-                {
-                    Console.WriteLine("Escape key pressed on popup - closing");
-                    if (_quickLoginPopup != null && _quickLoginPopup.IsOpen)
-                    {
-                        _quickLoginPopup.IsOpen = false;
-                    }
-                    e.Handled = true;
-                }
-            };
-
-            // Add PreviewKeyDown to popup for earlier capture
-            _quickLoginPopup.PreviewKeyDown += (sender, e) =>
-            {
-                if (e.Key == Key.Escape)
-                {
-                    Console.WriteLine("Escape key preview on popup - closing");
-                    if (_quickLoginPopup != null && _quickLoginPopup.IsOpen)
-                    {
-                        _quickLoginPopup.IsOpen = false;
-                    }
-                    e.Handled = true;
-                }
-            };
-            
-            // Measure the popup size before positioning
-            mainBorder.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            var popupSize = mainBorder.DesiredSize;
-            
-            // Get screen bounds for proper positioning
-            var screenBounds = SystemParameters.WorkArea;
-            
-            // Calculate position to center the popup on the mouse screen with boundary checking
-            double popupX = mouseScreenCenter.X - (popupSize.Width / 2);
-            double popupY = mouseScreenCenter.Y - (popupSize.Height / 2);
-            
-            // Ensure popup stays within screen bounds
-            popupX = Math.Max(10, Math.Min(popupX, screenBounds.Width - popupSize.Width - 10));
-            popupY = Math.Max(10, Math.Min(popupY, screenBounds.Height - popupSize.Height - 10));
-            
-            // Set the position
-            _quickLoginPopup.HorizontalOffset = popupX;
-            _quickLoginPopup.VerticalOffset = popupY;
-            
-            Console.WriteLine($"Positioning popup at: {popupX}, {popupY} (size: {popupSize.Width}x{popupSize.Height}, accounts: {_accounts.Count})");
-            
-            // Add event handler for when popup closes
-            _quickLoginPopup.Closed += (sender, e) =>
-            {
-                Console.WriteLine("Quick login popup closed");
-                _quickLoginPopup = null;
-                StopClickOutsideMonitoring();
-            };
-            
-            // Now open the popup
-            _quickLoginPopup.IsOpen = true;
-            
-            // Force focus to the popup content with multiple approaches
-            Task.Run(async () =>
-            {
-                await Task.Delay(100); // Small delay to ensure popup is rendered
-                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    try
-                    {
-                        // Try multiple focus approaches
-                        if (_quickLoginPopup.Child is FrameworkElement popupChild)
-                        {
-                            popupChild.Focus();
-                            Keyboard.Focus(popupChild);
-                        }
-                        
-                        // Also try focusing the main border
-                        mainBorder.Focus();
-                        Keyboard.Focus(mainBorder);
-                        
-                        // Make sure the popup is focusable
-                        if (!mainBorder.Focusable)
-                        {
-                            mainBorder.Focusable = true;
-                            mainBorder.Focus();
-                        }
-                        
-                        Console.WriteLine($"Popup opened and focus set. Focusable: {mainBorder.Focusable}, IsFocused: {mainBorder.IsFocused}");
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error setting focus: {ex.Message}");
-                    }
-                });
-            });
-            
-            // Start monitoring for clicks outside the popup with improved detection
-            StartClickOutsideMonitoring(popupX, popupY, popupSize.Width, popupSize.Height);
-            
-            Console.WriteLine("Quick login popup opened successfully - Press ESC to close");
-        }
-
-        private System.Windows.Controls.Button CreateQuickLoginButton(Account account)
-        {
-            var button = new System.Windows.Controls.Button
-            {
-                Height = 80,
-                Margin = new Thickness(0, 5, 0, 5), // Reduced margin for better spacing
-                Background = Brushes.Transparent,
-                BorderBrush = Brushes.Transparent,
-                BorderThickness = new Thickness(0),
-                Foreground = Brushes.White,
-                FontSize = 14,
-                HorizontalContentAlignment = System.Windows.HorizontalAlignment.Stretch,
-                Padding = new Thickness(0),
-                Cursor = System.Windows.Input.Cursors.Hand
-            };
-
-            // Remove default button style to prevent weird hover effects
-            button.Style = null;
-            button.Template = new ControlTemplate(typeof(System.Windows.Controls.Button))
-            {
-                VisualTree = new FrameworkElementFactory(typeof(ContentPresenter))
-            };
-
-            // Create rounded border for the button content with custom hover effects
-            var buttonBorder = new Border
-            {
-                Background = (SolidColorBrush)Resources["CardBackgroundBrush"],
-                BorderBrush = new SolidColorBrush(Color.FromRgb(85, 85, 92)),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(10),
-                Padding = new Thickness(15, 10, 15, 10)
-            };
-
-            // Store original colors for hover effect
-            var originalBackground = buttonBorder.Background.Clone();
-            var originalBorderBrush = buttonBorder.BorderBrush.Clone();
-            var hoverBackground = new SolidColorBrush(Color.FromRgb(50, 50, 62));
-            var hoverBorderBrush = new SolidColorBrush(Color.FromRgb(120, 120, 127));
-
-            // Apply hover effects to the button itself for better detection
-            button.MouseEnter += (s, e) =>
-            {
-                buttonBorder.Background = hoverBackground;
-                buttonBorder.BorderBrush = hoverBorderBrush;
-            };
-
-            button.MouseLeave += (s, e) =>
-            {
-                buttonBorder.Background = originalBackground;
-                buttonBorder.BorderBrush = originalBorderBrush;
-            };
-
-            var stackPanel = new StackPanel
-            {
-                Orientation = System.Windows.Controls.Orientation.Horizontal
-            };
-
-            // Add avatar
-            var avatarBorder = new Border
-            {
-                Width = 50,
-                Height = 50,
-                CornerRadius = new CornerRadius(25),
-                Margin = new Thickness(0, 0, 15, 0),
-                ClipToBounds = true,
-                Background = new SolidColorBrush(Color.FromRgb(85, 85, 92))
-            };
-
-            if (!string.IsNullOrEmpty(account.AvatarPath) && File.Exists(account.AvatarPath))
-            {
-                try
-                {
-                    var avatarImage = new System.Windows.Controls.Image
-                    {
-                        Source = new BitmapImage(new Uri(account.AvatarPath, UriKind.Absolute)),
-                        Stretch = Stretch.UniformToFill
-                    };
-                    avatarBorder.Child = avatarImage;
-                }
-                catch
-                {
-                    // Default avatar with first letter
-                    var avatarText = new TextBlock
-                    {
-                        Text = account.GameName.FirstOrDefault().ToString().ToUpper(),
-                        FontSize = 20,
-                        FontWeight = FontWeights.Bold,
-                        Foreground = Brushes.White,
-                        HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                        VerticalAlignment = System.Windows.VerticalAlignment.Center
-                    };
-                    avatarBorder.Child = avatarText;
-                }
-            }
-            else
-            {
-                // Default avatar with first letter
-                var avatarText = new TextBlock
-                {
-                    Text = account.GameName.FirstOrDefault().ToString().ToUpper(),
-                    FontSize = 20,
-                    FontWeight = FontWeights.Bold,
-                    Foreground = Brushes.White,
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                    VerticalAlignment = System.Windows.VerticalAlignment.Center
-                };
-                avatarBorder.Child = avatarText;
-            }
-
-            stackPanel.Children.Add(avatarBorder);
-
-            // Add text info
-            var textPanel = new StackPanel
-            {
-                Orientation = System.Windows.Controls.Orientation.Vertical,
-                VerticalAlignment = System.Windows.VerticalAlignment.Center
-            };
-
-            // Account name
-            var nameText = new TextBlock
-            {
-                Text = $"{account.GameName}#{account.TagLine}",
-                FontSize = 16,
-                FontWeight = FontWeights.Bold,
-                Foreground = Brushes.White
-            };
-            textPanel.Children.Add(nameText);
-
-            // Add rank info if available
-            if (account.DisplayRank != null && account.DisplayRankInfo != "Unranked")
-            {
-                var rankText = new TextBlock
-                {
-                    Text = account.DisplayRankInfo,
-                    FontSize = 11,
-                    Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 120)),
-                    Margin = new Thickness(0, 2, 0, 0)
-                };
-                textPanel.Children.Add(rankText);
-            }
-
-            stackPanel.Children.Add(textPanel);
-
-            buttonBorder.Child = stackPanel;
-            button.Content = buttonBorder;
-
-            // Add click handler
-            button.Click += async (sender, e) =>
-            {
-                Console.WriteLine($"🎯 Quick login clicked: {account.GameName}");
-                if (_quickLoginPopup != null)
-                    _quickLoginPopup.IsOpen = false;
-                await StartLoginAsync(account);
-            };
-
-            return button;
+            chooser.AccountSelected += async account => await StartLoginAsync(account);
+            chooser.ShowCenteredOnCursor();
         }
 
         private void ShowMainWindow()
@@ -1309,6 +894,7 @@ namespace RiotAutoLogin
         {
             // This method is called when the window is truly closing (e.g., after Application.Shutdown() is called).
             // Ensure resources are released here.
+            _quickLoginWindow?.Close();
             _waitingStatsTimer?.Stop();
             _waitingTimeMonitor?.Dispose();
             _loginCts?.Cancel();
@@ -2470,15 +2056,6 @@ namespace RiotAutoLogin
         }
         private async void MainWindow_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            // Handle Escape key to close quick login popup
-            if (e.Key == Key.Escape && _quickLoginPopup != null && _quickLoginPopup.IsOpen)
-            {
-                Console.WriteLine("Escape key pressed in main window - closing quick login popup");
-                _quickLoginPopup.IsOpen = false;
-                e.Handled = true;
-                return;
-            }
-            
             // Enable Enter key for quick login when an account is selected
             if (e.Key == Key.Enter && lbLoginAccounts?.SelectedItem is Account account)
             {
@@ -2488,137 +2065,5 @@ namespace RiotAutoLogin
             }
         }
 
-        private Point GetMouseScreenCenter()
-        {
-            try
-            {
-                // Get current cursor position
-                if (!GetCursorPos(out POINT cursorPos))
-                {
-                    Console.WriteLine("Failed to get cursor position, using primary screen center");
-                    return GetPrimaryScreenCenter();
-                }
-
-                // Get the monitor that contains the cursor
-                IntPtr hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
-                if (hMonitor == IntPtr.Zero)
-                {
-                    Console.WriteLine("Failed to get monitor info, using primary screen center");
-                    return GetPrimaryScreenCenter();
-                }
-
-                // Get monitor information
-                MONITORINFO monitorInfo = new MONITORINFO();
-                monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(MONITORINFO));
-                
-                if (!GetMonitorInfo(hMonitor, ref monitorInfo))
-                {
-                    Console.WriteLine("Failed to get monitor details, using primary screen center");
-                    return GetPrimaryScreenCenter();
-                }
-
-                // Calculate center of the work area (excluding taskbar)
-                double centerX = (monitorInfo.rcWork.Left + monitorInfo.rcWork.Right) / 2.0;
-                double centerY = (monitorInfo.rcWork.Top + monitorInfo.rcWork.Bottom) / 2.0;
-
-                Console.WriteLine($"Mouse screen center: {centerX}, {centerY}");
-                return new Point(centerX, centerY);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error getting mouse screen center: {ex.Message}");
-                return GetPrimaryScreenCenter();
-            }
-        }
-
-        private Point GetPrimaryScreenCenter()
-        {
-            // Fallback to primary screen center
-            double centerX = SystemParameters.PrimaryScreenWidth / 2.0;
-            double centerY = SystemParameters.PrimaryScreenHeight / 2.0;
-            return new Point(centerX, centerY);
-        }
-
-        // Click outside monitoring for popup
-        private System.Windows.Threading.DispatcherTimer? _clickMonitorTimer;
-        private Rect _popupBounds;
-
-        private void StartClickOutsideMonitoring(double popupX, double popupY, double popupWidth, double popupHeight)
-        {
-            // Store popup bounds with some padding to avoid edge cases
-            _popupBounds = new Rect(popupX - 5, popupY - 5, popupWidth + 10, popupHeight + 10);
-            
-            // Create timer to check for clicks outside
-            _clickMonitorTimer?.Stop();
-            _clickMonitorTimer = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(100) // Check every 100ms for better reliability
-            };
-            
-            bool wasMousePressed = false;
-            
-            _clickMonitorTimer.Tick += (sender, e) =>
-            {
-                try
-                {
-                    // Check for Escape key as a reliable fallback
-                    if (Keyboard.IsKeyDown(Key.Escape))
-                    {
-                        Console.WriteLine("Escape key detected in monitoring timer - closing popup");
-                        if (_quickLoginPopup != null && _quickLoginPopup.IsOpen)
-                        {
-                            _quickLoginPopup.IsOpen = false;
-                        }
-                        return;
-                    }
-                    
-                    // Get current cursor position
-                    if (GetCursorPos(out POINT cursorPos))
-                    {
-                        Point mousePos = new Point(cursorPos.X, cursorPos.Y);
-                        
-                        // Check if left mouse button is currently pressed
-                        bool isMousePressed = (System.Windows.Forms.Control.MouseButtons & MouseButtons.Left) == MouseButtons.Left;
-                        
-                        // Detect mouse button release after being pressed (end of click)
-                        if (wasMousePressed && !isMousePressed)
-                        {
-                            // Check if the release happened outside popup bounds
-                            if (!_popupBounds.Contains(mousePos))
-                            {
-                                Console.WriteLine($"Click released outside popup at ({mousePos.X}, {mousePos.Y}) - closing popup");
-                                if (_quickLoginPopup != null && _quickLoginPopup.IsOpen)
-                                {
-                                    // Use BeginInvoke for better thread safety
-                                    System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
-                                    {
-                                        if (_quickLoginPopup != null && _quickLoginPopup.IsOpen)
-                                        {
-                                            _quickLoginPopup.IsOpen = false;
-                                        }
-                                    }));
-                                }
-                            }
-                        }
-                        
-                        wasMousePressed = isMousePressed;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error in click monitoring: {ex.Message}");
-                }
-            };
-            
-            _clickMonitorTimer.Start();
-            Console.WriteLine($"Started improved click outside monitoring and Escape key detection for bounds: ({_popupBounds.X}, {_popupBounds.Y}, {_popupBounds.Width}x{_popupBounds.Height})");
-        }
-
-        private void StopClickOutsideMonitoring()
-        {
-            _clickMonitorTimer?.Stop();
-            _clickMonitorTimer = null;
-            Console.WriteLine("Stopped click outside monitoring");
-        }
     }
 }
