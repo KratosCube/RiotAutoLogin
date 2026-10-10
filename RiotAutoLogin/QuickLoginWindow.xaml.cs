@@ -7,7 +7,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Screen = System.Windows.Forms.Screen;
-using Cursor = System.Windows.Forms.Cursor;
+using MouseControl = System.Windows.Forms.Control;
 
 namespace RiotAutoLogin
 {
@@ -42,7 +42,7 @@ namespace RiotAutoLogin
 
         public void ShowCenteredOnCursor()
         {
-            var workArea = Screen.FromPoint(Cursor.Position).WorkingArea;
+            var workArea = Screen.FromPoint(MouseControl.MousePosition).WorkingArea;
             var handle = new WindowInteropHelper(this).EnsureHandle();
 
             // Move the hidden HWND to the cursor's monitor before sizing it;

@@ -46,7 +46,7 @@ internal static class Program
                 chooser.ShowCenteredOnCursor();
                 if (chooser.FindName("AccountList") is not ItemsControl choices || choices.Items.Count != 1)
                     throw new Exception("Quick Login did not display the saved account.");
-                var bounds = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position).WorkingArea;
+                var bounds = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Control.MousePosition).WorkingArea;
                 var handle = new System.Windows.Interop.WindowInteropHelper(chooser).Handle;
                 if (!GetWindowRect(handle, out var rect) ||
                     Math.Abs((rect.Left + rect.Right) / 2.0 - (bounds.Left + bounds.Right) / 2.0) > 2 ||
