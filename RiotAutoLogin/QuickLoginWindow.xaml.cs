@@ -1,6 +1,7 @@
 using RiotAutoLogin.Models;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
@@ -13,6 +14,7 @@ namespace RiotAutoLogin
 {
     public partial class QuickLoginWindow : Window
     {
+        private bool _closing;
         private const uint SwpNoSize = 0x0001;
         private const uint SwpNoZOrder = 0x0004;
         private const uint SwpNoActivate = 0x0010;
@@ -66,8 +68,20 @@ namespace RiotAutoLogin
                     SwpNoSize | SwpNoZOrder | SwpNoActivate);
             }
             Opacity = 1;
-            Deactivated += (_, _) => Close();
+            Deactivated += CloseWhenDeactivated;
             Activate();
+        }
+
+        private void CloseWhenDeactivated(object? sender, EventArgs e)
+        {
+            if (!_closing) Close();
+        }
+
+        protected override void OnClosing(CancelEventArgs e)
+        {
+            _closing = true;
+            Deactivated -= CloseWhenDeactivated;
+            base.OnClosing(e);
         }
 
         private void Account_Click(object sender, RoutedEventArgs e)
