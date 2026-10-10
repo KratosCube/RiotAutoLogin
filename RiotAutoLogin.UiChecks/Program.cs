@@ -4,6 +4,8 @@ using System.Runtime.InteropServices;
 using RiotAutoLogin;
 using RiotAutoLogin.Models;
 using Velopack;
+using TabControl = System.Windows.Controls.TabControl;
+using ListBox = System.Windows.Controls.ListBox;
 
 internal static class Program
 {
