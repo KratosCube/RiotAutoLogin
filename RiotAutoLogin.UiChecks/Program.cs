@@ -1,16 +1,26 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Runtime.InteropServices;
 using RiotAutoLogin;
 using RiotAutoLogin.Models;
 using Velopack;
+using TabControl = System.Windows.Controls.TabControl;
+using ListBox = System.Windows.Controls.ListBox;
 
 internal static class Program
 {
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr handle, out NativeRect rect);
+
     [STAThread]
     private static void Main()
     {
         VelopackApp.Build().SetAutoApplyOnStartup(false).Run();
-        var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        app.InitializeComponent();
         var window = new MainWindow();
         try
         {
@@ -31,6 +41,22 @@ internal static class Program
             if (!ReferenceEquals(tabs.SelectedItem, accountsTab) || cards.Items.Count != 1)
                 throw new Exception("The Accounts tab did not display the saved account.");
             Console.WriteLine("Accounts tab rendered with a saved account.");
+
+            var chooser = new QuickLoginWindow((List<Account>)saved.ItemsSource);
+            try
+            {
+                chooser.ShowCenteredOnCursor();
+                if (chooser.FindName("AccountList") is not ItemsControl choices || choices.Items.Count != 1)
+                    throw new Exception("Quick Login did not display the saved account.");
+                var bounds = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Control.MousePosition).WorkingArea;
+                var handle = new System.Windows.Interop.WindowInteropHelper(chooser).Handle;
+                if (!GetWindowRect(handle, out var rect) ||
+                    Math.Abs((rect.Left + rect.Right) / 2.0 - (bounds.Left + bounds.Right) / 2.0) > 2 ||
+                    Math.Abs((rect.Top + rect.Bottom) / 2.0 - (bounds.Top + bounds.Bottom) / 2.0) > 2)
+                    throw new Exception("Quick Login is not centered in the cursor monitor's work area.");
+                Console.WriteLine("Quick Login rendered with a saved account.");
+            }
+            finally { chooser.Close(); }
         }
         finally
         {

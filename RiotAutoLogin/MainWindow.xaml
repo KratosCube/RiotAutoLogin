@@ -22,21 +22,6 @@
         Loaded="Window_Loaded">
 
     <Window.Resources>
-        <!-- Theme colors -->
-        <SolidColorBrush x:Key="MainBackgroundBrush" Color="#090C12"/>
-        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#111720"/>
-        <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="#18212D"/>
-        <SolidColorBrush x:Key="ElevatedBackgroundBrush" Color="#1D2735"/>
-        <SolidColorBrush x:Key="BorderBrush" Color="#263241"/>
-        <SolidColorBrush x:Key="BorderHoverBrush" Color="#46576E"/>
-        <SolidColorBrush x:Key="AccentBrush" Color="#D83C45"/>
-        <SolidColorBrush x:Key="AccentHoverBrush" Color="#EA4B54"/>
-        <SolidColorBrush x:Key="AccentMutedBrush" Color="#352027"/>
-        <SolidColorBrush x:Key="TextColorBrush" Color="#F5F7FA"/>
-        <SolidColorBrush x:Key="MutedTextBrush" Color="#98A4B3"/>
-        <SolidColorBrush x:Key="SuccessBrush" Color="#3DDC97"/>
-        <SolidColorBrush x:Key="WarningBrush" Color="#F4C95D"/>
-
         <conv:RankInfoConverter x:Key="RankInfoConverter"/>
         <conv:StringToImageSourceConverter x:Key="StringToImageSourceConverter"/>
         <Style x:Key="GhostIconButton" TargetType="Button">
@@ -283,76 +268,6 @@
             <Setter Property="Margin" Value="0,0,10,0"/>
         </Style>
 
-        <!-- Scrollbars -->
-        <Style x:Key="DarkScrollBarStyle" TargetType="{x:Type ScrollBar}">
-            <Setter Property="Background" Value="#11151B"/>
-            <Setter Property="Width" Value="6"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type ScrollBar}">
-                        <Grid Background="{TemplateBinding Background}">
-                            <Track x:Name="PART_Track" IsDirectionReversed="True">
-                                <Track.DecreaseRepeatButton>
-                                    <RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0"/>
-                                </Track.DecreaseRepeatButton>
-                                <Track.IncreaseRepeatButton>
-                                    <RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0"/>
-                                </Track.IncreaseRepeatButton>
-                                <Track.Thumb>
-                                    <Thumb>
-                                        <Thumb.Template>
-                                            <ControlTemplate TargetType="{x:Type Thumb}">
-                                                <Border Background="{StaticResource AccentBrush}" CornerRadius="3"/>
-                                            </ControlTemplate>
-                                        </Thumb.Template>
-                                    </Thumb>
-                                </Track.Thumb>
-                            </Track>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="DarkScrollViewerStyle" TargetType="{x:Type ScrollViewer}">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type ScrollViewer}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="*"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <ScrollContentPresenter Grid.Row="0" Grid.Column="0"/>
-
-                            <ScrollBar x:Name="PART_VerticalScrollBar"
-                                       Grid.Row="0"
-                                       Grid.Column="1"
-                                       Style="{StaticResource DarkScrollBarStyle}"
-                                       Value="{TemplateBinding VerticalOffset}"
-                                       Maximum="{TemplateBinding ScrollableHeight}"
-                                       ViewportSize="{TemplateBinding ViewportHeight}"
-                                       Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
-
-                            <ScrollBar x:Name="PART_HorizontalScrollBar"
-                                       Grid.Row="1"
-                                       Grid.Column="0"
-                                       Style="{StaticResource DarkScrollBarStyle}"
-                                       Orientation="Horizontal"
-                                       Value="{TemplateBinding HorizontalOffset}"
-                                       Maximum="{TemplateBinding ScrollableWidth}"
-                                       ViewportSize="{TemplateBinding ViewportWidth}"
-                                       Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
     </Window.Resources>
 
     <Grid Margin="8">

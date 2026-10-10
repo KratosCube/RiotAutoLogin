@@ -9,6 +9,8 @@
     <Compile Include="../RiotAutoLogin/Models/Account.cs" Link="Account.cs" />
     <Compile Include="../RiotAutoLogin/Models/RankedQueue.cs" Link="RankedQueue.cs" />
     <Compile Include="../RiotAutoLogin/Models/GameflowSnapshot.cs" Link="GameflowSnapshot.cs" />
+    <Compile Include="../RiotAutoLogin/Models/LoadingAttemptTracker.cs" Link="LoadingAttemptTracker.cs" />
+    <Compile Include="../RiotAutoLogin/Models/ScreenPlacement.cs" Link="ScreenPlacement.cs" />
     <Compile Include="../RiotAutoLogin/Services/WaitingTimeLedger.cs" Link="WaitingTimeLedger.cs" />
     <Compile Include="../RiotAutoLogin/Models/UpdateModels.cs" Link="UpdateModels.cs" />
     <Compile Include="../RiotAutoLogin/Services/ReleasePolicy.cs" Link="ReleasePolicy.cs" />
