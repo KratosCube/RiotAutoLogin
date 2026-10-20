@@ -6,17 +6,19 @@ namespace RiotAutoLogin.Models
         DateTimeOffset StartedUtc, long StartedTick, long LastTick,
         string Account, RankedQueue? Queue, long GameId);
 
-    // Loading is provisional until the live game clock confirms when play began.
+    // Loading is provisional until the live GameStart event confirms play began.
     // Brief LCU outages during launch are common, so a missing poll alone does
     // not discard the attempt. A long gap, a clock jump or a new game does.
     public sealed class LoadingAttemptTracker
     {
         private LoadingAttempt? _pending;
 
+        public bool HasPending => _pending.HasValue;
+
         public void Reset() => _pending = null;
 
         public LoadingAttempt? Observe(DateTimeOffset utc, long tick, string account,
-            RankedQueue? queue, long gameId, TimedActivity activity, double? gameTime)
+            RankedQueue? queue, long gameId, TimedActivity activity)
         {
             if (_pending is { } previous &&
                 (previous.Account != account ||
@@ -39,7 +41,7 @@ namespace RiotAutoLogin.Models
                 return null;
             }
 
-            var confirmed = activity == TimedActivity.InGame && gameTime > 0 ? _pending : null;
+            var confirmed = activity == TimedActivity.InGame ? _pending : null;
             _pending = null;
             return confirmed;
         }

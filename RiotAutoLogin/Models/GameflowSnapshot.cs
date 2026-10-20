@@ -47,8 +47,9 @@ namespace RiotAutoLogin.Models
         public void Reset() => _queue = null;
     }
 
-    // The LCU's InProgress phase includes loading. A positive Live Client game
-    // clock confirms play; a missing endpoint on a mid-game attach proves nothing.
+    // The LCU's InProgress phase includes loading, and the game clock may
+    // advance before play begins. Confirm play using the Live Client GameStart
+    // event; a missing endpoint on a mid-game attach proves nothing.
     public sealed class GameflowTimeClassifier
     {
         private string _previousPhase = "None";
@@ -56,9 +57,9 @@ namespace RiotAutoLogin.Models
         private bool _observedLaunch;
         private bool _gameStarted;
 
-        public bool NeedsGameClock => !_gameStarted;
+        public bool NeedsGameStartEvent => !_gameStarted;
 
-        public TimedActivity Classify(GameflowSnapshot snapshot, double? gameTime)
+        public TimedActivity Classify(GameflowSnapshot snapshot, bool? gameStartedEvent)
         {
             bool active = snapshot.Phase is "GameStart" or "InProgress" or "Reconnect";
             if (!active || (snapshot.GameId != 0 && _gameId != 0 && snapshot.GameId != _gameId))
@@ -67,14 +68,11 @@ namespace RiotAutoLogin.Models
                 _gameStarted = false;
             }
             if (active && (_previousPhase == "ChampSelect" || snapshot.Phase == "GameStart")) _observedLaunch = true;
-            // A reconnect means the match has already started. If the live API
-            // is temporarily unavailable afterwards, do not call it loading.
-            if (snapshot.Phase == "Reconnect")
-            {
-                _observedLaunch = false;
+            // Retain a confirmed start across reconnects and temporary API outages.
+            // A reconnect before the event is observed does not prove play began.
+            if (snapshot.Phase == "Reconnect" && _gameStarted) _observedLaunch = false;
+            if (snapshot.Phase is "GameStart" or "InProgress" && gameStartedEvent is true)
                 _gameStarted = true;
-            }
-            if (active && gameTime > 0) _gameStarted = true;
             if (snapshot.GameId != 0) _gameId = snapshot.GameId;
             _previousPhase = snapshot.Phase;
 
