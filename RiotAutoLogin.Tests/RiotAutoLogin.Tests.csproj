@@ -12,6 +12,7 @@
     <Compile Include="../RiotAutoLogin/Models/LoadingAttemptTracker.cs" Link="LoadingAttemptTracker.cs" />
     <Compile Include="../RiotAutoLogin/Models/ScreenPlacement.cs" Link="ScreenPlacement.cs" />
     <Compile Include="../RiotAutoLogin/Services/WaitingTimeLedger.cs" Link="WaitingTimeLedger.cs" />
+    <Compile Include="../RiotAutoLogin/Services/LiveGameStartService.cs" Link="LiveGameStartService.cs" />
     <Compile Include="../RiotAutoLogin/Models/UpdateModels.cs" Link="UpdateModels.cs" />
     <Compile Include="../RiotAutoLogin/Services/ReleasePolicy.cs" Link="ReleasePolicy.cs" />
     <Compile Include="../RiotAutoLogin/Services/ReleaseSnapshotSource.cs" Link="ReleaseSnapshotSource.cs" />

@@ -119,17 +119,15 @@ namespace RiotAutoLogin.Services
             _dirty = true;
         }
 
-        public void RecordConfirmedGameStart(DateTimeOffset launch, DateTimeOffset observed, string account, RankedQueue? queue, double gameTimeSeconds)
+        public void RecordConfirmedGameStart(DateTimeOffset launch, DateTimeOffset observed, string account, RankedQueue? queue)
         {
             lock (_gate)
             {
                 double elapsed = (observed - launch).TotalSeconds;
-                if (elapsed <= 0 || elapsed > 3600 || !double.IsFinite(gameTimeSeconds) || gameTimeSeconds < 0) return;
-                // If the first successful clock read is late, subtract already
-                // elapsed gameplay rather than calling all of it loading time.
-                double inGame = Math.Min(elapsed, gameTimeSeconds);
-                AddSpan(launch, account, queue, TimedActivity.Loading, elapsed - inGame);
-                AddSpan(observed.AddSeconds(-inGame), account, queue, TimedActivity.InGame, inGame);
+                if (elapsed <= 0 || elapsed > 3600) return;
+                // The live clock can run during loading. Never reassign time
+                // before the GameStart event to gameplay using its value.
+                AddSpan(launch, account, queue, TimedActivity.Loading, elapsed);
             }
         }
 

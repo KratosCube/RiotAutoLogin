@@ -116,7 +116,7 @@ namespace RiotAutoLogin
             waitingStatsPage.ToolTip = $"{period} · selected ranked queue · all accounts\n" +
                 $"{_waitingTimeMonitor?.Status ?? "Starting tracking…"}\n" +
                 $"Recorded on this PC since {since}. Includes time in the tray; excludes sleep and time with the app closed.\n" +
-                "Queue includes ready checks. Loading is saved after the game clock confirms the start. Historical waiting time cannot be imported.";
+                "Queue includes ready checks. Loading is saved after the game start event confirms play. Historical waiting time cannot be imported.";
             if (_waitingTimeMonitor?.PersistenceError is { } error) waitingStatsPage.ToolTip += "\n" + error;
         }
 

@@ -58,10 +58,17 @@ try
     var session = GameflowSnapshot.Parse("""{"phase":"ChampSelect","gameData":{"gameId":123,"queue":{"id":710,"type":"RANKED_TEAM_5x5"},"isSpectator":false}}""");
     Equal<RankedQueue?>(RankedQueue.RankedFives, session.Queue, "Read queue from LCU session");
     Equal(123L, session.GameId, "Read game identity");
+    Equal<bool?>(true, LiveGameStartService.Parse("""{"Events":[{"EventName":"GameStart","EventTime":0.03}]}"""), "GameStart event confirms play");
+    Equal<bool?>(false, LiveGameStartService.Parse("""{"Events":[{"EventName":"ChampionKill"}]}"""), "Other live events do not confirm play");
+    Equal<bool?>(false, LiveGameStartService.Parse("""{"Events":[]}"""), "An empty event list means play has not started");
+    Equal<bool?>(null, LiveGameStartService.Parse("""{"gameTime":12}"""), "Missing event list gives no start signal");
+    Equal<bool?>(null, LiveGameStartService.Parse("invalid"), "Invalid event data gives no start signal");
+
     var classifier = new GameflowTimeClassifier();
     var inProgress = new GameflowSnapshot("InProgress", RankedQueue.SoloDuo, 100, false);
     Equal(TimedActivity.None, classifier.Classify(inProgress, null), "Attaching mid-game with unavailable API is not loading");
-    Equal(TimedActivity.InGame, classifier.Classify(inProgress, 250), "Positive clock confirms an active game");
+    Equal(TimedActivity.None, classifier.Classify(inProgress, false), "Missing GameStart cannot confirm play");
+    Equal(TimedActivity.InGame, classifier.Classify(inProgress, true), "GameStart confirms an active game on mid-game attach");
     Equal(TimedActivity.InGame, classifier.Classify(inProgress, null), "Transient live API failure does not restart loading");
     Equal(TimedActivity.None, classifier.Classify(inProgress with { Phase = "Reconnect" }, null), "Reconnect is not initial loading");
     Equal(TimedActivity.InGame, classifier.Classify(inProgress, null), "Returning from reconnect remains in game");
@@ -69,10 +76,11 @@ try
     Equal(TimedActivity.Queue, classifier.Classify(session with { Phase = "Matchmaking" }, null), "Dodge returns to queue");
     classifier.Classify(session, null);
     Equal(TimedActivity.Loading, classifier.Classify(session with { Phase = "GameStart" }, null), "Observed launch begins initial loading");
-    Equal(TimedActivity.InGame, classifier.Classify(session with { Phase = "InProgress" }, 1), "Loading ends at the running game clock");
+    Equal(TimedActivity.Loading, classifier.Classify(session with { Phase = "InProgress" }, false), "InProgress remains loading until GameStart is reported");
+    Equal(TimedActivity.InGame, classifier.Classify(session with { Phase = "InProgress" }, true), "GameStart event ends loading");
     classifier.Classify(session with { Phase = "Reconnect" }, null);
-    Equal(TimedActivity.InGame, classifier.Classify(session with { Phase = "InProgress" }, null), "Reconnect cannot resume initial loading after the live API drops");
-    Equal(TimedActivity.None, classifier.Classify(inProgress with { IsSpectator = true }, 30), "Spectating is excluded");
+    Equal(TimedActivity.InGame, classifier.Classify(session with { Phase = "InProgress" }, null), "Reconnect cannot resume loading after confirmed game start");
+    Equal(TimedActivity.None, classifier.Classify(inProgress with { IsSpectator = true }, true), "Spectating is excluded");
 
     var queueTracker = new GameflowQueueTracker();
     Equal<RankedQueue?>(RankedQueue.RankedFives, queueTracker.Observe(session), "Capture the ranked queue in champion select");
@@ -81,17 +89,17 @@ try
 
     var loadingAttempt = new LoadingAttemptTracker();
     var loadingStart = new DateTimeOffset(2026, 9, 25, 12, 0, 0, TimeSpan.Zero);
-    loadingAttempt.Observe(loadingStart, 0, "a", RankedQueue.SoloDuo, 1, TimedActivity.Loading, null);
-    loadingAttempt.Observe(loadingStart.AddSeconds(5), 5000, "a", null, 1, TimedActivity.Loading, null);
-    var resumed = loadingAttempt.Observe(loadingStart.AddSeconds(20), 20000, "a", null, 1, TimedActivity.InGame, 8);
+    loadingAttempt.Observe(loadingStart, 0, "a", RankedQueue.SoloDuo, 1, TimedActivity.Loading);
+    loadingAttempt.Observe(loadingStart.AddSeconds(5), 5000, "a", null, 1, TimedActivity.Loading);
+    var resumed = loadingAttempt.Observe(loadingStart.AddSeconds(20), 20000, "a", null, 1, TimedActivity.InGame);
     Equal<DateTimeOffset?>(loadingStart, resumed?.StartedUtc, "Brief LCU outage retains the observed loading start");
     Equal<RankedQueue?>(RankedQueue.SoloDuo, resumed?.Queue, "Transient missing queue does not hide loading from the selected ranked queue");
-    loadingAttempt.Observe(loadingStart, 0, "a", RankedQueue.SoloDuo, 1, TimedActivity.Loading, null);
-    Equal<LoadingAttempt?>(null, loadingAttempt.Observe(loadingStart.AddSeconds(61), 61000, "a", RankedQueue.SoloDuo, 1, TimedActivity.InGame, 60), "Long poll gap cannot invent loading time");
-    loadingAttempt.Observe(loadingStart, 0, "a", RankedQueue.SoloDuo, 1, TimedActivity.Loading, null);
-    Equal<LoadingAttempt?>(null, loadingAttempt.Observe(loadingStart.AddSeconds(3), 3000, "a", RankedQueue.SoloDuo, 2, TimedActivity.InGame, 1), "Another game cannot confirm the previous loading attempt");
-    loadingAttempt.Observe(loadingStart, 0, "a", RankedQueue.SoloDuo, 1, TimedActivity.Loading, null);
-    Equal<LoadingAttempt?>(null, loadingAttempt.Observe(loadingStart.AddMinutes(5), 1000, "a", RankedQueue.SoloDuo, 1, TimedActivity.InGame, 1), "A wall clock jump cannot fabricate loading time");
+    loadingAttempt.Observe(loadingStart, 0, "a", RankedQueue.SoloDuo, 1, TimedActivity.Loading);
+    Equal<LoadingAttempt?>(null, loadingAttempt.Observe(loadingStart.AddSeconds(61), 61000, "a", RankedQueue.SoloDuo, 1, TimedActivity.InGame), "Long poll gap cannot invent loading time");
+    loadingAttempt.Observe(loadingStart, 0, "a", RankedQueue.SoloDuo, 1, TimedActivity.Loading);
+    Equal<LoadingAttempt?>(null, loadingAttempt.Observe(loadingStart.AddSeconds(3), 3000, "a", RankedQueue.SoloDuo, 2, TimedActivity.InGame), "Another game cannot confirm the previous loading attempt");
+    loadingAttempt.Observe(loadingStart, 0, "a", RankedQueue.SoloDuo, 1, TimedActivity.Loading);
+    Equal<LoadingAttempt?>(null, loadingAttempt.Observe(loadingStart.AddMinutes(5), 1000, "a", RankedQueue.SoloDuo, 1, TimedActivity.InGame), "A wall clock jump cannot fabricate loading time");
     Equal(new PixelLocation(-1190, 355), ScreenPlacement.Center(-1920, 0, 1920, 1040, 460, 330), "A monitor left of primary has a negative X origin");
     Equal(new PixelLocation(730, -705), ScreenPlacement.Center(0, -1080, 1920, 1080, 460, 330), "A monitor above primary has a negative Y origin");
 
@@ -144,12 +152,13 @@ try
     midnightLedger.Observe(midnightStart.AddHours(1), 5000, "a", RankedQueue.RankedFives, TimedActivity.None);
     Equal(2.0, midnightLedger.GetTotals(null, false, DateTime.Now).QueueSeconds, "Wall clock jumps cannot inflate history");
 
-    var lateClock = new WaitingTimeLedger(Path.Combine(directory, "late-clock.json"));
-    lateClock.RecordConfirmedGameStart(start, start.AddSeconds(35), "a", RankedQueue.SoloDuo, 15);
-    Equal(20.0, lateClock.GetTotals(null, false, DateTime.Now).LoadingSeconds, "A delayed clock read subtracts time already spent playing");
-    Equal(15.0, lateClock.GetTotals(null, false, DateTime.Now).InGameSeconds, "Confirmed elapsed gameplay is retained");
-    lateClock.RecordConfirmedGameStart(start.AddMinutes(5), start.AddMinutes(5).AddSeconds(2), "a", RankedQueue.SoloDuo, 300);
-    Equal(20.0, lateClock.GetTotals(null, false, DateTime.Now).LoadingSeconds, "Mid-game clock cannot produce negative or invented loading");
+    var confirmedStart = new WaitingTimeLedger(Path.Combine(directory, "confirmed-start.json"));
+    confirmedStart.RecordConfirmedGameStart(start, start.AddSeconds(35), "a", RankedQueue.SoloDuo);
+    Equal(35.0, confirmedStart.GetTotals(null, false, DateTime.Now).LoadingSeconds, "All time before GameStart belongs to loading");
+    Equal(0.0, confirmedStart.GetTotals(null, false, DateTime.Now).InGameSeconds, "No pre-start seconds are reassigned to gameplay");
+    confirmedStart.Observe(start.AddSeconds(35), 35000, "a", RankedQueue.SoloDuo, TimedActivity.InGame);
+    confirmedStart.Observe(start.AddSeconds(40), 40000, "a", RankedQueue.SoloDuo, TimedActivity.None);
+    Equal(5.0, confirmedStart.GetTotals(null, false, DateTime.Now).InGameSeconds, "Gameplay counts only after the confirmed boundary");
 
     string broken = Path.Combine(directory, "broken.json");
     File.WriteAllText(broken, "broken history");

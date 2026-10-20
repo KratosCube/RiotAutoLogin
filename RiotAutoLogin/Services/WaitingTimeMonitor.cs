@@ -93,10 +93,10 @@ namespace RiotAutoLogin.Services
                                     identityCheckedAt = identity[0] == "200" ? now : now - 14000;
                                 }
                                 RankedQueue? queue = _queueTracker.Observe(session);
-                                double? gameTime = null;
-                                if (session.Phase is "GameStart" or "InProgress" && _classifier.NeedsGameClock)
-                                    gameTime = await LiveGameClockService.ReadAsync(token).ConfigureAwait(false);
-                                var activity = _classifier.Classify(session, gameTime);
+                                bool? gameStartedEvent = null;
+                                if (session.Phase is "GameStart" or "InProgress" && _classifier.NeedsGameStartEvent)
+                                    gameStartedEvent = await LiveGameStartService.ReadAsync(token).ConfigureAwait(false);
+                                var activity = _classifier.Classify(session, gameStartedEvent);
                                 if (account.Length == 0)
                                 {
                                     _ledger.Pause();
@@ -107,15 +107,25 @@ namespace RiotAutoLogin.Services
                                 }
                                 else
                                 {
-                                    RecordObservation(account, queue, session.GameId, activity, gameTime);
-                                    Status = activity switch
+                                    if (activity == TimedActivity.Loading && gameStartedEvent is null && _loadingAttempt.HasPending)
                                     {
-                                        TimedActivity.Queue => "Tracking · Queue (including ready check)",
-                                        TimedActivity.ChampSelect => "Tracking · Champion select",
-                                        TimedActivity.Loading => "Loading · duration saved when the game clock starts",
-                                        TimedActivity.InGame => "Tracking · In game",
-                                        _ => "Ready · waiting for your next queue"
-                                    };
+                                        // Keep the first launch observation, but do not extend an
+                                        // unverified loading attempt while the API is unavailable.
+                                        _ledger.Pause();
+                                        Status = "Loading · waiting for game start signal";
+                                    }
+                                    else
+                                    {
+                                        RecordObservation(account, queue, session.GameId, activity);
+                                        Status = activity switch
+                                        {
+                                            TimedActivity.Queue => "Tracking · Queue (including ready check)",
+                                            TimedActivity.ChampSelect => "Tracking · Champion select",
+                                            TimedActivity.Loading => "Loading · waiting for the game to start",
+                                            TimedActivity.InGame => "Tracking · In game",
+                                            _ => "Ready · waiting for your next queue"
+                                        };
+                                    }
                                 }
                                 if (previousPhase != session.Phase || now - savedAt >= 30000)
                                 {
@@ -148,21 +158,20 @@ namespace RiotAutoLogin.Services
         }
 
         private void RecordObservation(string account, RankedQueue? queue, long gameId,
-            TimedActivity activity, double? gameTime)
+            TimedActivity activity)
         {
             DateTimeOffset utc = DateTimeOffset.UtcNow;
             long tick = Environment.TickCount64;
-            var confirmed = _loadingAttempt.Observe(utc, tick, account, queue, gameId, activity, gameTime);
+            var confirmed = _loadingAttempt.Observe(utc, tick, account, queue, gameId, activity);
             if (activity == TimedActivity.Loading)
             {
-                // Keep loading provisional until the clock confirms when play
-                // actually began. An inaccessible Live Client API must not turn
-                // an entire match into a fabricated loading-screen statistic.
+                // Keep loading provisional until the GameStart event confirms play.
+                // An inaccessible Live Client API cannot confirm a boundary.
                 _ledger!.Observe(utc, tick, account, queue, TimedActivity.None);
                 return;
             }
-            if (confirmed is { } pending && gameTime.HasValue)
-                _ledger!.RecordConfirmedGameStart(pending.StartedUtc, utc, account, pending.Queue, gameTime.Value);
+            if (confirmed is { } pending)
+                _ledger!.RecordConfirmedGameStart(pending.StartedUtc, utc, account, pending.Queue);
             _ledger!.Observe(utc, tick, account, queue, activity);
         }
 
