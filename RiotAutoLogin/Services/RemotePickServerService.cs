@@ -483,10 +483,6 @@ namespace RiotAutoLogin.Services
                 confirmed = await TryHoverAsync("lol-champ-select/v1/session/my-selection",
                     new { championPickIntent = request.ChampionId });
 
-            if (!confirmed && !string.IsNullOrWhiteSpace(state.PickActionId) && state.PickActionId != state.ActionId)
-                confirmed = await TryHoverAsync($"lol-champ-select/v1/session/actions/{state.PickActionId}",
-                    new { championId = request.ChampionId, completed = false });
-
             if (!confirmed)
                 confirmed = await TryHoverAsync("lol-champ-select/v1/session/my-selection",
                     new { championId = request.ChampionId });
