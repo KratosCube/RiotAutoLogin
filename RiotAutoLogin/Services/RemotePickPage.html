@@ -737,7 +737,7 @@
         } catch {
           if (!queuedHoverId) showToast('Could not verify hover in League Client.', true);
         }
-        await loadTimer();
+        loadTimer();
       }
       hoveringId = 0;
       renderHoverReadout(); renderMobileActions();
