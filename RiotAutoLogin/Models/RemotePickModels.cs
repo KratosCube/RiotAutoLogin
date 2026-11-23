@@ -36,6 +36,8 @@ namespace RiotAutoLogin.Models
         public string Message { get; set; } = string.Empty;
         public int SelectedChampionId { get; set; }
         public int PickIntentChampionId { get; set; }
+        public int HoveredChampionId { get; set; }
+        public string HoveredChampionSource { get; set; } = string.Empty;
         public int Spell1Id { get; set; }
         public int Spell2Id { get; set; }
         public List<int> BannedChampionIds { get; set; } = new();
@@ -44,6 +46,8 @@ namespace RiotAutoLogin.Models
         public List<int> EnemyPickedChampionIds { get; set; } = new();
         public List<int> AvailableSpellIds { get; set; } = new();
         public List<int> AvailableChampionIds { get; set; } = new();
+        public List<RemoteTeamSlotDto> AllySlots { get; set; } = new();
+        public List<RemoteTeamSlotDto> EnemySlots { get; set; } = new();
         public List<RemoteChampionDto> Champions
         {
             get
@@ -61,6 +65,16 @@ namespace RiotAutoLogin.Models
         public List<RemoteRunePageDto> RunePages { get; set; } = new();
         public List<RemoteRecommendedRunePageDto> RecommendedRunePages { get; set; } = new();
         public RemoteRunePageDto? CurrentRunePage { get; set; }
+    }
+
+    public class RemoteTeamSlotDto
+    {
+        public int CellId { get; set; }
+        public int ChampionId { get; set; }
+        public int IntentChampionId { get; set; }
+        public bool IsLocalPlayer { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string ImageUrl { get; set; } = string.Empty;
     }
 
     public class RemoteChampionDto
@@ -95,6 +109,10 @@ namespace RiotAutoLogin.Models
         public bool IsCurrent { get; set; }
         public bool IsEditable { get; set; }
         public bool IsDeletable { get; set; }
+        public string KeystoneName { get; set; } = string.Empty;
+        public string PrimaryStyleName { get; set; } = string.Empty;
+        public string SecondaryStyleName { get; set; } = string.Empty;
+        public List<string> KeyRuneNames { get; set; } = new();
     }
 
     public class RemoteRecommendedRunePageDto
@@ -105,6 +123,10 @@ namespace RiotAutoLogin.Models
         public int PrimaryStyleId { get; set; }
         public int SubStyleId { get; set; }
         public List<int> SelectedPerkIds { get; set; } = new();
+        public string KeystoneName { get; set; } = string.Empty;
+        public string PrimaryStyleName { get; set; } = string.Empty;
+        public string SecondaryStyleName { get; set; } = string.Empty;
+        public List<string> KeyRuneNames { get; set; } = new();
         public bool CanApply => PrimaryStyleId > 0 && SubStyleId > 0 && SelectedPerkIds.Count > 0;
     }
 
@@ -133,5 +155,7 @@ namespace RiotAutoLogin.Models
     {
         public bool Success { get; set; }
         public string Message { get; set; } = string.Empty;
+        public int ConfirmedChampionId { get; set; }
+        public string ConfirmedChampionSource { get; set; } = string.Empty;
     }
 }
