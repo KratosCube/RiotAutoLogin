@@ -139,7 +139,7 @@
     .busy .champion-actions button, .busy .mobile-action-buttons button, .busy .loadout button, .busy .leave-button, .busy .spell-option { pointer-events: none; opacity: .52; }
     @media (max-width: 1050px) { .layout { grid-template-columns: 185px minmax(0, 1fr) 225px; gap: 10px; } .champion-grid { grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); } }
     @media (max-width: 850px) {
-      .app { padding: 14px 12px 118px; }
+      .app { padding: 14px 12px calc(125px + env(safe-area-inset-bottom)); }
       body:not([data-view="champions"]) .app { padding-bottom: 35px; }
       .site-header { margin-bottom: 12px; }
       .eyebrow { font-size: .67rem; }
@@ -352,6 +352,7 @@
       timerPending = true;
       try {
         const snapshot = await getJson('/api/timer');
+        const previousAction = state && `${state.phase}|${state.actionType}|${state.canPick}|${state.canBan}`;
         latestTimer = snapshot; latestTimerAt = performance.now();
         syncTimer(snapshot);
         if (state) mergeLive(state, snapshot);
@@ -359,6 +360,11 @@
         applyPhaseTransition(state);
         if (hasFullState) setConnection(true);
         updateStatus(); renderMobileActions();
+        const nextAction = `${state.phase}|${state.actionType}|${state.canPick}|${state.canBan}`;
+        if (hasFullState && previousAction !== nextAction) {
+          renderChampionGrid(); renderLoadout();
+          loadState();
+        }
       } catch {
         // The full-state request also checks connectivity. A transient timer failure does not erase the page.
       } finally { timerPending = false; }
@@ -385,6 +391,12 @@
         return;
       }
       const champions = state.champions || [];
+      if (!state.isInChampSelect) {
+        gridKey = '';
+        ui.champions.replaceChildren(); ui.count.textContent = '0 champions';
+        renderEmpty('Waiting for champion select', 'Champions will appear when League Client starts champion select.');
+        return;
+      }
       const filtered = champions.filter(champion => (champion.name || '').toLocaleLowerCase().includes(query));
       ui.count.textContent = `${filtered.length} of ${champions.length}`;
       if (!champions.length) {
