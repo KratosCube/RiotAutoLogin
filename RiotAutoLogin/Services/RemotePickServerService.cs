@@ -30,6 +30,8 @@ namespace RiotAutoLogin.Services
         private Task? _serverTask;
         private List<ChampionModel>? _championCache;
         private List<RemoteChampionDto>? _remoteChampionCache;
+        private Dictionary<int, RemoteChampionDto>? _allChampionMetadata;
+        private DateTime _nextChampionMetadataAttemptUtc;
         private List<RemoteSummonerSpellDto>? _remoteSpellCache;
         private sealed record RecommendedRuneCache(string Key, DateTime ExpiresUtc, List<RemoteRecommendedRunePageDto> Pages);
         private RecommendedRuneCache? _recommendedRuneCache;
@@ -1179,15 +1181,59 @@ namespace RiotAutoLogin.Services
         private void EnrichTeamSlots(RemotePickState state)
         {
             if (_remoteChampionCache == null) return;
-            foreach (RemoteTeamSlotDto slot in state.AllySlots.Concat(state.EnemySlots))
+
+            List<RemoteTeamSlotDto> slots = state.AllySlots.Concat(state.EnemySlots).ToList();
+            if (slots.Any(slot =>
+                (slot.ChampionId > 0 || slot.IntentChampionId > 0) &&
+                !_remoteChampionCache.Any(champion => champion.Id == (slot.ChampionId > 0 ? slot.ChampionId : slot.IntentChampionId))))
+                EnsureAllChampionMetadata();
+
+            foreach (RemoteTeamSlotDto slot in slots)
             {
                 int id = slot.ChampionId > 0 ? slot.ChampionId : slot.IntentChampionId;
                 RemoteChampionDto? champion = _remoteChampionCache.FirstOrDefault(candidate => candidate.Id == id);
+                if (champion == null && _allChampionMetadata != null)
+                    _allChampionMetadata.TryGetValue(id, out champion);
                 if (champion != null)
                 {
                     slot.Name = champion.Name;
                     slot.ImageUrl = champion.ImageUrl;
                 }
+            }
+        }
+
+        private void EnsureAllChampionMetadata()
+        {
+            if (_allChampionMetadata != null || DateTime.UtcNow < _nextChampionMetadataAttemptUtc) return;
+            _nextChampionMetadataAttemptUtc = DateTime.UtcNow.AddSeconds(30);
+            string[] response = LCUService.ClientRequest("GET", "lol-game-data/assets/v1/champion-summary.json");
+            if (response[0] != "200") return;
+
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(response[1]);
+                if (document.RootElement.ValueKind != JsonValueKind.Array) return;
+
+                var metadata = new Dictionary<int, RemoteChampionDto>();
+                foreach (JsonElement champion in document.RootElement.EnumerateArray())
+                {
+                    if (champion.ValueKind != JsonValueKind.Object) continue;
+                    int id = GetIntProperty(champion, "id");
+                    if (id <= 0) continue;
+                    string name = GetStringProperty(champion, "name") ?? $"Champion #{id}";
+                    string alias = GetStringProperty(champion, "alias") ?? name;
+                    metadata[id] = new RemoteChampionDto
+                    {
+                        Id = id,
+                        Name = name,
+                        ImageUrl = DataDragonService.GetChampionImageUrl(alias)
+                    };
+                }
+                _allChampionMetadata = metadata;
+            }
+            catch (JsonException ex)
+            {
+                Debug.WriteLine($"Could not read champion metadata for team picks: {ex.Message}");
             }
         }
 
