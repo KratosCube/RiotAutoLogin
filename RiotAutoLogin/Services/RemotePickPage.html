@@ -35,7 +35,7 @@
     button:disabled { opacity: .46; cursor: not-allowed; }
     button:focus-visible, input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
     [hidden] { display: none !important; }
-    .app { width: min(100%, 1500px); margin: 0 auto; padding: 24px clamp(12px, 2vw, 30px) 48px; }
+    .app { width: min(100%, 1680px); margin: 0 auto; padding: 24px clamp(12px, 2vw, 30px) 48px; }
     .site-header { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
     .eyebrow, .section-title, .field-label { color: var(--gold); font-size: .76rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
     h1 { font: 500 clamp(1.8rem, 3vw, 2.6rem)/1.1 Georgia, serif; letter-spacing: .02em; margin: 7px 0 0; color: var(--gold-light); }
@@ -68,14 +68,38 @@
     .timer-value { color: var(--gold-light); font-variant-numeric: tabular-nums; font-size: 2.5rem; line-height: 1; font-weight: 800; }
     .timer-value.game { font-size: 1.65rem; }
     .timer-label { margin-top: 6px; color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-    .layout { display: grid; grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(235px, 285px); align-items: start; gap: 16px; margin-top: 18px; }
+    .hover-readout { display: flex; align-items: center; gap: 9px; width: fit-content; max-width: 100%; margin-top: 10px; padding: 5px 10px 5px 5px; border: 1px solid rgba(57, 213, 197, .48); background: rgba(57, 213, 197, .07); }
+    .hover-readout.pending { border-color: var(--gold); }
+    .hover-readout img { width: 35px; height: 35px; object-fit: cover; background: #112333; }
+    .hover-readout span { display: block; color: var(--cyan); font-size: .68rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .hover-readout strong { display: block; overflow: hidden; max-width: 240px; white-space: nowrap; text-overflow: ellipsis; font-size: .86rem; }
+    .hover-readout small { display: block; color: var(--muted); font-size: .7rem; }
+    .draft-strip { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 8px 12px; border-top: 1px solid var(--line); background: rgba(4, 11, 18, .72); }
+    .draft-team { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .draft-team-label { width: 52px; flex: none; color: var(--gold-light); font-size: .69rem; font-weight: 800; text-transform: uppercase; }
+    .draft-slots { display: flex; gap: 5px; min-width: 0; }
+    .draft-slot { position: relative; width: 34px; height: 34px; flex: none; display: grid; place-items: center; border: 1px solid var(--line); background: #142332; color: var(--muted); font-size: .76rem; }
+    .draft-slot img { width: 100%; height: 100%; object-fit: cover; }
+    .draft-slot.local { border-color: var(--cyan); }
+    .draft-slot.intent { border-style: dashed; }
+    .draft-slot span { position: absolute; right: 1px; bottom: 0; padding: 0 2px; background: #08131f; font-size: .55rem; }
+    .mini-card.local { border-color: var(--cyan); }
+    .mini-card.pending { opacity: .72; }
+    .rune-highlight { padding: 10px; margin: 0 0 10px; border: 1px solid rgba(57, 213, 197, .35); background: rgba(57, 213, 197, .07); }
+    .rune-highlight strong { display: block; margin: 4px 0; color: var(--gold-light); font-size: .98rem; }
+    .rune-paths, .rune-keys { display: block; color: var(--muted); font-size: .77rem; line-height: 1.4; }
+    .rune-keys { margin-top: 4px; }
+    .rune-label { color: var(--cyan); font-size: .7rem; font-weight: 800; text-transform: uppercase; }
+    .layout { display: grid; grid-template-columns: 170px minmax(0, 1fr) 225px; align-items: start; gap: 12px; margin-top: 14px; }
+    #allyPanel, #enemyPanel { position: sticky; top: var(--status-height, 170px); align-self: start; }
     .right-rail { display: grid; gap: 16px; min-width: 0; }
     .panel { min-width: 0; border: 1px solid var(--line); background: rgba(11, 22, 34, .94); box-shadow: inset 0 1px rgba(255, 255, 255, .04); }
     .panel h2 { margin: 0; padding: 15px 16px; color: var(--gold-light); border-bottom: 1px solid var(--line); font-size: .88rem; letter-spacing: .1em; text-transform: uppercase; }
     .rail-list { display: grid; gap: 8px; padding: 12px; }
     .rail-empty { margin: 0; padding: 9px 2px; color: var(--muted); line-height: 1.5; font-size: .87rem; }
     .mini-card { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px; background: #142332; border: 1px solid rgba(255, 255, 255, .06); }
-    .mini-card img { width: 40px; height: 40px; object-fit: cover; background: #0a151f; border: 1px solid var(--line); }
+    .mini-card img, .rail-placeholder { width: 40px; height: 40px; flex: none; object-fit: cover; background: #0a151f; border: 1px solid var(--line); }
+    .rail-placeholder { display: grid; place-items: center; color: var(--muted); font-size: .82rem; }
     .mini-card .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .86rem; font-weight: 700; }
     .mini-card .sub { margin-top: 3px; color: var(--muted); font-size: .76rem; }
     .search-wrap { display: grid; gap: 9px; margin-bottom: 14px; }
@@ -84,12 +108,13 @@
     .search-controls { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
     .search-controls input { min-width: 0; min-height: 46px; width: 100%; padding: 10px 14px; color: var(--text); border: 1px solid var(--line); border-radius: 0; background: #0a1723; font-size: 1rem; }
     .search-controls input::placeholder { color: var(--muted); }
-    .champion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+    .champion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
     .champion { min-width: 0; overflow: hidden; border: 1px solid var(--line); background: var(--panel); transition: border-color .15s, box-shadow .15s; }
     .champion:hover { border-color: var(--gold); }
-    .champion.selected-card { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan), 0 0 20px rgba(57, 213, 197, .15); }
+    .champion.selected-card { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+    .champion.client-hover { border-color: var(--cyan); box-shadow: inset 0 0 0 1px var(--cyan), 0 0 16px rgba(57, 213, 197, .26); }
     .card-select { width: 100%; padding: 0; color: var(--text); border: 0; background: transparent; text-align: left; }
-    .portrait { position: relative; display: block; height: clamp(105px, 10vw, 155px); background: linear-gradient(135deg, #152e3b, #08131e); overflow: hidden; }
+    .portrait { position: relative; display: block; height: clamp(95px, 8vw, 120px); background: linear-gradient(135deg, #152e3b, #08131e); overflow: hidden; }
     .portrait img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .2s; }
     .champion:hover .portrait img { transform: scale(1.04); }
     .champion.disabled .portrait img { filter: grayscale(1) brightness(.52); }
@@ -137,7 +162,7 @@
     .toast { position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: min(400px, calc(100vw - 36px)); padding: 14px 17px; border: 1px solid var(--cyan); background: #102b32; box-shadow: 0 16px 40px #0009; line-height: 1.4; }
     .toast.error { border-color: var(--red); background: #3a1c27; }
     .busy .champion-actions button, .busy .mobile-action-buttons button, .busy .loadout button, .busy .leave-button, .busy .spell-option { pointer-events: none; opacity: .52; }
-    @media (max-width: 1050px) { .layout { grid-template-columns: 185px minmax(0, 1fr) 225px; gap: 10px; } .champion-grid { grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); } }
+    @media (max-width: 1050px) { .layout { grid-template-columns: 145px minmax(0, 1fr) 195px; gap: 10px; } .champion-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); } }
     @media (max-width: 850px) {
       .app { padding: 14px 12px calc(125px + env(safe-area-inset-bottom)); }
       body:not([data-view="champions"]) .app { padding-bottom: 35px; }
@@ -161,13 +186,21 @@
       .mobile-nav button { min-height: 44px; color: var(--muted); border: 1px solid var(--line); background: #101e2b; font-size: .86rem; font-weight: 700; }
       .mobile-nav button[aria-pressed="true"] { color: var(--gold-light); border-color: var(--gold); background: #1b2d3b; }
       .layout { display: block; margin-top: 12px; }
+      #allyPanel, #enemyPanel { position: static; }
+      .hover-readout { margin-top: 7px; padding: 3px 7px 3px 3px; }
+      .hover-readout img { width: 28px; height: 28px; }
+      .hover-readout small { display: none; }
+      .draft-strip { grid-template-columns: 1fr; gap: 4px; padding: 5px 9px; }
+      .draft-team-label { width: 42px; font-size: .65rem; }
+      .draft-slot { width: 27px; height: 27px; }
+      .draft-slots { gap: 4px; }
       .layout[data-view="champions"] #allyPanel, .layout[data-view="champions"] .right-rail,
       .layout[data-view="picks"] #championView, .layout[data-view="picks"] #desktopLoadout,
       .layout[data-view="loadout"] #championView, .layout[data-view="loadout"] #allyPanel, .layout[data-view="loadout"] #enemyPanel { display: none; }
       .layout[data-view="picks"] #allyPanel { margin-bottom: 12px; }
       .layout[data-view="loadout"] .right-rail { display: block; }
-      .champion-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
-      .portrait { height: clamp(88px, 27vw, 145px); }
+      .champion-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+      .portrait { height: clamp(76px, 20vw, 105px); }
       .champion-name { padding: 8px 6px; font-size: .77rem; }
       .champion-actions { display: none; }
       .mobile-action-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; gap: 8px; padding: 9px 12px calc(9px + env(safe-area-inset-bottom)); border-top: 1px solid var(--gold); background: rgba(6, 14, 22, .98); box-shadow: 0 -12px 35px #0009; }
@@ -181,7 +214,7 @@
       .toast { right: 10px; bottom: calc(115px + env(safe-area-inset-bottom)); }
       body:not([data-view="champions"]) .toast { bottom: 12px; }
     }
-    @media (max-width: 360px) { .connection { font-size: 0; gap: 0; } .connection::before { width: 10px; height: 10px; } .timer-box { min-width: 72px; } }
+    @media (max-width: 360px) { .connection { font-size: 0; gap: 0; } .connection::before { width: 10px; height: 10px; } .timer-box { min-width: 72px; } .champion-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
     @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; } }
   </style>
 </head>
@@ -193,9 +226,11 @@
     </header>
     <section class="status" aria-label="Current match status">
       <div class="status-main"><div id="phase" class="phase">Connecting</div><p id="message" class="message">Connecting to Riot Auto Login…</p>
+        <div id="hoverReadout" class="hover-readout" role="status" aria-live="polite" hidden><img id="hoverPortrait" alt="" hidden><div><span>League Client state</span><strong id="hoverName">No hover confirmed</strong><small id="hoverHint">Select a champion to preview</small></div></div>
         <div class="status-actions"><span id="turn" class="turn-pill waiting">Waiting</span><span id="gameStatus" class="turn-pill waiting">Game waiting</span><button id="leaveButton" class="leave-button" type="button" disabled>Leave lobby</button></div>
       </div>
       <div class="timer-box"><span id="timer" class="timer-value">--</span><span id="timerLabel" class="timer-label">Seconds</span></div>
+      <div class="draft-strip" aria-label="Team picks" hidden><div class="draft-team"><span class="draft-team-label">Ally</span><div id="allyStrip" class="draft-slots"></div></div><div class="draft-team"><span class="draft-team-label">Enemy</span><div id="enemyStrip" class="draft-slots"></div></div></div>
     </section>
     <nav class="mobile-nav" aria-label="Remote Pick sections">
       <button type="button" data-view-button="champions" aria-controls="championView" aria-pressed="true">Champions</button>
@@ -224,6 +259,8 @@
       layout: $('layout'), champions: $('champions'), ally: $('allyPickedList'), enemy: $('enemyPickedList'),
       phase: $('phase'), message: $('message'), turn: $('turn'), gameStatus: $('gameStatus'),
       timer: $('timer'), timerLabel: $('timerLabel'), connection: $('connection'),
+      hoverReadout: $('hoverReadout'), hoverPortrait: $('hoverPortrait'), hoverName: $('hoverName'), hoverHint: $('hoverHint'),
+      allyStrip: $('allyStrip'), enemyStrip: $('enemyStrip'), draftStrip: document.querySelector('.draft-strip'), status: document.querySelector('.status'),
       search: $('search'), clearSearch: $('clearSearch'), count: $('count'),
       empty: $('emptyState'), emptyTitle: $('emptyTitle'), emptyMessage: $('emptyMessage'), emptyClear: $('emptyClear'),
       loadout: $('desktopLoadout'), toast: $('toast'), leave: $('leaveButton'),
@@ -234,14 +271,15 @@
     };
     let state = null, hasFullState = false, query = '', selectedChampionId = 0;
     let statePending = false, timerPending = false, actionPending = false;
-    let latestTimer = null, latestTimerAt = 0, previousPhase = null, gridKey = '', loadoutKey = '';
+    let latestTimer = null, latestTimerAt = 0, previousPhase = null, gridKey = '', loadoutKey = '', draftKey = '';
+    let hoverTask = null, queuedHoverId = 0, hoveringId = 0, hoverConfirmedAt = 0;
     let timerBaseMs = null, timerBasePerf = 0, timerInfinite = false, activeModal = null, returnFocus = null, confirmResolve = null;
 
     const liveFields = [
       'phase', 'champSelectPhase', 'phaseLabel', 'timeLeftInPhaseMs', 'totalTimeInPhaseMs', 'isTimerInfinite',
       'isInChampSelect', 'isMyTurn', 'canPick', 'canBan', 'canLeave', 'actionType', 'actionId', 'actionGroupIndex',
       'timerActionKey', 'isGameClientRunning', 'isGameLoaded', 'gameTimeSeconds', 'gameStatus', 'message',
-      'selectedChampionId', 'pickIntentChampionId', 'spell1Id', 'spell2Id'
+      'selectedChampionId', 'pickIntentChampionId', 'hoveredChampionId', 'hoveredChampionSource', 'allySlots', 'enemySlots', 'spell1Id', 'spell2Id'
     ];
     function mergeLive(target, snapshot) {
       for (const key of liveFields) if (Object.prototype.hasOwnProperty.call(snapshot, key)) target[key] = snapshot[key];
@@ -302,7 +340,7 @@
       const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
       ui.phase.textContent = `${state.phaseLabel || state.phase || 'Waiting'}${state.champSelectPhase ? ' · ' + state.champSelectPhase : ''}`;
       ui.message.textContent = state.message || 'Waiting for League Client.';
-      ui.turn.textContent = canBan ? 'Your ban turn' : canPick ? 'Your pick turn' : state.isInChampSelect ? 'Hover available' : 'Waiting';
+      ui.turn.textContent = canBan ? 'Your ban turn' : canPick ? 'Your pick turn' : state.isInChampSelect ? 'Preview a champion' : 'Waiting';
       ui.turn.className = `turn-pill ${canBan ? 'ban' : canPick ? '' : 'waiting'}`;
       if (state.isGameLoaded) { ui.gameStatus.textContent = `In game ${formatGameClock(state.gameTimeSeconds)}`; ui.gameStatus.className = 'turn-pill'; }
       else if (state.phase === 'GameStart' || state.phase === 'InProgress' || state.isGameClientRunning) {
@@ -310,8 +348,62 @@
         ui.gameStatus.className = 'turn-pill loading';
       } else { ui.gameStatus.textContent = 'Game waiting'; ui.gameStatus.className = 'turn-pill waiting'; }
       ui.leave.disabled = !hasFullState || !state.canLeave || actionPending;
+      ui.gameStatus.hidden = !!state.isInChampSelect;
+      renderHoverReadout();
       ui.leave.textContent = state.phase === 'Matchmaking' ? 'Cancel queue' : state.phase === 'ReadyCheck' ? 'Decline' : state.phase === 'ChampSelect' ? 'Dodge' : 'Leave lobby';
       updateTimerDisplay();
+    }
+    function getChampionMeta(id) {
+      if (!id) return {name: '', imageUrl: ''};
+      return (state?.champions || []).find(champion => champion.id === id) ||
+        [...(state?.allySlots || []), ...(state?.enemySlots || [])].find(slot =>
+          (slot.championId || slot.intentChampionId) === id && slot.name) ||
+        {name: `Champion #${id}`, imageUrl: ''};
+    }
+    function renderHoverReadout() {
+      if (!state?.isInChampSelect) { ui.hoverReadout.hidden = true; return; }
+      ui.hoverReadout.hidden = false;
+      ui.hoverReadout.classList.toggle('pending', !!hoveringId);
+      const id = state.hoveredChampionId || state.selectedChampionId || 0;
+      const champion = getChampionMeta(id);
+      ui.hoverName.textContent = id ? champion.name : 'No hover confirmed';
+      ui.hoverPortrait.hidden = !id || !champion.imageUrl;
+      if (!ui.hoverPortrait.hidden) ui.hoverPortrait.src = champion.imageUrl;
+      else ui.hoverPortrait.removeAttribute('src');
+      ui.hoverHint.textContent = hoveringId
+        ? `Sending ${getChampionMeta(hoveringId).name} · waiting for client`
+        : state.hoveredChampionSource === 'PickIntent' ? 'Confirmed pick intent in client session'
+        : state.hoveredChampionSource === 'ActivePick' ? 'Confirmed active pick in client session'
+        : state.hoveredChampionSource === 'PlanningSelection' ? 'Selected during planning in client session'
+        : id ? 'Selected in League Client session' : 'Tap a champion to preview';
+    }
+    function renderDraftStrip() {
+      ui.draftStrip.hidden = !state?.isInChampSelect;
+      if (ui.draftStrip.hidden) { draftKey = ''; return; }
+      const ally = state.allySlots || [], enemy = state.enemySlots || [];
+      const key = JSON.stringify([ally, enemy]);
+      if (key === draftKey) return;
+      draftKey = key;
+      for (const [target, slots, team] of [[ui.allyStrip, ally, 'Ally'], [ui.enemyStrip, enemy, 'Enemy']]) {
+        const fragment = document.createDocumentFragment();
+        for (let index = 0; index < Math.max(5, slots.length); index++) {
+          const slot = slots[index] || {};
+          const id = slot.championId || slot.intentChampionId || 0;
+          const meta = slot.name ? slot : getChampionMeta(id);
+          const label = id ? `${team} ${index + 1}: ${meta.name}${!slot.championId ? ' (intent)' : ''}` : `${team} ${index + 1}: waiting`;
+          const item = document.createElement('span');
+          item.className = `draft-slot${slot.isLocalPlayer ? ' local' : ''}${id && !slot.championId ? ' intent' : ''}`;
+          item.setAttribute('aria-label', label);
+          item.title = label;
+          item.innerHTML = id && meta.imageUrl ? `<img src="${escapeAttr(meta.imageUrl)}" alt=""><span>${index + 1}</span>` : String(index + 1);
+          fragment.appendChild(item);
+        }
+        target.replaceChildren(fragment);
+      }
+    }
+    function renderTeamRails() {
+      renderRail(ui.ally, state?.allySlots || [], 'Ally');
+      renderRail(ui.enemy, state?.enemySlots || [], 'Enemy');
     }
     function showDisconnectedState() {
       hasFullState = false;
@@ -323,7 +415,9 @@
       ui.leave.disabled = true;
       timerBaseMs = null; timerInfinite = false;
       state = null;
-      gridKey = '';
+      gridKey = ''; draftKey = '';
+      ui.hoverReadout.hidden = true;
+      renderDraftStrip();
       updateTimerDisplay(); renderChampionGrid(); renderMobileActions();
     }
     async function getJson(url) {
@@ -339,6 +433,10 @@
         const next = await getJson('/api/state');
         if (latestTimer && latestTimerAt > started) mergeLive(next, latestTimer);
         else syncTimer(next);
+        if (hoverConfirmedAt > started && state) {
+          next.hoveredChampionId = state.hoveredChampionId;
+          next.hoveredChampionSource = state.hoveredChampionSource;
+        }
         state = next;
         hasFullState = true;
         applyPhaseTransition(next);
@@ -350,16 +448,24 @@
     async function loadTimer() {
       if (timerPending) return;
       timerPending = true;
+      const started = performance.now();
       try {
         const snapshot = await getJson('/api/timer');
+        if (hoverConfirmedAt > started && state) {
+          snapshot.hoveredChampionId = state.hoveredChampionId;
+          snapshot.hoveredChampionSource = state.hoveredChampionSource;
+        }
         const previousAction = state && `${state.phase}|${state.actionType}|${state.canPick}|${state.canBan}`;
+        const previousHover = state?.hoveredChampionId;
         latestTimer = snapshot; latestTimerAt = performance.now();
         syncTimer(snapshot);
         if (state) mergeLive(state, snapshot);
         else state = snapshot;
         applyPhaseTransition(state);
         if (hasFullState) setConnection(true);
-        updateStatus(); renderMobileActions();
+        updateStatus(); renderMobileActions(); renderDraftStrip();
+        if (hasFullState) renderTeamRails();
+        if (previousHover !== state.hoveredChampionId) renderChampionGrid();
         const nextAction = `${state.phase}|${state.actionType}|${state.canPick}|${state.canBan}`;
         if (hasFullState && previousAction !== nextAction) {
           renderChampionGrid(); renderLoadout();
@@ -372,10 +478,7 @@
     function renderAll() {
       if (!state) return;
       if (selectedChampionId && !(state.champions || []).some(champion => champion.id === selectedChampionId)) selectedChampionId = 0;
-      updateStatus(); renderChampionGrid(); renderMobileActions(); renderLoadout();
-      const picked = state.champions || [];
-      renderRail(ui.ally, picked.filter(champion => champion.isPicked && champion.teamSide !== 'enemy'), 'Ally pick');
-      renderRail(ui.enemy, picked.filter(champion => champion.isPicked && champion.teamSide === 'enemy'), 'Enemy pick');
+      updateStatus(); renderChampionGrid(); renderMobileActions(); renderLoadout(); renderDraftStrip(); renderTeamRails();
     }
     function renderEmpty(title, message, allowClear = false) {
       ui.empty.hidden = false;
@@ -414,7 +517,7 @@
       ui.empty.hidden = true;
       const canPick = state.canPick || (state.isMyTurn && state.actionType === 'pick');
       const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
-      const nextKey = JSON.stringify([query, selectedChampionId, state.isInChampSelect, canPick, canBan,
+      const nextKey = JSON.stringify([query, selectedChampionId, state.hoveredChampionId, state.isInChampSelect, canPick, canBan,
         filtered.map(champion => [champion.id, champion.isDisabled, champion.isBanned, champion.isPicked, champion.isSelected, champion.isIntent])]);
       if (nextKey === gridKey) return;
       gridKey = nextKey;
@@ -423,11 +526,12 @@
       for (const champion of filtered) {
         const badge = champion.isBanned ? '<span class="badge banned">Banned</span>' :
           champion.isPicked ? '<span class="badge">Picked</span>' :
+          champion.id === state.hoveredChampionId ? `<span class="badge intent">${state.hoveredChampionSource === 'PickIntent' ? 'Client intent' : 'Client hover'}</span>` :
           champion.isIntent ? '<span class="badge intent">Intent</span>' :
           champion.isSelected ? '<span class="badge">Selected</span>' : '';
         const card = document.createElement('article');
-        card.className = `champion${champion.isDisabled ? ' disabled' : ''}${selectedChampionId === champion.id ? ' selected-card' : ''}`;
-        card.innerHTML = `<button type="button" class="card-select" data-select-id="${champion.id}" aria-pressed="${selectedChampionId === champion.id}" aria-label="Select ${escapeAttr(champion.name)}"><span class="portrait">${badge}<img src="${escapeAttr(champion.imageUrl)}" alt="" loading="lazy"></span><span class="champion-name">${escapeHtml(champion.name)}</span></button><div class="champion-actions"><button type="button" class="hover" ${champion.isDisabled || !state.isInChampSelect ? 'disabled' : ''} aria-label="Hover ${escapeAttr(champion.name)}">Hover</button><button type="button" class="${canBan ? 'ban' : 'lock'}" ${champion.isDisabled || (!canPick && !canBan) ? 'disabled' : ''} aria-label="${canBan ? 'Ban' : 'Pick'} ${escapeAttr(champion.name)}">${canBan ? 'Ban' : 'Pick'}</button></div>`;
+        card.className = `champion${champion.isDisabled ? ' disabled' : ''}${selectedChampionId === champion.id ? ' selected-card' : ''}${state.hoveredChampionId === champion.id ? ' client-hover' : ''}`;
+        card.innerHTML = `<button type="button" class="card-select" data-select-id="${champion.id}" aria-pressed="${selectedChampionId === champion.id}" aria-label="${!canBan && !champion.isDisabled ? 'Preview' : 'Select'} ${escapeAttr(champion.name)}"><span class="portrait">${badge}<img src="${escapeAttr(champion.imageUrl)}" alt="" loading="lazy"></span><span class="champion-name">${escapeHtml(champion.name)}</span></button><div class="champion-actions"><button type="button" class="hover" ${champion.isDisabled || !state.isInChampSelect || canBan || state.actionType === 'ban' ? 'disabled' : ''} aria-label="Hover ${escapeAttr(champion.name)}">Hover</button><button type="button" class="${canBan ? 'ban' : 'lock'}" ${champion.isDisabled || (!canPick && !canBan) ? 'disabled' : ''} aria-label="${canBan ? 'Ban' : 'Pick'} ${escapeAttr(champion.name)}">${canBan ? 'Ban' : 'Pick'}</button></div>`;
         card.querySelector('.card-select').onclick = () => selectChampion(champion.id);
         card.querySelector('.hover').onclick = () => hoverChampion(champion.id);
         card.querySelector('.lock, .ban').onclick = () => canBan ? banChampion(champion) : pickChampion(champion);
@@ -441,48 +545,74 @@
       gridKey = '';
       renderChampionGrid(); renderMobileActions();
       ui.champions.querySelector(`[data-select-id="${id}"]`)?.focus({preventScroll: true});
+      const champion = getSelectedChampion();
+      if (champion && !champion.isDisabled && state?.isInChampSelect && !state.canBan && state.actionType !== 'ban' && state.hoveredChampionId !== id)
+        hoverChampion(id);
     }
     function getSelectedChampion() { return (state?.champions || []).find(champion => champion.id === selectedChampionId); }
     function renderMobileActions() {
       const champion = getSelectedChampion();
       if (!champion) {
         ui.selectedImage.removeAttribute('src'); ui.selectedName.textContent = 'Select champion';
-        ui.selectedHint.textContent = 'Tap a champion above';
+        ui.selectedHint.textContent = state?.hoveredChampionId ? `Client hover: ${getChampionMeta(state.hoveredChampionId).name}` : 'Tap a champion above';
         ui.hover.disabled = ui.ban.disabled = ui.pick.disabled = true;
         return;
       }
       ui.selectedImage.src = champion.imageUrl || '';
       ui.selectedName.textContent = champion.name;
-      ui.selectedHint.textContent = champion.isBanned ? 'Banned' : champion.isPicked ? 'Already picked' : champion.isIntent ? 'Intent selected' : champion.isSelected ? 'Selected' : 'Ready';
+      ui.selectedHint.textContent = champion.isBanned ? 'Banned' : champion.isPicked ? 'Already picked' :
+        state.hoveredChampionId === champion.id ? 'Confirmed in client session' :
+        state.selectedChampionId === champion.id ? 'Selected in client session' :
+        state.hoveredChampionId ? `Client hover: ${getChampionMeta(state.hoveredChampionId).name}` :
+        hoveringId === champion.id ? 'Sending hover…' : 'Tap to preview in client';
       const ready = hasFullState && !actionPending && !champion.isDisabled && state.isInChampSelect;
-      ui.hover.disabled = !ready;
+      ui.hover.disabled = !ready || !!state.canBan || state.actionType === 'ban';
       ui.ban.disabled = !ready || !(state.canBan || (state.isMyTurn && state.actionType === 'ban'));
       ui.pick.disabled = !ready || !(state.canPick || (state.isMyTurn && state.actionType === 'pick'));
     }
-    function renderRail(target, champions, label) {
-      target.replaceChildren();
-      if (!champions.length) {
-        const empty = document.createElement('p'); empty.className = 'rail-empty';
-        empty.textContent = `No ${label.toLowerCase()}s yet.`; target.appendChild(empty); return;
+    function renderRail(target, slots, team) {
+      const fragment = document.createDocumentFragment();
+      for (let index = 0; index < Math.max(5, slots.length); index++) {
+        const slot = slots[index] || {}, id = slot.championId || slot.intentChampionId || 0;
+        const meta = slot.name ? slot : getChampionMeta(id);
+        const row = document.createElement('div');
+        row.className = `mini-card${slot.isLocalPlayer ? ' local' : ''}${id ? '' : ' pending'}`;
+        row.innerHTML = `${id && meta.imageUrl
+          ? `<img src="${escapeAttr(meta.imageUrl)}" alt="" loading="lazy">`
+          : `<span class="rail-placeholder">${index + 1}</span>`}
+          <div><div class="name">${escapeHtml(id ? meta.name : 'Waiting for pick')}</div>
+          <div class="sub">${team} ${index + 1}${slot.isLocalPlayer ? ' · You' : ''}${id && !slot.championId ? ' · Intent' : ''}</div></div>`;
+        fragment.appendChild(row);
       }
-      for (const champion of champions.slice(0, 10)) {
-        const row = document.createElement('div'); row.className = 'mini-card';
-        row.innerHTML = `<img src="${escapeAttr(champion.imageUrl)}" alt="" loading="lazy"><div><div class="name">${escapeHtml(champion.name)}</div><div class="sub">${label}</div></div>`;
-        target.appendChild(row);
-      }
+      target.replaceChildren(fragment);
     }
     function renderSpellButton(slot, spell) {
       return `<button type="button" class="spell-button" data-slot="${slot}" ${state.isInChampSelect ? '' : 'disabled'}>${spell ? `<img src="${escapeAttr(spell.imageUrl)}" alt="">` : ''}<div><span>Spell ${slot}</span><strong>${spell ? escapeHtml(spell.name) : 'Choose'}</strong></div></button>`;
     }
+    function renderRuneDetails(page) {
+      const paths = [page.primaryStyleName, page.secondaryStyleName].filter(Boolean).join(' / ');
+      const secondary = (page.keyRuneNames || []).slice(1, 4).join(' · ');
+      return `${paths ? `<span class="rune-paths">${escapeHtml(paths)}</span>` : ''}
+        ${secondary ? `<span class="rune-keys">${escapeHtml(secondary)}</span>` : ''}`.trim();
+    }
     function renderRecommendedRunes() {
       const pages = state.recommendedRunePages || [];
       if (!pages.length) return '<div class="rune-block"><div class="rune-current">Recommended runes unavailable</div></div>';
-      return `<div class="rune-block"><div class="rune-current">Recommended by Riot</div><div class="rune-list">${pages.map(page => `<button type="button" class="rune-button" data-recommended-index="${page.index}" ${page.canApply === false ? 'disabled' : ''}><span><strong>${escapeHtml(page.name || `Recommended ${page.index + 1}`)}</strong><small>${escapeHtml(page.subtitle || `${page.selectedPerkIds?.length || 0} perks`)}</small></span><em>Apply</em></button>`).join('')}</div></div>`;
+      return `<div class="rune-block"><div class="rune-current">Recommended by Riot</div><div class="rune-list">${pages.map(page =>
+        `<button type="button" class="rune-button" data-recommended-index="${page.index}" ${page.canApply === false ? 'disabled' : ''}>
+          <span><strong>${escapeHtml(page.keystoneName || page.name || `Recommended ${page.index + 1}`)}</strong>
+          ${renderRuneDetails(page) || `<small>${escapeHtml(page.subtitle || 'Runes available')}</small>`}</span><em>Apply</em></button>`
+      ).join('')}</div></div>`;
     }
     function renderSavedRunes() {
       const pages = state.runePages || [], current = state.currentRunePage || pages.find(page => page.isCurrent);
       if (!pages.length) return '<div class="rune-block"><div class="rune-current">Saved runes unavailable</div></div>';
-      return `<div class="rune-block"><div class="rune-current">Saved: ${current ? escapeHtml(current.name) : 'Choose a page'}</div><div class="rune-list">${pages.map(page => `<button type="button" class="rune-button" data-rune-id="${page.id}" ${page.isCurrent ? 'disabled' : ''}><span>${escapeHtml(page.name)}</span><em>${page.isCurrent ? 'Active' : 'Set'}</em></button>`).join('')}</div></div>`;
+      const preview = current ? `<div class="rune-highlight"><span class="rune-label">Active rune page</span>
+        <strong>${escapeHtml(current.keystoneName || current.name)}</strong>${renderRuneDetails(current)}</div>` : '';
+      return `<div class="rune-block"><div class="rune-current">Saved rune pages</div><div class="rune-list">${preview}
+        ${pages.map(page => `<button type="button" class="rune-button" data-rune-id="${page.id}" ${page.isCurrent ? 'disabled' : ''}>
+          <span>${escapeHtml(page.name)}${page.keystoneName ? `<small>${escapeHtml(page.keystoneName)} · ${escapeHtml(page.primaryStyleName || 'Runes')}</small>` : ''}</span>
+          <em>${page.isCurrent ? 'Active' : 'Set'}</em></button>`).join('')}</div></div>`;
     }
     function renderLoadout() {
       if (!state) return;
@@ -555,6 +685,7 @@
       openModal(ui.spellModal, $('closeSpellModal'));
     }
     async function runAction(path, payload, fallback) {
+      if (hoverTask) await hoverTask;
       if (actionPending || !hasFullState) return false;
       actionPending = true;
       document.body.classList.add('busy');
@@ -583,9 +714,47 @@
         renderMobileActions(); updateStatus();
       }
     }
-    function hoverChampion(id) { return runAction('/api/hover', {championId: id}, 'Champion intent updated.'); }
+    async function flushHover() {
+      while (queuedHoverId) {
+        const id = queuedHoverId;
+        queuedHoverId = 0;
+        hoveringId = id;
+        renderHoverReadout(); renderMobileActions();
+        try {
+          const response = await fetch('/api/hover', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-Remote-Pick-Request': '1'},
+            body: JSON.stringify({championId: id})
+          });
+          const result = await response.json();
+          if (state && typeof result.confirmedChampionId === 'number') {
+            state.hoveredChampionId = result.confirmedChampionId;
+            state.hoveredChampionSource = result.confirmedChampionSource || '';
+            hoverConfirmedAt = performance.now();
+          }
+          if (!queuedHoverId) showToast(result.message || (result.success ? 'Hover confirmed.' : 'Hover was not confirmed.'), !response.ok || !result.success);
+          renderHoverReadout(); renderMobileActions(); renderChampionGrid();
+        } catch {
+          if (!queuedHoverId) showToast('Could not verify hover in League Client.', true);
+        }
+        loadTimer();
+      }
+      hoveringId = 0;
+      renderHoverReadout(); renderMobileActions();
+    }
+    function hoverChampion(id) {
+      if (!hasFullState || !state?.isInChampSelect || actionPending) return Promise.resolve(false);
+      queuedHoverId = id;
+      if (!hoverTask) hoverTask = flushHover().finally(() => { hoverTask = null; });
+      return hoverTask;
+    }
     async function pickChampion(champion) {
-      if (await confirmAction(`Lock in ${champion.name}?`, 'This will confirm your champion pick in League Client.', 'Lock in'))
+      if (hoverTask) await hoverTask;
+      const current = state?.hoveredChampionId ? getChampionMeta(state.hoveredChampionId).name : 'none';
+      const message = state?.hoveredChampionId === champion.id
+        ? `${champion.name} is the current pick in League Client session. Lock in this pick?`
+        : `League Client session currently shows ${current}. Locking in ${champion.name} will set your pick to this champion.`;
+      if (await confirmAction(`Lock in ${champion.name}?`, message, 'Lock in'))
         await runAction('/api/pick', {championId: champion.id}, 'Champion locked in.');
     }
     async function banChampion(champion) {
@@ -649,6 +818,9 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') { loadState(); loadTimer(); }
     });
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(() => document.documentElement.style.setProperty('--status-height', `${ui.status.getBoundingClientRect().height + 12}px`)).observe(ui.status);
+    }
     loadState(); loadTimer();
     setInterval(() => { if (document.visibilityState === 'visible') loadTimer(); }, 1000);
     setInterval(() => { if (document.visibilityState === 'visible') loadState(); }, 4000);

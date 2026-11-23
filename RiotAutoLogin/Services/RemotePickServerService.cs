@@ -30,9 +30,13 @@ namespace RiotAutoLogin.Services
         private Task? _serverTask;
         private List<ChampionModel>? _championCache;
         private List<RemoteChampionDto>? _remoteChampionCache;
+        private Dictionary<int, RemoteChampionDto>? _allChampionMetadata;
+        private DateTime _nextChampionMetadataAttemptUtc;
         private List<RemoteSummonerSpellDto>? _remoteSpellCache;
         private sealed record RecommendedRuneCache(string Key, DateTime ExpiresUtc, List<RemoteRecommendedRunePageDto> Pages);
         private RecommendedRuneCache? _recommendedRuneCache;
+        private sealed record RuneNameCache(DateTime ExpiresUtc, Dictionary<int, string> Names);
+        private RuneNameCache? _runeNameCache;
 
         public bool IsRunning { get; private set; }
         public int Port { get; private set; } = DefaultPort;
@@ -307,11 +311,19 @@ namespace RiotAutoLogin.Services
             var bannedChampionIds = new HashSet<int>();
             ParseBans(root, bannedChampionIds);
             ParseLocalPlayerSelection(root, state);
+            ParseTeamSlots(root, state);
+            EnrichTeamSlots(state);
             ParseQueueAndMode(root, state);
             ParseAvailableChampionIds(root, state);
             ParseAvailableSpellIds(root, state);
             ParseTimer(root, state);
             ParseActions(root, state);
+            if (state.HoveredChampionId <= 0 && state.SelectedChampionId > 0 &&
+                state.ChampSelectPhase.Contains("PLANNING", StringComparison.OrdinalIgnoreCase))
+                {
+                state.HoveredChampionId = state.SelectedChampionId;
+                state.HoveredChampionSource = "PlanningSelection";
+            }
             state.BannedChampionIds = bannedChampionIds.OrderBy(id => id).ToList();
             state.PhaseLabel = GetChampSelectPhaseLabel(state, bannedChampionIds);
             string modePrefix = string.IsNullOrWhiteSpace(state.QueueName) ? string.Empty : $"{state.QueueName}: ";
@@ -434,17 +446,84 @@ namespace RiotAutoLogin.Services
             if (state.IsRandomChampionMode && state.AvailableChampionIds.Count > 0 && !state.AvailableChampionIds.Contains(request.ChampionId))
                 return Failure("This champion is not available in the current ARAM/random selection.");
 
-            bool success = false;
-            if (!string.IsNullOrWhiteSpace(state.PickActionId))
-                success = LCUService.SelectChampion(request.ChampionId, state.PickActionId, complete: false);
-            if (!success && !string.IsNullOrWhiteSpace(state.ActionId) && state.ActionType == "pick")
-                success = LCUService.SelectChampion(request.ChampionId, state.ActionId, complete: false);
-            if (!success)
-                success = TryPatchMySelection(new { championPickIntent = request.ChampionId });
-            if (!success)
-                success = TryPatchMySelection(new { championId = request.ChampionId });
+            int confirmedId = state.HoveredChampionId;
+            string confirmedSource = state.HoveredChampionSource;
+            if (confirmedId == request.ChampionId)
+                return new RemotePickActionResult { Success = true, Message = "Hover confirmed in League Client session.", ConfirmedChampionId = confirmedId, ConfirmedChampionSource = confirmedSource };
 
-            return new RemotePickActionResult { Success = success, Message = success ? "Champion intent updated." : "League Client rejected the hover request." };
+            async Task<bool> TryHoverAsync(string endpoint, object payload)
+            {
+                string json = JsonSerializer.Serialize(payload, _jsonOptions);
+                string[] reply = await LCUService.ClientRequestAsync("PATCH", endpoint, json);
+                if (!reply[0].StartsWith("2"))
+                    return false;
+
+                // An accepted PATCH does not prove that the client actually changed its hover.
+                // Read the session back before reporting success to the phone.
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    if (attempt > 0)
+                        await Task.Delay(80);
+                    RemotePickState? observed = await ReadClientHoverAsync();
+                    if (observed != null)
+                    {
+                        confirmedId = observed.HoveredChampionId;
+                        confirmedSource = observed.HoveredChampionSource;
+                        if (confirmedId == request.ChampionId)
+                            return true;
+                    }
+                }
+                return false;
+            }
+
+            bool confirmed = false;
+            if (state.IsMyTurn && state.ActionType == "pick" && !string.IsNullOrWhiteSpace(state.ActionId))
+                confirmed = await TryHoverAsync($"lol-champ-select/v1/session/actions/{state.ActionId}",
+                    new { championId = request.ChampionId, completed = false });
+
+            if (!confirmed)
+                confirmed = await TryHoverAsync("lol-champ-select/v1/session/my-selection",
+                    new { championPickIntent = request.ChampionId });
+
+            if (!confirmed)
+                confirmed = await TryHoverAsync("lol-champ-select/v1/session/my-selection",
+                    new { championId = request.ChampionId });
+
+            return new RemotePickActionResult
+            {
+                Success = confirmed,
+                ConfirmedChampionId = confirmedId,
+                ConfirmedChampionSource = confirmedSource,
+                Message = confirmed ? "Hover confirmed in League Client session." :
+                    "League Client did not confirm this hover. It may no longer accept changes in this phase."
+            };
+        }
+
+        private static async Task<RemotePickState?> ReadClientHoverAsync()
+        {
+            string[] response = await LCUService.ClientRequestAsync("GET", "lol-champ-select/v1/session");
+            if (response[0] != "200")
+                return null;
+
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(response[1]);
+                var snapshot = new RemotePickState();
+                ParseLocalPlayerSelection(document.RootElement, snapshot);
+                ParseTimer(document.RootElement, snapshot);
+                ParseActions(document.RootElement, snapshot);
+                if (snapshot.HoveredChampionId <= 0 && snapshot.SelectedChampionId > 0 &&
+                    snapshot.ChampSelectPhase.Contains("PLANNING", StringComparison.OrdinalIgnoreCase))
+                    {
+                    snapshot.HoveredChampionId = snapshot.SelectedChampionId;
+                    snapshot.HoveredChampionSource = "PlanningSelection";
+                }
+                return snapshot;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
 
         public async Task<RemotePickActionResult> SelectSpellAsync(string body)
@@ -554,6 +633,7 @@ namespace RiotAutoLogin.Services
         private async Task AddChampionSpellAndRuneListsAsync(RemotePickState state, HashSet<int> bannedChampionIds, HashSet<int> pickedChampionIds, HashSet<int> allyPickedChampionIds, HashSet<int> enemyPickedChampionIds)
         {
             await EnsureRemoteChampionCacheAsync();
+            EnrichTeamSlots(state);
             await EnsureRemoteSpellCacheAsync();
 
             var availableChampionIds = new HashSet<int>(state.AvailableChampionIds);
@@ -608,18 +688,27 @@ namespace RiotAutoLogin.Services
                 if (pagesDoc.RootElement.ValueKind != JsonValueKind.Array)
                     return;
 
+                Dictionary<int, string> perkNames = GetRuneNames();
                 foreach (JsonElement page in pagesDoc.RootElement.EnumerateArray())
                 {
                     if (!TryGetPropertyLong(page, "id", out long pageId))
                         continue;
 
+                    List<string> keyRunes = GetPerkIds(page).Take(4)
+                        .Select(id => GetNameOrId(perkNames, id)).ToList();
+                    int primaryId = GetIntProperty(page, "primaryStyleId");
+                    int secondaryId = GetIntProperty(page, "subStyleId");
                     var dto = new RemoteRunePageDto
                     {
                         Id = pageId,
                         Name = GetStringProperty(page, "name") ?? $"Rune Page {pageId}",
                         IsCurrent = currentPageId == pageId || GetBoolProperty(page, "current") || GetBoolProperty(page, "isCurrent"),
                         IsEditable = GetBoolProperty(page, "isEditable"),
-                        IsDeletable = GetBoolProperty(page, "isDeletable")
+                        IsDeletable = GetBoolProperty(page, "isDeletable"),
+                        KeystoneName = keyRunes.FirstOrDefault() ?? string.Empty,
+                        PrimaryStyleName = primaryId > 0 ? GetNameOrId(perkNames, primaryId) : string.Empty,
+                        SecondaryStyleName = secondaryId > 0 ? GetNameOrId(perkNames, secondaryId) : string.Empty,
+                        KeyRuneNames = keyRunes
                     };
 
                     state.RunePages.Add(dto);
@@ -747,17 +836,12 @@ namespace RiotAutoLogin.Services
                 pages.Add(dto);
         }
 
-        private static void EnrichRecommendedRunePageNames(List<RemoteRecommendedRunePageDto> pages)
+        private void EnrichRecommendedRunePageNames(List<RemoteRecommendedRunePageDto> pages)
         {
             if (pages.Count == 0 || !LCUService.CheckIfLeagueClientIsOpen())
                 return;
 
-            Dictionary<int, string> perkNames = GetLcuIdNameMap("lol-game-data/assets/v1/perks.json");
-            foreach (KeyValuePair<int, string> pair in GetLcuIdNameMap("lol-perks/v1/styles"))
-            {
-                if (!perkNames.ContainsKey(pair.Key))
-                    perkNames[pair.Key] = pair.Value;
-            }
+            Dictionary<int, string> perkNames = GetRuneNames();
 
             foreach (RemoteRecommendedRunePageDto page in pages)
             {
@@ -769,12 +853,31 @@ namespace RiotAutoLogin.Services
                     .Select(id => GetNameOrId(perkNames, id))
                     .ToList();
 
-                if (runeNames.Count > 0)
-                    page.Name = runeNames[0];
+                page.KeystoneName = runeNames.FirstOrDefault() ?? string.Empty;
+                page.KeyRuneNames = runeNames.Take(4).ToList();
+                page.PrimaryStyleName = primaryStyle;
+                page.SecondaryStyleName = secondaryStyle;
+                if (!string.IsNullOrWhiteSpace(page.KeystoneName))
+                    page.Name = page.KeystoneName;
 
-                string runeSummary = runeNames.Count > 1 ? string.Join(" · ", runeNames.Skip(1)) : string.Empty;
-                page.Subtitle = $"{originalSubtitle} · {primaryStyle} / {secondaryStyle}" + (string.IsNullOrWhiteSpace(runeSummary) ? string.Empty : $" · {runeSummary}");
+                page.Subtitle = string.IsNullOrWhiteSpace(originalSubtitle)
+                    ? $"{primaryStyle} / {secondaryStyle}"
+                    : $"{originalSubtitle} · {primaryStyle} / {secondaryStyle}";
             }
+        }
+
+        private Dictionary<int, string> GetRuneNames()
+        {
+            RuneNameCache? cached = _runeNameCache;
+            if (cached != null && cached.ExpiresUtc > DateTime.UtcNow)
+                return cached.Names;
+
+            Dictionary<int, string> names = GetLcuIdNameMap("lol-game-data/assets/v1/perks.json");
+            foreach (KeyValuePair<int, string> pair in GetLcuIdNameMap("lol-perks/v1/styles"))
+                names.TryAdd(pair.Key, pair.Value);
+
+            _runeNameCache = new RuneNameCache(DateTime.UtcNow.AddSeconds(30), names);
+            return names;
         }
 
         private static Dictionary<int, string> GetLcuIdNameMap(string endpoint)
@@ -1036,11 +1139,101 @@ namespace RiotAutoLogin.Services
                     continue;
 
                 if (TryGetPropertyInt(player, "championId", out int championId)) state.SelectedChampionId = championId;
-                if (TryGetPropertyInt(player, "championPickIntent", out int intentChampionId)) state.PickIntentChampionId = intentChampionId;
+                if (TryGetPropertyInt(player, "championPickIntent", out int intentChampionId))
+                {
+                    state.PickIntentChampionId = intentChampionId;
+                    state.HoveredChampionId = intentChampionId;
+                    if (intentChampionId > 0) state.HoveredChampionSource = "PickIntent";
+                }
                 if (TryGetPropertyInt(player, "spell1Id", out int spell1Id)) state.Spell1Id = spell1Id;
                 if (TryGetPropertyInt(player, "spell2Id", out int spell2Id)) state.Spell2Id = spell2Id;
                 state.AssignedPosition = GetStringProperty(player, "assignedPosition", "position") ?? string.Empty;
                 return;
+            }
+        }
+
+        private static void ParseTeamSlots(JsonElement root, RemotePickState state)
+        {
+            int localCellId = TryGetPropertyInt(root, "localPlayerCellId", out int id) ? id : -1;
+            state.AllySlots = ReadTeamSlots(root, "myTeam", localCellId);
+            state.EnemySlots = ReadTeamSlots(root, "theirTeam", -1);
+        }
+
+        private static List<RemoteTeamSlotDto> ReadTeamSlots(JsonElement root, string propertyName, int localCellId)
+        {
+            var slots = new List<RemoteTeamSlotDto>();
+            if (!root.TryGetProperty(propertyName, out JsonElement team) || team.ValueKind != JsonValueKind.Array)
+                return slots;
+
+            foreach (JsonElement player in team.EnumerateArray())
+            {
+                slots.Add(new RemoteTeamSlotDto
+                {
+                    CellId = GetIntProperty(player, "cellId"),
+                    ChampionId = GetIntProperty(player, "championId"),
+                    IntentChampionId = GetIntProperty(player, "championPickIntent"),
+                    IsLocalPlayer = localCellId >= 0 && GetIntProperty(player, "cellId") == localCellId
+                });
+            }
+            return slots;
+        }
+
+        private void EnrichTeamSlots(RemotePickState state)
+        {
+            if (_remoteChampionCache == null) return;
+
+            List<RemoteTeamSlotDto> slots = state.AllySlots.Concat(state.EnemySlots).ToList();
+            if (slots.Any(slot =>
+                (slot.ChampionId > 0 || slot.IntentChampionId > 0) &&
+                !_remoteChampionCache.Any(champion => champion.Id == (slot.ChampionId > 0 ? slot.ChampionId : slot.IntentChampionId))))
+                EnsureAllChampionMetadata();
+
+            foreach (RemoteTeamSlotDto slot in slots)
+            {
+                int id = slot.ChampionId > 0 ? slot.ChampionId : slot.IntentChampionId;
+                RemoteChampionDto? champion = _remoteChampionCache.FirstOrDefault(candidate => candidate.Id == id);
+                if (champion == null && _allChampionMetadata != null)
+                    _allChampionMetadata.TryGetValue(id, out champion);
+                if (champion != null)
+                {
+                    slot.Name = champion.Name;
+                    slot.ImageUrl = champion.ImageUrl;
+                }
+            }
+        }
+
+        private void EnsureAllChampionMetadata()
+        {
+            if (_allChampionMetadata != null || DateTime.UtcNow < _nextChampionMetadataAttemptUtc) return;
+            _nextChampionMetadataAttemptUtc = DateTime.UtcNow.AddSeconds(30);
+            string[] response = LCUService.ClientRequest("GET", "lol-game-data/assets/v1/champion-summary.json");
+            if (response[0] != "200") return;
+
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(response[1]);
+                if (document.RootElement.ValueKind != JsonValueKind.Array) return;
+
+                var metadata = new Dictionary<int, RemoteChampionDto>();
+                foreach (JsonElement champion in document.RootElement.EnumerateArray())
+                {
+                    if (champion.ValueKind != JsonValueKind.Object) continue;
+                    int id = GetIntProperty(champion, "id");
+                    if (id <= 0) continue;
+                    string name = GetStringProperty(champion, "name") ?? $"Champion #{id}";
+                    string alias = GetStringProperty(champion, "alias") ?? name;
+                    metadata[id] = new RemoteChampionDto
+                    {
+                        Id = id,
+                        Name = name,
+                        ImageUrl = DataDragonService.GetChampionImageUrl(alias)
+                    };
+                }
+                _allChampionMetadata = metadata;
+            }
+            catch (JsonException ex)
+            {
+                Debug.WriteLine($"Could not read champion metadata for team picks: {ex.Message}");
             }
         }
 
@@ -1169,8 +1362,17 @@ namespace RiotAutoLogin.Services
 
                     if (!TryGetPropertyInt(action, "actorCellId", out int actorCellId) || actorCellId != localPlayerCellId)
                         continue;
-                    if (actionType == "pick" && string.IsNullOrWhiteSpace(state.PickActionId))
-                        state.PickActionId = actionId;
+                    if (actionType == "pick")
+                    {
+                        if (string.IsNullOrWhiteSpace(state.PickActionId))
+                            state.PickActionId = actionId;
+                        if (inProgress && !GetBoolProperty(action, "completed") &&
+                            TryGetPropertyInt(action, "championId", out int hoveredId) && hoveredId > 0)
+                        {
+                            state.HoveredChampionId = hoveredId;
+                            state.HoveredChampionSource = "ActivePick";
+                        }
+                    }
                     if (!inProgress)
                         continue;
 
