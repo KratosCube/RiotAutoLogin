@@ -1224,7 +1224,7 @@
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock Text="Enable phone pick page on port 51337"
+                                                    <TextBlock Text="Enable phone pick page on your local network"
                                                                FontSize="14"
                                                                Foreground="{StaticResource TextColorBrush}"
                                                                VerticalAlignment="Center"/>

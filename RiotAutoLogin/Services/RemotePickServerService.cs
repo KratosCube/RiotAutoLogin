@@ -31,6 +31,8 @@ namespace RiotAutoLogin.Services
         private List<ChampionModel>? _championCache;
         private List<RemoteChampionDto>? _remoteChampionCache;
         private List<RemoteSummonerSpellDto>? _remoteSpellCache;
+        private sealed record RecommendedRuneCache(string Key, DateTime ExpiresUtc, List<RemoteRecommendedRunePageDto> Pages);
+        private RecommendedRuneCache? _recommendedRuneCache;
 
         public bool IsRunning { get; private set; }
         public int Port { get; private set; } = DefaultPort;
@@ -127,6 +129,7 @@ namespace RiotAutoLogin.Services
                 string method = requestParts[0].ToUpperInvariant();
                 string path = requestParts[1];
                 int contentLength = 0;
+                bool isPageAction = false;
 
                 string? headerLine;
                 while (!string.IsNullOrEmpty(headerLine = await reader.ReadLineAsync()))
@@ -139,6 +142,21 @@ namespace RiotAutoLogin.Services
                     string value = headerLine[(separatorIndex + 1)..].Trim();
                     if (name.Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
                         int.TryParse(value, out contentLength);
+                    else if (name.Equals("X-Remote-Pick-Request", StringComparison.OrdinalIgnoreCase) && value == "1")
+                        isPageAction = true;
+                }
+
+                // A cross-origin form can send a POST to the LAN server, but cannot add this
+                // header without a CORS preflight. This server never grants CORS access.
+                if (method == "POST" && !isPageAction)
+                {
+                    await WriteTextResponseAsync(stream, 403, "Forbidden", "Open Remote Pick to perform actions.", cancellationToken);
+                    return;
+                }
+                if (contentLength < 0 || contentLength > 16 * 1024)
+                {
+                    await WriteTextResponseAsync(stream, 413, "Payload Too Large", "Request body is too large.", cancellationToken);
+                    return;
                 }
 
                 string body = await ReadBodyAsync(reader, contentLength);
@@ -441,6 +459,8 @@ namespace RiotAutoLogin.Services
                 return Failure("League Client is not running.");
 
             RemotePickState state = await GetTimerStateAsync();
+            if (!state.IsInChampSelect)
+                return Failure("Summoner spells can only be changed during champion select.");
             if (state.AvailableSpellIds.Count > 0 && !state.AvailableSpellIds.Contains(request.SpellId) && request.SpellId != state.Spell1Id && request.SpellId != state.Spell2Id)
                 return Failure("This summoner spell is not available in the current queue.");
 
@@ -622,6 +642,13 @@ namespace RiotAutoLogin.Services
             var candidates = new List<RemoteRecommendedRunePageDto>();
             string position = NormalizePosition(state.AssignedPosition);
             int mapId = state.MapId > 0 ? state.MapId : 11;
+            string cacheKey = $"{championId}:{position}:{mapId}";
+            RecommendedRuneCache? cached = _recommendedRuneCache;
+            if (cached != null && cached.Key == cacheKey && cached.ExpiresUtc > DateTime.UtcNow)
+            {
+                state.RecommendedRunePages = cached.Pages;
+                return;
+            }
 
             string[] sessionResult = LCUService.ClientRequest("GET", "lol-champ-select/v1/session");
             if (sessionResult[0] == "200")
@@ -644,6 +671,7 @@ namespace RiotAutoLogin.Services
 
             EnrichRecommendedRunePageNames(pages);
             state.RecommendedRunePages = pages;
+            _recommendedRuneCache = new RecommendedRuneCache(cacheKey, DateTime.UtcNow.AddSeconds(20), pages);
         }
 
         private static IEnumerable<string> GetRecommendedRuneEndpoints(int championId, string position, int mapId)

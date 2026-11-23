@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#060c14">
+  <title>Remote Pick · Riot Auto Login</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #050b13;
+      --panel: #0d1824;
+      --panel-soft: #122333;
+      --line: rgba(200, 170, 110, .28);
+      --gold: #c8aa6e;
+      --gold-light: #f1d594;
+      --cyan: #39d5c5;
+      --red: #f28a91;
+      --text: #f3efe5;
+      --muted: #b5c0cb;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 280px;
+      color: var(--text);
+      background: radial-gradient(ellipse 75% 32rem at 50% -8rem, #244152 0%, transparent 72%),
+                  linear-gradient(135deg, #050b13, #0b1420 53%, #050b13);
+    }
+    body.modal-open { overflow: hidden; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { opacity: .46; cursor: not-allowed; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+    [hidden] { display: none !important; }
+    .app { width: min(100%, 1500px); margin: 0 auto; padding: 24px clamp(12px, 2vw, 30px) 48px; }
+    .site-header { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+    .eyebrow, .section-title, .field-label { color: var(--gold); font-size: .76rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { font: 500 clamp(1.8rem, 3vw, 2.6rem)/1.1 Georgia, serif; letter-spacing: .02em; margin: 7px 0 0; color: var(--gold-light); }
+    .header-actions { display: flex; align-items: center; gap: 9px; }
+    .connection { display: inline-flex; align-items: center; gap: 8px; padding: 10px 13px; color: var(--muted); border: 1px solid var(--line); background: var(--panel); font-size: .86rem; white-space: nowrap; }
+    .connection::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
+    .connection.online::before { background: var(--cyan); }
+    .connection.offline::before { background: var(--red); }
+    .subtle-button, .leave-button, .search-clear, .modal-button {
+      min-height: 42px; padding: 9px 14px; color: var(--text); border: 1px solid var(--line);
+      background: #101d2a; font-size: .86rem; font-weight: 700;
+    }
+    .subtle-button:hover:not(:disabled), .search-clear:hover:not(:disabled), .modal-button:hover:not(:disabled) { background: #1a3041; border-color: var(--gold); }
+    .status {
+      position: sticky; top: 0; z-index: 20; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+      border: 1px solid var(--line); background: rgba(8, 18, 29, .97);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, .3); backdrop-filter: blur(14px);
+    }
+    .status-main { min-width: 0; padding: 17px 20px; }
+    .phase { color: var(--cyan); font-size: .83rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .message { margin: 6px 0 0; color: var(--text); font-size: .96rem; line-height: 1.45; }
+    .status-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 13px; }
+    .turn-pill { padding: 6px 10px; color: #d9fff9; border: 1px solid rgba(57, 213, 197, .48); background: rgba(57, 213, 197, .11); font-size: .76rem; font-weight: 800; }
+    .turn-pill.waiting { color: var(--gold-light); border-color: var(--line); background: rgba(200, 170, 110, .08); }
+    .turn-pill.ban { color: #ffd5d8; border-color: rgba(242, 138, 145, .53); background: rgba(242, 138, 145, .12); }
+    .turn-pill.loading { color: var(--gold-light); }
+    .leave-button { min-height: 34px; padding: 6px 11px; color: #ffd5d8; border-color: rgba(242, 138, 145, .48); background: rgba(242, 138, 145, .08); }
+    .leave-button:hover:not(:disabled) { background: rgba(242, 138, 145, .2); }
+    .timer-box { min-width: 125px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 18px; border-left: 1px solid var(--line); background: rgba(0, 0, 0, .18); }
+    .timer-value { color: var(--gold-light); font-variant-numeric: tabular-nums; font-size: 2.5rem; line-height: 1; font-weight: 800; }
+    .timer-value.game { font-size: 1.65rem; }
+    .timer-label { margin-top: 6px; color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+    .layout { display: grid; grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(235px, 285px); align-items: start; gap: 16px; margin-top: 18px; }
+    .right-rail { display: grid; gap: 16px; min-width: 0; }
+    .panel { min-width: 0; border: 1px solid var(--line); background: rgba(11, 22, 34, .94); box-shadow: inset 0 1px rgba(255, 255, 255, .04); }
+    .panel h2 { margin: 0; padding: 15px 16px; color: var(--gold-light); border-bottom: 1px solid var(--line); font-size: .88rem; letter-spacing: .1em; text-transform: uppercase; }
+    .rail-list { display: grid; gap: 8px; padding: 12px; }
+    .rail-empty { margin: 0; padding: 9px 2px; color: var(--muted); line-height: 1.5; font-size: .87rem; }
+    .mini-card { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px; background: #142332; border: 1px solid rgba(255, 255, 255, .06); }
+    .mini-card img { width: 40px; height: 40px; object-fit: cover; background: #0a151f; border: 1px solid var(--line); }
+    .mini-card .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .86rem; font-weight: 700; }
+    .mini-card .sub { margin-top: 3px; color: var(--muted); font-size: .76rem; }
+    .search-wrap { display: grid; gap: 9px; margin-bottom: 14px; }
+    .search-heading { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .count { color: var(--muted); font-size: .84rem; font-variant-numeric: tabular-nums; }
+    .search-controls { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .search-controls input { min-width: 0; min-height: 46px; width: 100%; padding: 10px 14px; color: var(--text); border: 1px solid var(--line); border-radius: 0; background: #0a1723; font-size: 1rem; }
+    .search-controls input::placeholder { color: var(--muted); }
+    .champion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+    .champion { min-width: 0; overflow: hidden; border: 1px solid var(--line); background: var(--panel); transition: border-color .15s, box-shadow .15s; }
+    .champion:hover { border-color: var(--gold); }
+    .champion.selected-card { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan), 0 0 20px rgba(57, 213, 197, .15); }
+    .card-select { width: 100%; padding: 0; color: var(--text); border: 0; background: transparent; text-align: left; }
+    .portrait { position: relative; display: block; height: clamp(105px, 10vw, 155px); background: linear-gradient(135deg, #152e3b, #08131e); overflow: hidden; }
+    .portrait img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .2s; }
+    .champion:hover .portrait img { transform: scale(1.04); }
+    .champion.disabled .portrait img { filter: grayscale(1) brightness(.52); }
+    .champion-name { display: block; overflow: hidden; padding: 9px 10px; font-size: .83rem; font-weight: 800; white-space: nowrap; text-overflow: ellipsis; }
+    .badge { position: absolute; top: 7px; left: 7px; padding: 4px 6px; border: 1px solid var(--line); color: var(--gold-light); background: rgba(4, 9, 15, .91); font-size: .7rem; font-weight: 800; }
+    .badge.banned { color: #ffd5d8; border-color: var(--red); }
+    .badge.intent { color: #d9fff9; border-color: var(--cyan); }
+    .champion-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 0 7px 7px; }
+    .champion-actions button, .mobile-action-buttons button { min-height: 38px; padding: 5px; color: var(--text); border: 1px solid var(--line); background: #112333; font-size: .76rem; font-weight: 800; }
+    .champion-actions button:hover:not(:disabled), .mobile-action-buttons button:hover:not(:disabled) { background: #204154; }
+    button.lock { color: #dcfffa; border-color: rgba(57, 213, 197, .57); }
+    button.ban { color: #ffd5d8; border-color: rgba(242, 138, 145, .57); }
+    .empty-state { padding: 38px 20px; text-align: center; border: 1px dashed var(--line); background: rgba(13, 24, 36, .8); }
+    .empty-state strong { display: block; color: var(--gold-light); font: 500 1.3rem Georgia, serif; }
+    .empty-state p { margin: 10px auto 0; max-width: 27rem; color: var(--muted); line-height: 1.5; }
+    .empty-state button { margin-top: 17px; }
+    .loadout { padding: 13px; }
+    .loadout-note { margin: 0 0 11px; color: var(--muted); line-height: 1.5; font-size: .86rem; }
+    .spell-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .spell-button { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 57px; padding: 7px; color: var(--text); border: 1px solid var(--line); background: #112333; text-align: left; }
+    .spell-button img { width: 36px; height: 36px; flex: none; border: 1px solid var(--line); background: var(--bg); }
+    .spell-button span { display: block; color: var(--gold); font-size: .73rem; }
+    .spell-button strong { display: block; overflow: hidden; margin-top: 3px; font-size: .83rem; text-overflow: ellipsis; }
+    .rune-block { margin-top: 12px; border: 1px solid var(--line); background: rgba(200, 170, 110, .03); }
+    .rune-current { padding: 11px; border-bottom: 1px solid var(--line); color: var(--gold-light); font-size: .8rem; font-weight: 800; }
+    .rune-list { display: grid; gap: 7px; padding: 8px; }
+    .rune-button { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0; min-height: 45px; padding: 8px; color: var(--text); border: 1px solid rgba(200, 170, 110, .2); background: #112333; text-align: left; font-size: .84rem; }
+    .rune-button:hover:not(:disabled), .spell-button:hover:not(:disabled) { border-color: var(--cyan); background: #19384a; }
+    .rune-button span { min-width: 0; overflow-wrap: anywhere; }
+    .rune-button small { display: block; margin-top: 4px; color: var(--muted); font-size: .75rem; line-height: 1.3; }
+    .rune-button em { flex: none; color: var(--gold-light); font-size: .74rem; font-style: normal; font-weight: 800; }
+    .mobile-nav, .mobile-action-bar { display: none; }
+    .modal-backdrop { position: fixed; inset: 0; z-index: 40; display: flex; justify-content: center; align-items: center; padding: 16px; background: rgba(0, 0, 0, .78); }
+    .modal { width: min(100%, 580px); max-height: min(90vh, 750px); overflow-y: auto; border: 1px solid var(--gold); background: #0b1723; box-shadow: 0 24px 70px #000; }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 17px; border-bottom: 1px solid var(--line); }
+    .modal-head h2 { margin: 0; color: var(--gold-light); font: 500 1.3rem Georgia, serif; }
+    .spell-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 8px; padding: 16px; }
+    .spell-option { display: flex; align-items: center; gap: 10px; min-height: 55px; padding: 8px; color: var(--text); border: 1px solid var(--line); background: var(--panel-soft); text-align: left; }
+    .spell-option img { width: 37px; height: 37px; border: 1px solid var(--line); }
+    .spell-option:hover { border-color: var(--cyan); background: #1a3545; }
+    .confirm-copy { margin: 0; padding: 18px; color: var(--muted); line-height: 1.5; }
+    .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 0 18px 18px; }
+    .modal-button.danger { color: #ffd5d8; border-color: var(--red); }
+    .modal-button.primary { color: #d9fff9; border-color: var(--cyan); }
+    .toast { position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: min(400px, calc(100vw - 36px)); padding: 14px 17px; border: 1px solid var(--cyan); background: #102b32; box-shadow: 0 16px 40px #0009; line-height: 1.4; }
+    .toast.error { border-color: var(--red); background: #3a1c27; }
+    .busy .champion-actions button, .busy .mobile-action-buttons button, .busy .loadout button, .busy .leave-button, .busy .spell-option { pointer-events: none; opacity: .52; }
+    @media (max-width: 1050px) { .layout { grid-template-columns: 185px minmax(0, 1fr) 225px; gap: 10px; } .champion-grid { grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); } }
+    @media (max-width: 850px) {
+      .app { padding: 14px 12px 118px; }
+      body:not([data-view="champions"]) .app { padding-bottom: 35px; }
+      .site-header { margin-bottom: 12px; }
+      .eyebrow { font-size: .67rem; }
+      h1 { font-size: 1.65rem; }
+      .header-actions { gap: 5px; }
+      .connection { padding: 8px; font-size: .76rem; }
+      .subtle-button { min-height: 35px; padding: 6px 9px; font-size: .75rem; }
+      .status-main { padding: 11px 12px; }
+      .phase { font-size: .75rem; }
+      .message { font-size: .82rem; line-height: 1.35; }
+      .status-actions { margin-top: 8px; gap: 5px; }
+      .turn-pill { padding: 4px 6px; font-size: .69rem; }
+      .leave-button { min-height: 30px; padding: 4px 7px; font-size: .74rem; }
+      .timer-box { min-width: 83px; padding: 8px 9px; }
+      .timer-value { font-size: 1.8rem; }
+      .timer-value.game { font-size: 1.17rem; }
+      .timer-label { font-size: .62rem; }
+      .mobile-nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
+      .mobile-nav button { min-height: 44px; color: var(--muted); border: 1px solid var(--line); background: #101e2b; font-size: .86rem; font-weight: 700; }
+      .mobile-nav button[aria-pressed="true"] { color: var(--gold-light); border-color: var(--gold); background: #1b2d3b; }
+      .layout { display: block; margin-top: 12px; }
+      .layout[data-view="champions"] #allyPanel, .layout[data-view="champions"] .right-rail,
+      .layout[data-view="picks"] #championView, .layout[data-view="picks"] #desktopLoadout,
+      .layout[data-view="loadout"] #championView, .layout[data-view="loadout"] #allyPanel, .layout[data-view="loadout"] #enemyPanel { display: none; }
+      .layout[data-view="picks"] #allyPanel { margin-bottom: 12px; }
+      .layout[data-view="loadout"] .right-rail { display: block; }
+      .champion-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+      .portrait { height: clamp(88px, 27vw, 145px); }
+      .champion-name { padding: 8px 6px; font-size: .77rem; }
+      .champion-actions { display: none; }
+      .mobile-action-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; gap: 8px; padding: 9px 12px calc(9px + env(safe-area-inset-bottom)); border-top: 1px solid var(--gold); background: rgba(6, 14, 22, .98); box-shadow: 0 -12px 35px #0009; }
+      body:not([data-view="champions"]) .mobile-action-bar { display: none; }
+      .mobile-selected { display: flex; align-items: center; gap: 9px; min-width: 0; }
+      .mobile-selected img { width: 36px; height: 36px; object-fit: cover; border: 1px solid var(--line); background: #0a151f; }
+      .mobile-selected strong { display: block; font-size: .85rem; }
+      .mobile-selected span { display: block; margin-top: 2px; color: var(--muted); font-size: .72rem; }
+      .mobile-action-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+      .mobile-action-buttons button { min-height: 44px; font-size: .82rem; }
+      .toast { right: 10px; bottom: calc(115px + env(safe-area-inset-bottom)); }
+      body:not([data-view="champions"]) .toast { bottom: 12px; }
+    }
+    @media (max-width: 360px) { .connection { font-size: 0; gap: 0; } .connection::before { width: 10px; height: 10px; } .timer-box { min-width: 72px; } }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; } }
+  </style>
+</head>
+<body data-view="champions">
+  <div class="app">
+    <header class="site-header">
+      <div><div class="eyebrow">Riot Auto Login / Remote control</div><h1>Remote Pick</h1></div>
+      <div class="header-actions"><span id="connection" class="connection" role="status">Connecting</span><button id="refreshButton" class="subtle-button" type="button">Refresh</button></div>
+    </header>
+    <section class="status" aria-label="Current match status">
+      <div class="status-main"><div id="phase" class="phase">Connecting</div><p id="message" class="message">Connecting to Riot Auto Login…</p>
+        <div class="status-actions"><span id="turn" class="turn-pill waiting">Waiting</span><span id="gameStatus" class="turn-pill waiting">Game waiting</span><button id="leaveButton" class="leave-button" type="button" disabled>Leave lobby</button></div>
+      </div>
+      <div class="timer-box"><span id="timer" class="timer-value">--</span><span id="timerLabel" class="timer-label">Seconds</span></div>
+    </section>
+    <nav class="mobile-nav" aria-label="Remote Pick sections">
+      <button type="button" data-view-button="champions" aria-controls="championView" aria-pressed="true">Champions</button>
+      <button type="button" data-view-button="picks" aria-controls="allyPanel enemyPanel" aria-pressed="false">Picks</button>
+      <button type="button" data-view-button="loadout" aria-controls="desktopLoadout" aria-pressed="false">Loadout</button>
+    </nav>
+    <section id="layout" class="layout" data-view="champions">
+      <aside id="allyPanel" class="panel"><h2>Ally picks</h2><div id="allyPickedList" class="rail-list"></div></aside>
+      <main id="championView">
+        <div class="search-wrap"><div class="search-heading"><label class="field-label" for="search">Champions</label><span id="count" class="count" role="status" aria-live="polite">Loading…</span></div>
+          <div class="search-controls"><input id="search" type="search" placeholder="Search champions" autocomplete="off" spellcheck="false"><button id="clearSearch" class="search-clear" type="button" hidden>Clear</button></div>
+        </div>
+        <div id="champions" class="champion-grid"></div>
+        <div id="emptyState" class="empty-state" hidden><strong id="emptyTitle">Waiting for champion select</strong><p id="emptyMessage">Champions will appear here when the client starts champion select.</p><button id="emptyClear" class="subtle-button" type="button" hidden>Clear search</button></div>
+      </main>
+      <div class="right-rail"><aside id="enemyPanel" class="panel"><h2>Enemy picks</h2><div id="enemyPickedList" class="rail-list"></div></aside><aside id="desktopLoadout" class="panel loadout-panel" aria-label="Loadout"></aside></div>
+    </section>
+  </div>
+  <div id="mobileActionBar" class="mobile-action-bar"><div class="mobile-selected"><img id="mobileSelectedImage" alt=""><div><strong id="mobileSelectedName">Select champion</strong><span id="mobileSelectedHint">Tap a champion above</span></div></div><div class="mobile-action-buttons"><button id="mobileHoverButton" type="button" disabled>Hover</button><button id="mobileBanButton" class="ban" type="button" disabled>Ban</button><button id="mobilePickButton" class="lock" type="button" disabled>Pick</button></div></div>
+  <div id="spellModal" class="modal-backdrop" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="spellModalTitle"><div class="modal-head"><h2 id="spellModalTitle">Choose spell</h2><button id="closeSpellModal" class="subtle-button" type="button">Close</button></div><div id="spellGrid" class="spell-grid"></div></div></div>
+  <div id="confirmModal" class="modal-backdrop" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmCopy"><div class="modal-head"><h2 id="confirmTitle">Confirm action</h2></div><p id="confirmCopy" class="confirm-copy"></p><div class="confirm-actions"><button id="cancelConfirm" class="modal-button" type="button">Cancel</button><button id="acceptConfirm" class="modal-button primary" type="button">Confirm</button></div></div></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script>
+    const $ = id => document.getElementById(id);
+    const ui = {
+      layout: $('layout'), champions: $('champions'), ally: $('allyPickedList'), enemy: $('enemyPickedList'),
+      phase: $('phase'), message: $('message'), turn: $('turn'), gameStatus: $('gameStatus'),
+      timer: $('timer'), timerLabel: $('timerLabel'), connection: $('connection'),
+      search: $('search'), clearSearch: $('clearSearch'), count: $('count'),
+      empty: $('emptyState'), emptyTitle: $('emptyTitle'), emptyMessage: $('emptyMessage'), emptyClear: $('emptyClear'),
+      loadout: $('desktopLoadout'), toast: $('toast'), leave: $('leaveButton'),
+      spellModal: $('spellModal'), spellGrid: $('spellGrid'), spellTitle: $('spellModalTitle'),
+      confirmModal: $('confirmModal'), confirmTitle: $('confirmTitle'), confirmCopy: $('confirmCopy'), confirmAccept: $('acceptConfirm'),
+      selectedImage: $('mobileSelectedImage'), selectedName: $('mobileSelectedName'), selectedHint: $('mobileSelectedHint'),
+      hover: $('mobileHoverButton'), ban: $('mobileBanButton'), pick: $('mobilePickButton')
+    };
+    let state = null, hasFullState = false, query = '', selectedChampionId = 0;
+    let statePending = false, timerPending = false, actionPending = false;
+    let latestTimer = null, latestTimerAt = 0, previousPhase = null, gridKey = '', loadoutKey = '';
+    let timerBaseMs = null, timerBasePerf = 0, timerInfinite = false, activeModal = null, returnFocus = null, confirmResolve = null;
+
+    const liveFields = [
+      'phase', 'champSelectPhase', 'phaseLabel', 'timeLeftInPhaseMs', 'totalTimeInPhaseMs', 'isTimerInfinite',
+      'isInChampSelect', 'isMyTurn', 'canPick', 'canBan', 'canLeave', 'actionType', 'actionId', 'actionGroupIndex',
+      'timerActionKey', 'isGameClientRunning', 'isGameLoaded', 'gameTimeSeconds', 'gameStatus', 'message',
+      'selectedChampionId', 'pickIntentChampionId', 'spell1Id', 'spell2Id'
+    ];
+    function mergeLive(target, snapshot) {
+      for (const key of liveFields) if (Object.prototype.hasOwnProperty.call(snapshot, key)) target[key] = snapshot[key];
+    }
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch]));
+    }
+    function escapeAttr(value) { return escapeHtml(value).replace(/`/g, '&#96;'); }
+    function formatGameClock(seconds) {
+      if (typeof seconds !== 'number' || seconds < 0 || !Number.isFinite(seconds)) return '--:--';
+      const total = Math.floor(seconds);
+      return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+    }
+    function showToast(message, isError = false) {
+      ui.toast.textContent = message;
+      ui.toast.classList.toggle('error', isError);
+      ui.toast.hidden = false;
+      clearTimeout(showToast.timeout);
+      showToast.timeout = setTimeout(() => { ui.toast.hidden = true; }, isError ? 6000 : 3800);
+    }
+    function setConnection(connected) {
+      ui.connection.className = `connection ${connected ? 'online' : 'offline'}`;
+      ui.connection.textContent = connected ? 'Connected' : 'Reconnecting';
+      ui.connection.setAttribute('aria-label', connected ? 'Connected to Remote Pick' : 'Reconnecting to Remote Pick');
+    }
+    function syncTimer(snapshot) {
+      timerInfinite = !!snapshot.isTimerInfinite;
+      timerBaseMs = typeof snapshot.timeLeftInPhaseMs === 'number' && snapshot.timeLeftInPhaseMs >= 0
+        ? snapshot.timeLeftInPhaseMs : null;
+      timerBasePerf = performance.now();
+    }
+    function currentTimerMs() {
+      if (timerInfinite) return Infinity;
+      return timerBaseMs === null ? null : Math.max(0, timerBaseMs - (performance.now() - timerBasePerf));
+    }
+    function updateTimerDisplay() {
+      if (state && !state.isInChampSelect &&
+          (state.phase === 'GameStart' || state.phase === 'InProgress' || state.isGameClientRunning || state.isGameLoaded)) {
+        ui.timer.classList.add('game');
+        if (state.isGameLoaded) { ui.timer.textContent = formatGameClock(state.gameTimeSeconds); ui.timerLabel.textContent = 'Game time'; }
+        else if (state.isGameClientRunning) { ui.timer.textContent = 'LOAD'; ui.timerLabel.textContent = 'Loading'; }
+        else { ui.timer.textContent = 'START'; ui.timerLabel.textContent = 'Game'; }
+        return;
+      }
+      ui.timer.classList.remove('game');
+      ui.timerLabel.textContent = 'Seconds';
+      const ms = currentTimerMs();
+      ui.timer.textContent = ms === Infinity ? '∞' : ms === null ? '--' : String(Math.ceil(ms / 1000));
+    }
+    function applyPhaseTransition(snapshot) {
+      if (snapshot.phase === 'ChampSelect' && previousPhase && previousPhase !== 'ChampSelect')
+        showToast('Match accepted. Champion select started.');
+      previousPhase = snapshot.phase;
+    }
+    function updateStatus() {
+      if (!state) return;
+      const canPick = state.canPick || (state.isMyTurn && state.actionType === 'pick');
+      const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
+      ui.phase.textContent = `${state.phaseLabel || state.phase || 'Waiting'}${state.champSelectPhase ? ' · ' + state.champSelectPhase : ''}`;
+      ui.message.textContent = state.message || 'Waiting for League Client.';
+      ui.turn.textContent = canBan ? 'Your ban turn' : canPick ? 'Your pick turn' : state.isInChampSelect ? 'Hover available' : 'Waiting';
+      ui.turn.className = `turn-pill ${canBan ? 'ban' : canPick ? '' : 'waiting'}`;
+      if (state.isGameLoaded) { ui.gameStatus.textContent = `In game ${formatGameClock(state.gameTimeSeconds)}`; ui.gameStatus.className = 'turn-pill'; }
+      else if (state.phase === 'GameStart' || state.phase === 'InProgress' || state.isGameClientRunning) {
+        ui.gameStatus.textContent = state.isGameClientRunning ? 'Loading screen' : 'Starting game';
+        ui.gameStatus.className = 'turn-pill loading';
+      } else { ui.gameStatus.textContent = 'Game waiting'; ui.gameStatus.className = 'turn-pill waiting'; }
+      ui.leave.disabled = !hasFullState || !state.canLeave || actionPending;
+      ui.leave.textContent = state.phase === 'Matchmaking' ? 'Cancel queue' : state.phase === 'ReadyCheck' ? 'Decline' : state.phase === 'ChampSelect' ? 'Dodge' : 'Leave lobby';
+      updateTimerDisplay();
+    }
+    function showDisconnectedState() {
+      hasFullState = false;
+      setConnection(false);
+      ui.phase.textContent = 'Connection lost';
+      ui.message.textContent = 'Cannot load Remote Pick. Retrying automatically…';
+      ui.turn.textContent = 'Offline'; ui.turn.className = 'turn-pill waiting';
+      ui.gameStatus.textContent = 'Game unknown'; ui.gameStatus.className = 'turn-pill waiting';
+      ui.leave.disabled = true;
+      timerBaseMs = null; timerInfinite = false;
+      state = null;
+      gridKey = '';
+      updateTimerDisplay(); renderChampionGrid(); renderMobileActions();
+    }
+    async function getJson(url) {
+      const response = await fetch(url, {cache: 'no-store'});
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }
+    async function loadState() {
+      if (statePending) return;
+      statePending = true;
+      const started = performance.now();
+      try {
+        const next = await getJson('/api/state');
+        if (latestTimer && latestTimerAt > started) mergeLive(next, latestTimer);
+        else syncTimer(next);
+        state = next;
+        hasFullState = true;
+        applyPhaseTransition(next);
+        setConnection(true);
+        renderAll();
+      } catch { showDisconnectedState(); }
+      finally { statePending = false; }
+    }
+    async function loadTimer() {
+      if (timerPending) return;
+      timerPending = true;
+      try {
+        const snapshot = await getJson('/api/timer');
+        latestTimer = snapshot; latestTimerAt = performance.now();
+        syncTimer(snapshot);
+        if (state) mergeLive(state, snapshot);
+        else state = snapshot;
+        applyPhaseTransition(state);
+        if (hasFullState) setConnection(true);
+        updateStatus(); renderMobileActions();
+      } catch {
+        // The full-state request also checks connectivity. A transient timer failure does not erase the page.
+      } finally { timerPending = false; }
+    }
+    function renderAll() {
+      if (!state) return;
+      if (selectedChampionId && !(state.champions || []).some(champion => champion.id === selectedChampionId)) selectedChampionId = 0;
+      updateStatus(); renderChampionGrid(); renderMobileActions(); renderLoadout();
+      const picked = state.champions || [];
+      renderRail(ui.ally, picked.filter(champion => champion.isPicked && champion.teamSide !== 'enemy'), 'Ally pick');
+      renderRail(ui.enemy, picked.filter(champion => champion.isPicked && champion.teamSide === 'enemy'), 'Enemy pick');
+    }
+    function renderEmpty(title, message, allowClear = false) {
+      ui.empty.hidden = false;
+      ui.emptyTitle.textContent = title;
+      ui.emptyMessage.textContent = message;
+      ui.emptyClear.hidden = !allowClear;
+    }
+    function renderChampionGrid() {
+      if (!hasFullState || !state) {
+        gridKey = '';
+        ui.champions.replaceChildren(); ui.count.textContent = 'Unavailable';
+        renderEmpty('Reconnecting', 'The champion list could not be loaded. It will retry automatically.');
+        return;
+      }
+      const champions = state.champions || [];
+      const filtered = champions.filter(champion => (champion.name || '').toLocaleLowerCase().includes(query));
+      ui.count.textContent = `${filtered.length} of ${champions.length}`;
+      if (!champions.length) {
+        gridKey = '';
+        ui.champions.replaceChildren();
+        renderEmpty(state.isInChampSelect ? 'Loading champions' : 'Waiting for champion select',
+          state.isInChampSelect ? 'The champion list is still loading. Try Refresh in a moment.' : 'Champions will appear when League Client starts champion select.');
+        return;
+      }
+      if (!filtered.length) {
+        gridKey = '';
+        ui.champions.replaceChildren(); renderEmpty('No champions found', 'Try another name or clear the search.', true);
+        return;
+      }
+      ui.empty.hidden = true;
+      const canPick = state.canPick || (state.isMyTurn && state.actionType === 'pick');
+      const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
+      const nextKey = JSON.stringify([query, selectedChampionId, state.isInChampSelect, canPick, canBan,
+        filtered.map(champion => [champion.id, champion.isDisabled, champion.isBanned, champion.isPicked, champion.isSelected, champion.isIntent])]);
+      if (nextKey === gridKey) return;
+      gridKey = nextKey;
+      const focused = document.activeElement?.dataset?.selectId;
+      const fragment = document.createDocumentFragment();
+      for (const champion of filtered) {
+        const badge = champion.isBanned ? '<span class="badge banned">Banned</span>' :
+          champion.isPicked ? '<span class="badge">Picked</span>' :
+          champion.isIntent ? '<span class="badge intent">Intent</span>' :
+          champion.isSelected ? '<span class="badge">Selected</span>' : '';
+        const card = document.createElement('article');
+        card.className = `champion${champion.isDisabled ? ' disabled' : ''}${selectedChampionId === champion.id ? ' selected-card' : ''}`;
+        card.innerHTML = `<button type="button" class="card-select" data-select-id="${champion.id}" aria-pressed="${selectedChampionId === champion.id}" aria-label="Select ${escapeAttr(champion.name)}"><span class="portrait">${badge}<img src="${escapeAttr(champion.imageUrl)}" alt="" loading="lazy"></span><span class="champion-name">${escapeHtml(champion.name)}</span></button><div class="champion-actions"><button type="button" class="hover" ${champion.isDisabled || !state.isInChampSelect ? 'disabled' : ''} aria-label="Hover ${escapeAttr(champion.name)}">Hover</button><button type="button" class="${canBan ? 'ban' : 'lock'}" ${champion.isDisabled || (!canPick && !canBan) ? 'disabled' : ''} aria-label="${canBan ? 'Ban' : 'Pick'} ${escapeAttr(champion.name)}">${canBan ? 'Ban' : 'Pick'}</button></div>`;
+        card.querySelector('.card-select').onclick = () => selectChampion(champion.id);
+        card.querySelector('.hover').onclick = () => hoverChampion(champion.id);
+        card.querySelector('.lock, .ban').onclick = () => canBan ? banChampion(champion) : pickChampion(champion);
+        fragment.appendChild(card);
+      }
+      ui.champions.replaceChildren(fragment);
+      if (focused) ui.champions.querySelector(`[data-select-id="${focused}"]`)?.focus({preventScroll: true});
+    }
+    function selectChampion(id) {
+      selectedChampionId = id;
+      gridKey = '';
+      renderChampionGrid(); renderMobileActions();
+      ui.champions.querySelector(`[data-select-id="${id}"]`)?.focus({preventScroll: true});
+    }
+    function getSelectedChampion() { return (state?.champions || []).find(champion => champion.id === selectedChampionId); }
+    function renderMobileActions() {
+      const champion = getSelectedChampion();
+      if (!champion) {
+        ui.selectedImage.removeAttribute('src'); ui.selectedName.textContent = 'Select champion';
+        ui.selectedHint.textContent = 'Tap a champion above';
+        ui.hover.disabled = ui.ban.disabled = ui.pick.disabled = true;
+        return;
+      }
+      ui.selectedImage.src = champion.imageUrl || '';
+      ui.selectedName.textContent = champion.name;
+      ui.selectedHint.textContent = champion.isBanned ? 'Banned' : champion.isPicked ? 'Already picked' : champion.isIntent ? 'Intent selected' : champion.isSelected ? 'Selected' : 'Ready';
+      const ready = hasFullState && !actionPending && !champion.isDisabled && state.isInChampSelect;
+      ui.hover.disabled = !ready;
+      ui.ban.disabled = !ready || !(state.canBan || (state.isMyTurn && state.actionType === 'ban'));
+      ui.pick.disabled = !ready || !(state.canPick || (state.isMyTurn && state.actionType === 'pick'));
+    }
+    function renderRail(target, champions, label) {
+      target.replaceChildren();
+      if (!champions.length) {
+        const empty = document.createElement('p'); empty.className = 'rail-empty';
+        empty.textContent = `No ${label.toLowerCase()}s yet.`; target.appendChild(empty); return;
+      }
+      for (const champion of champions.slice(0, 10)) {
+        const row = document.createElement('div'); row.className = 'mini-card';
+        row.innerHTML = `<img src="${escapeAttr(champion.imageUrl)}" alt="" loading="lazy"><div><div class="name">${escapeHtml(champion.name)}</div><div class="sub">${label}</div></div>`;
+        target.appendChild(row);
+      }
+    }
+    function renderSpellButton(slot, spell) {
+      return `<button type="button" class="spell-button" data-slot="${slot}" ${state.isInChampSelect ? '' : 'disabled'}>${spell ? `<img src="${escapeAttr(spell.imageUrl)}" alt="">` : ''}<div><span>Spell ${slot}</span><strong>${spell ? escapeHtml(spell.name) : 'Choose'}</strong></div></button>`;
+    }
+    function renderRecommendedRunes() {
+      const pages = state.recommendedRunePages || [];
+      if (!pages.length) return '<div class="rune-block"><div class="rune-current">Recommended runes unavailable</div></div>';
+      return `<div class="rune-block"><div class="rune-current">Recommended by Riot</div><div class="rune-list">${pages.map(page => `<button type="button" class="rune-button" data-recommended-index="${page.index}" ${page.canApply === false ? 'disabled' : ''}><span><strong>${escapeHtml(page.name || `Recommended ${page.index + 1}`)}</strong><small>${escapeHtml(page.subtitle || `${page.selectedPerkIds?.length || 0} perks`)}</small></span><em>Apply</em></button>`).join('')}</div></div>`;
+    }
+    function renderSavedRunes() {
+      const pages = state.runePages || [], current = state.currentRunePage || pages.find(page => page.isCurrent);
+      if (!pages.length) return '<div class="rune-block"><div class="rune-current">Saved runes unavailable</div></div>';
+      return `<div class="rune-block"><div class="rune-current">Saved: ${current ? escapeHtml(current.name) : 'Choose a page'}</div><div class="rune-list">${pages.map(page => `<button type="button" class="rune-button" data-rune-id="${page.id}" ${page.isCurrent ? 'disabled' : ''}><span>${escapeHtml(page.name)}</span><em>${page.isCurrent ? 'Active' : 'Set'}</em></button>`).join('')}</div></div>`;
+    }
+    function renderLoadout() {
+      if (!state) return;
+      const key = JSON.stringify([state.isInChampSelect, state.spell1Id, state.spell2Id,
+        state.summonerSpells, state.runePages, state.currentRunePage, state.recommendedRunePages]);
+      if (key === loadoutKey) return;
+      loadoutKey = key;
+      const focused = document.activeElement?.dataset;
+      const focusSelector = focused?.slot ? `[data-slot="${focused.slot}"]` :
+        focused?.runeId ? `[data-rune-id="${focused.runeId}"]` :
+        focused?.recommendedIndex ? `[data-recommended-index="${focused.recommendedIndex}"]` : null;
+      if (!state.isInChampSelect) {
+        ui.loadout.innerHTML = '<h2>Loadout</h2><div class="loadout"><p class="loadout-note">Summoner spells and runes are available during champion select.</p></div>';
+        return;
+      }
+      const spells = state.summonerSpells || [];
+      ui.loadout.innerHTML = `<h2>Loadout</h2><div class="loadout"><p class="loadout-note">Choose spells and apply a rune page before locking in.</p><div class="spell-slots">${renderSpellButton(1, spells.find(spell => spell.isSpell1))}${renderSpellButton(2, spells.find(spell => spell.isSpell2))}</div>${renderRecommendedRunes()}${renderSavedRunes()}</div>`;
+      for (const button of ui.loadout.querySelectorAll('[data-slot]')) button.onclick = () => openSpellModal(Number(button.dataset.slot));
+      for (const button of ui.loadout.querySelectorAll('[data-rune-id]')) button.onclick = () => selectRunePage(Number(button.dataset.runeId));
+      for (const button of ui.loadout.querySelectorAll('[data-recommended-index]')) button.onclick = () => selectRecommendedRunes(Number(button.dataset.recommendedIndex));
+      if (focusSelector) ui.loadout.querySelector(focusSelector)?.focus({preventScroll: true});
+    }
+    function openModal(modal, initialFocus) {
+      returnFocus = document.activeElement;
+      activeModal = modal;
+      modal.hidden = false;
+      document.body.classList.add('modal-open');
+      (initialFocus || modal.querySelector('button'))?.focus();
+    }
+    function closeModal(modal) {
+      modal.hidden = true;
+      if (activeModal === modal) activeModal = null;
+      document.body.classList.remove('modal-open');
+      const replacement = returnFocus?.dataset?.slot ? ui.loadout.querySelector(`[data-slot="${returnFocus.dataset.slot}"]`) : null;
+      (returnFocus?.isConnected ? returnFocus : replacement || ui.search)?.focus({preventScroll: true});
+      returnFocus = null;
+    }
+    function closeSpellModal() { if (!ui.spellModal.hidden) closeModal(ui.spellModal); }
+    function resolveConfirm(accepted) {
+      if (ui.confirmModal.hidden) return;
+      closeModal(ui.confirmModal);
+      const resolve = confirmResolve; confirmResolve = null;
+      resolve?.(accepted);
+    }
+    function confirmAction(title, message, buttonText, danger = false) {
+      if (activeModal || actionPending) return Promise.resolve(false);
+      ui.confirmTitle.textContent = title;
+      ui.confirmCopy.textContent = message;
+      ui.confirmAccept.textContent = buttonText;
+      ui.confirmAccept.className = `modal-button ${danger ? 'danger' : 'primary'}`;
+      return new Promise(resolve => { confirmResolve = resolve; openModal(ui.confirmModal, $('cancelConfirm')); });
+    }
+    function openSpellModal(slot) {
+      if (!state?.isInChampSelect || activeModal) return;
+      ui.spellTitle.textContent = `Choose summoner spell ${slot}`;
+      ui.spellGrid.replaceChildren();
+      const spells = state.summonerSpells || [];
+      const available = spells.filter(spell => spell.isAvailable);
+      if (!available.length) {
+        const message = document.createElement('p'); message.className = 'rail-empty';
+        message.textContent = 'No summoner spells are available in this mode.';
+        ui.spellGrid.appendChild(message);
+      }
+      for (const spell of available) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'spell-option';
+        button.innerHTML = `<img src="${escapeAttr(spell.imageUrl)}" alt=""><strong>${escapeHtml(spell.name)}</strong>`;
+        button.onclick = () => selectSpell(slot, spell.id);
+        ui.spellGrid.appendChild(button);
+      }
+      openModal(ui.spellModal, $('closeSpellModal'));
+    }
+    async function runAction(path, payload, fallback) {
+      if (actionPending || !hasFullState) return false;
+      actionPending = true;
+      document.body.classList.add('busy');
+      renderMobileActions();
+      try {
+        const response = await fetch(path, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-Remote-Pick-Request': '1'},
+          body: JSON.stringify(payload ?? {})
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          showToast(result.message || 'League Client rejected the action.', true);
+          return false;
+        }
+        showToast(result.message || fallback);
+        await loadState();
+        await loadTimer();
+        return true;
+      } catch {
+        showToast('Could not reach Remote Pick. Check the connection and try again.', true);
+        return false;
+      } finally {
+        actionPending = false;
+        document.body.classList.remove('busy');
+        renderMobileActions(); updateStatus();
+      }
+    }
+    function hoverChampion(id) { return runAction('/api/hover', {championId: id}, 'Champion intent updated.'); }
+    async function pickChampion(champion) {
+      if (await confirmAction(`Lock in ${champion.name}?`, 'This will confirm your champion pick in League Client.', 'Lock in'))
+        await runAction('/api/pick', {championId: champion.id}, 'Champion locked in.');
+    }
+    async function banChampion(champion) {
+      if (await confirmAction(`Ban ${champion.name}?`, 'This will confirm your champion ban in League Client.', 'Ban champion', true))
+        await runAction('/api/ban', {championId: champion.id}, 'Champion banned.');
+    }
+    async function selectSpell(slot, spellId) {
+      if (await runAction('/api/spell', {slot, spellId}, 'Summoner spell updated.')) closeSpellModal();
+    }
+    function selectRunePage(pageId) { return runAction('/api/rune-page', {pageId}, 'Rune page selected.'); }
+    function selectRecommendedRunes(index) { return runAction('/api/recommended-rune-page', {index}, 'Recommended runes applied.'); }
+    async function leaveLobby() {
+      if (!state?.canLeave) return;
+      const label = ui.leave.textContent || 'Leave lobby';
+      const warning = state.phase === 'ChampSelect'
+        ? 'You will leave champion select. League Client may apply a dodge penalty.'
+        : state.phase === 'ReadyCheck' ? 'You will decline this ready check.' : 'You will leave the current lobby or queue.';
+      if (await confirmAction(`${label}?`, warning, label, true)) await runAction('/api/leave', {}, 'Leave request sent.');
+    }
+    function setView(view) {
+      ui.layout.dataset.view = view;
+      document.body.dataset.view = view;
+      for (const button of document.querySelectorAll('[data-view-button]')) button.setAttribute('aria-pressed', String(button.dataset.viewButton === view));
+    }
+    function clearSearch() {
+      ui.search.value = ''; query = ''; ui.clearSearch.hidden = true;
+      gridKey = ''; renderChampionGrid(); ui.search.focus();
+    }
+    ui.search.addEventListener('input', () => {
+      query = ui.search.value.trim().toLocaleLowerCase();
+      ui.clearSearch.hidden = !query;
+      gridKey = ''; renderChampionGrid();
+    });
+    ui.clearSearch.onclick = clearSearch;
+    ui.emptyClear.onclick = clearSearch;
+    $('refreshButton').onclick = () => { loadState(); loadTimer(); };
+    ui.leave.onclick = leaveLobby;
+    ui.hover.onclick = () => { const champion = getSelectedChampion(); if (champion) hoverChampion(champion.id); };
+    ui.ban.onclick = () => { const champion = getSelectedChampion(); if (champion) banChampion(champion); };
+    ui.pick.onclick = () => { const champion = getSelectedChampion(); if (champion) pickChampion(champion); };
+    $('closeSpellModal').onclick = closeSpellModal;
+    $('cancelConfirm').onclick = () => resolveConfirm(false);
+    ui.confirmAccept.onclick = () => resolveConfirm(true);
+    ui.spellModal.onclick = event => { if (event.target === ui.spellModal && !actionPending) closeSpellModal(); };
+    ui.confirmModal.onclick = event => { if (event.target === ui.confirmModal) resolveConfirm(false); };
+    for (const button of document.querySelectorAll('[data-view-button]')) button.onclick = () => setView(button.dataset.viewButton);
+    document.addEventListener('keydown', event => {
+      if (!activeModal) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (activeModal === ui.spellModal && !actionPending) closeSpellModal();
+        else if (activeModal === ui.confirmModal) resolveConfirm(false);
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...activeModal.querySelectorAll('button:not([disabled])')];
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') { loadState(); loadTimer(); }
+    });
+    loadState(); loadTimer();
+    setInterval(() => { if (document.visibilityState === 'visible') loadTimer(); }, 1000);
+    setInterval(() => { if (document.visibilityState === 'visible') loadState(); }, 4000);
+    setInterval(updateTimerDisplay, 250);
+  </script>
+</body>
+</html>
