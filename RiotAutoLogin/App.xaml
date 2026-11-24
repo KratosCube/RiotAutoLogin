@@ -83,5 +83,25 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <DataTemplate x:Key="AccountWinRate">
+            <DockPanel ToolTip="Win rate for the selected ranked queue" LastChildFill="True">
+                <TextBlock DockPanel.Dock="Right" Margin="6,0,0,0" FontSize="11"
+                           Foreground="{StaticResource MutedTextBrush}"
+                           Text="{Binding WinFraction, StringFormat={}{0:0%} WR, TargetNullValue=—}"/>
+                <Grid Height="4" VerticalAlignment="Center">
+                    <Border x:Name="Track" CornerRadius="2" Background="#795157"/>
+                    <Border Background="#49C6B3" CornerRadius="2" RenderTransformOrigin="0,0.5">
+                        <Border.RenderTransform>
+                            <ScaleTransform ScaleX="{Binding WinFraction, TargetNullValue=0}"/>
+                        </Border.RenderTransform>
+                    </Border>
+                </Grid>
+            </DockPanel>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding WinFraction}" Value="{x:Null}">
+                    <Setter TargetName="Track" Property="Background" Value="{StaticResource BorderBrush}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </Application.Resources>
 </Application>

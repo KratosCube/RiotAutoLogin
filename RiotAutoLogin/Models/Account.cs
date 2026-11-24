@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 
 namespace RiotAutoLogin.Models
 {
-    public class Account : INotifyPropertyChanged
+    public partial class Account : INotifyPropertyChanged
     {
         private string _accountName = "", _gameName = "", _tagLine = "", _region = "", _avatarPath = "";
         public string AccountName { get => _accountName; set => SetDisplayField(ref _accountName, value); }
@@ -28,6 +28,15 @@ namespace RiotAutoLogin.Models
 
         [JsonIgnore] public RankedQueue SelectedQueue { get; set; }
         [JsonIgnore] public RankData? DisplayRank => QueueRanks.GetValueOrDefault(SelectedQueue);
+        [JsonIgnore] public double? WinFraction
+        {
+            get
+            {
+                if (DisplayRank is not { } rank) return null;
+                long games = (long)rank.Wins + rank.Losses;
+                return games > 0 ? (double)rank.Wins / games : null;
+            }
+        }
         [JsonIgnore] public string DisplayRankInfo => DisplayRank?.Label ?? (SelectedQueue == RankedQueue.RankedFives ? "No Ranked 5s data" : "Not synced");
         [JsonIgnore] public string DisplayLeaguePoints => DisplayRank?.LeaguePoints.ToString() ?? "—";
         [JsonIgnore] public string DisplayWins => DisplayRank?.Wins.ToString() ?? "—";
@@ -40,11 +49,14 @@ namespace RiotAutoLogin.Models
             if (field == value) return;
             field = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+            if (name == nameof(AvatarPath)) AvatarChanged();
         }
+
+        partial void AvatarChanged();
 
         public void RefreshRankDisplay()
         {
-            foreach (string name in new[] { nameof(DisplayRank), nameof(DisplayRankInfo), nameof(DisplayLeaguePoints), nameof(DisplayWins), nameof(DisplayLosses) })
+            foreach (string name in new[] { nameof(DisplayRank), nameof(WinFraction), nameof(DisplayRankInfo), nameof(DisplayLeaguePoints), nameof(DisplayWins), nameof(DisplayLosses) })
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 

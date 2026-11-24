@@ -45,9 +45,10 @@ internal static class Program
         {
             using var original = new System.Drawing.Bitmap(2400, 1200);
             original.Save(path, System.Drawing.Imaging.ImageFormat.Png);
-            var converter = new StringToImageSourceConverter();
-            var image = converter.Convert(path, typeof(BitmapSource), null!, System.Globalization.CultureInfo.InvariantCulture);
-            if (image is not BitmapSource { PixelWidth: 192, PixelHeight: 96 })
+            var account = new Account { AvatarPath = path };
+            var image = account.AvatarThumbnail;
+            if (image is not BitmapSource { PixelWidth: 192, PixelHeight: 96, IsFrozen: true } ||
+                !ReferenceEquals(image, account.AvatarThumbnail))
                 throw new Exception("Account cards did not decode a proportional thumbnail.");
         }
         finally { System.IO.File.Delete(path); }

@@ -104,6 +104,14 @@ try
     Equal(0, wrongPlayer.Count, "A matching name and a different tag cannot contribute ranks");
 
     var account = new Account { RankInfo = "GOLD IV (40 LP, 10W/11L)", LeaguePoints = 40, Wins = 10, Losses = 11 };
+    foreach (var (wins, losses, fraction) in new (int, int, double?)[] { (0, 0, null), (0, 2, 0), (2, 0, 1), (3, 1, 0.75) })
+    {
+        var sample = new Account();
+        sample.ApplyRanks(new() { [RankedQueue.SoloDuo] = new RankData { Wins = wins, Losses = losses } });
+        Equal(fraction, sample.WinFraction, "Win-rate bar reflects recorded games");
+        sample.SelectedQueue = RankedQueue.Flex;
+        Equal<double?>(null, sample.WinFraction, "Unknown queue has a neutral win-rate bar");
+    }
     account.MigrateLegacyRank();
     Equal("10", account.DisplayWins, "Old Solo/Duo data survives migration");
     account.SelectedQueue = RankedQueue.Flex;

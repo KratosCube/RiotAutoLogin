@@ -16,7 +16,7 @@
         UseLayoutRounding="True"
         FontFamily="Segoe UI Variable Text, Segoe UI">
     <Window.Resources>
-        <conv:StringToImageSourceConverter x:Key="AvatarConverter"/>
+        <conv:RankEmblemConverter x:Key="EmblemConverter"/>
         <conv:RankInfoConverter x:Key="RankConverter"/>
         <Style x:Key="AccountChoiceStyle" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}"/>
@@ -81,9 +81,6 @@
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1"
                 CornerRadius="20">
-            <Border.Effect>
-                <DropShadowEffect ShadowDepth="0" BlurRadius="18" Opacity="0.3"/>
-            </Border.Effect>
             <Grid Margin="18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -142,7 +139,7 @@
                                             <Grid>
                                                 <TextBlock Text="●" Foreground="{StaticResource AccentBrush}"
                                                            FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                <Image Source="{Binding AvatarPath, Converter={StaticResource AvatarConverter}}"
+                                                <Image Source="{Binding AvatarThumbnail, IsAsync=True}"
                                                        Stretch="UniformToFill"/>
                                             </Grid>
                                         </Border>
@@ -152,20 +149,20 @@
                                                        TextTrimming="CharacterEllipsis"/>
                                             <TextBlock FontSize="11" Foreground="{StaticResource MutedTextBrush}"
                                                        TextTrimming="CharacterEllipsis" Margin="0,3,0,0">
-                                                <Run Text="#"/><Run Text="{Binding TagLine}"/>
+                                                <Run Text="#"/><Run Text="{Binding TagLine}"/><Run Text="  ·  "/><Run Text="{Binding Region}"/>
                                             </TextBlock>
                                         </StackPanel>
                                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="10,0,0,0"
                                                     HorizontalAlignment="Right">
-                                            <Border CornerRadius="7" Background="{StaticResource SecondaryBackgroundBrush}"
-                                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                                                    Padding="7,3" HorizontalAlignment="Right">
-                                                <TextBlock Text="{Binding Region}" FontSize="10" FontWeight="SemiBold"
-                                                           Foreground="{StaticResource MutedTextBrush}"/>
-                                            </Border>
-                                            <TextBlock Text="{Binding DisplayRankInfo, Converter={StaticResource RankConverter}}"
-                                                       FontSize="10" Foreground="{StaticResource MutedTextBrush}"
-                                                       HorizontalAlignment="Right" Margin="0,6,0,0"/>
+                                            <DockPanel HorizontalAlignment="Right">
+                                                <Image Width="28" Height="24" Margin="0,0,5,0" Stretch="Uniform"
+                                                       Source="{Binding DisplayRank, Converter={StaticResource EmblemConverter}}"/>
+                                                <TextBlock VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Text="{Binding DisplayRankInfo, Converter={StaticResource RankConverter}}"/>
+                                            </DockPanel>
+                                            <ContentPresenter MinWidth="100" Margin="0,3,0,0" Content="{Binding}"
+                                                              ContentTemplate="{StaticResource AccountWinRate}"/>
                                         </StackPanel>
                                     </Grid>
                                 </Button>
