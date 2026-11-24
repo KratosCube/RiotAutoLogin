@@ -155,6 +155,8 @@
                                                        TextTrimming="CharacterEllipsis" Margin="0,3,0,0">
                                                 <Run Text="#"/><Run Text="{Binding TagLine}"/><Run Text="  ·  "/><Run Text="{Binding Region}"/>
                                             </TextBlock>
+                                            <ContentPresenter x:Name="OpponentRank" Margin="0,3,0,0" Content="{Binding}"
+                                                              ContentTemplate="{StaticResource OpponentRank}"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="10,0,0,0"
                                                     HorizontalAlignment="Right">

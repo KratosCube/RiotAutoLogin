@@ -111,6 +111,13 @@ internal static class Program
                     QueueRanks = new() { [RankedQueue.SoloDuo] = new RankData { Tier = "SILVER", Rank = "IV", Wins = 3, Losses = 7 } } },
                 new() { GameName = "New account", TagLine = "R4", Region = "euw1" }
             };
+            double[] sampleRanks = [2250, 2850, 1100];
+            for (int i = 0; i < sampleRanks.Length; i++)
+                popupAccounts[i].ApplyOpponentRanks(RankedQueue.SoloDuo, new OpponentRankSummary
+                {
+                    MeanRankPosition = sampleRanks[i], Games = 10, RankedOpponents = 48,
+                    TotalOpponents = 50, UpdatedUtc = DateTime.UtcNow
+                });
             var chooser = new QuickLoginWindow(popupAccounts);
             try
             {
@@ -133,8 +140,11 @@ internal static class Program
                     if ((emblem.Source != null) != (i < 3))
                         throw new Exception("The popup rank emblem does not match the saved account.");
                     var button = (System.Windows.Controls.Button)choices.ItemTemplate.FindName("AccountChoice", presenter);
+                    var opponents = (ContentPresenter)choices.ItemTemplate.FindName("OpponentRank", presenter);
+                    AccountGridChecks.CheckOpponentRank(opponents, popupAccounts[i].OpponentRankLabel);
+                    var opponentBounds = opponents.TransformToAncestor(button).TransformBounds(new Rect(opponents.RenderSize));
                     var rateBounds = rate.TransformToAncestor(button).TransformBounds(new Rect(rate.RenderSize));
-                    if (!new Rect(button.RenderSize).Contains(rateBounds))
+                    if (!new Rect(button.RenderSize).Contains(rateBounds) || !new Rect(button.RenderSize).Contains(opponentBounds))
                         throw new Exception("The popup win rate extends past the account button.");
                 }
                 AccountGridChecks.Capture(chooser, "quick-login-preview.png");
