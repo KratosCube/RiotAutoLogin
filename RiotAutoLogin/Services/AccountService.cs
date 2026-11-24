@@ -58,7 +58,7 @@ namespace RiotAutoLogin.Services
             {
                 string name = account.GameName, tag = account.TagLine;
                 var ranks = await RiotClientAutomationService.GetRanksAsync(name, tag, region);
-                if (ranks.Count == 0 || account.GameName != name || account.TagLine != tag || account.Region != region)
+                if (ranks.Count == 0 || !account.MatchesRiotId(name, tag, region))
                     return false;
                 account.ApplyRanks(ranks);
                 return true;

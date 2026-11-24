@@ -312,7 +312,7 @@
                                 Background="{StaticResource SecondaryBackgroundBrush}"
                                 BorderBrush="{StaticResource BorderBrush}"
                                 BorderThickness="1">
-                            <Image Source="pack://application:,,,/resources/logoAcc.ico"
+                            <Image Source="pack://application:,,,/RiotAutoLogin;component/resources/logoAcc.ico"
                                    Stretch="Uniform"/>
                         </Border>
 
@@ -418,7 +418,7 @@
                                               Style="{StaticResource DarkScrollViewerStyle}"
                                               HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
                                               CanContentScroll="False" ClipToBounds="True" Padding="2,0,2,2">
-                                    <ItemsControl x:Name="icLoginAccounts"
+                                    <ItemsControl x:Name="icLoginAccounts" VerticalAlignment="Top"
                                                   ItemsSource="{Binding ElementName=lbLoginAccounts, Path=ItemsSource}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><UniformGrid Columns="4"/></ItemsPanelTemplate>
@@ -426,7 +426,7 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Border x:Name="AccountCard" Style="{StaticResource InteractiveCardStyle}"
-                                                        Margin="4,3,4,6" Padding="12,10" Tag="{Binding}"
+                                                        Margin="4,3,4,6" Padding="12,16" Tag="{Binding}"
                                                         MouseDown="LoginCard_MouseDown">
                                                     <StackPanel>
                                                         <Grid>
@@ -456,7 +456,7 @@
                                                                 </TextBlock>
                                                             </StackPanel>
                                                         </Grid>
-                                                        <DockPanel Margin="0,5,0,5" MinHeight="28" ToolTip="{Binding DisplayRankInfo}">
+                                                        <DockPanel Margin="0,13,0,9" MinHeight="28" ToolTip="{Binding DisplayRankInfo}">
                                                             <Image x:Name="RankEmblem" DockPanel.Dock="Left" Width="30" Height="26"
                                                                    Margin="0,0,6,0" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
                                                                    Source="{Binding DisplayRank, Converter={StaticResource RankEmblemConverter}}"/>

@@ -49,9 +49,8 @@ internal static class AccountGridChecks
             {
                 UIService.UpdateTotalGameStats(window, eight, RankedQueue.SoloDuo);
                 window.UpdateLayout();
-                var view = (FrameworkElement)window.Content;
-                var image = new RenderTargetBitmap((int)Math.Ceiling(view.ActualWidth), (int)Math.Ceiling(view.ActualHeight), 96, 96, PixelFormats.Pbgra32);
-                image.Render(view);
+                var image = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth), (int)Math.Ceiling(window.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+                image.Render(window);
                 var png = new PngBitmapEncoder();
                 png.Frames.Add(BitmapFrame.Create(image));
                 Directory.CreateDirectory("build");

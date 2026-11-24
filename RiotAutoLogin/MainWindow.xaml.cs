@@ -499,9 +499,7 @@ namespace RiotAutoLogin
             {
                 string region = _selectedRegion;
                 selected.AccountName = txtAccountLogin.Text;
-                selected.GameName = txtGameName.Text;
-                selected.TagLine = txtTagLine.Text;
-                selected.Region = region;
+                selected.UpdateRiotId(txtGameName.Text, txtTagLine.Text, region);
                 if (!string.IsNullOrWhiteSpace(txtAccountPassword.Password))
                 {
                     selected.EncryptedPassword = EncryptionService.EncryptString(txtAccountPassword.Password);

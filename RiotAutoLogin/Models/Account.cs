@@ -77,6 +77,26 @@ namespace RiotAutoLogin.Models
             }
             RefreshRankDisplay();
         }
+
+        public bool MatchesRiotId(string gameName, string tagLine, string region) =>
+            string.Equals(GameName?.Trim(), gameName?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(TagLine?.Trim(), tagLine?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(Region?.Trim(), region?.Trim(), StringComparison.OrdinalIgnoreCase);
+
+        public void UpdateRiotId(string gameName, string tagLine, string region)
+        {
+            bool samePlayer = MatchesRiotId(gameName, tagLine, region);
+            GameName = gameName;
+            TagLine = tagLine;
+            Region = region;
+            if (samePlayer) return;
+
+            QueueRanks = new();
+            RanksUpdatedUtc = null;
+            RankInfo = string.Empty;
+            LeaguePoints = Wins = Losses = 0;
+            RefreshRankDisplay();
+        }
     }
 
     public class GreyscreenData

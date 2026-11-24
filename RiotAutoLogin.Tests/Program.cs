@@ -122,6 +122,12 @@ try
     reloadedAccount.QueueRanks[RankedQueue.RankedFives] = new RankData();
     reloadedAccount.MigrateLegacyRank();
     Equal(false, reloadedAccount.QueueRanks.ContainsKey(RankedQueue.RankedFives), "Remove synthetic zeroes saved by older releases");
+    reloadedAccount.UpdateRiotId("Two Words", "TAG", "eun1");
+    reloadedAccount.ApplyRanks(clientRanks);
+    reloadedAccount.UpdateRiotId("two words", "tag", "EUN1");
+    Equal(72, reloadedAccount.QueueRanks[RankedQueue.RankedFives].LeaguePoints, "Cosmetic Riot ID edits preserve cached ranks");
+    reloadedAccount.UpdateRiotId("Two Words", "OTHER", "eun1");
+    Equal(0, reloadedAccount.QueueRanks.Count, "An edited Riot ID cannot inherit another player's weekend rank");
     Equal(false, JsonSerializer.Serialize(account).Contains("DisplayWins"), "Display-only values are not persisted");
     var changes = new List<string?>();
     account.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
