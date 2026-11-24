@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace RiotAutoLogin.Models
 {
@@ -39,6 +40,8 @@ namespace RiotAutoLogin.Models
         public int PickIntentChampionId { get; set; }
         public int HoveredChampionId { get; set; }
         public string HoveredChampionSource { get; set; } = string.Empty;
+        public int HoveredBanChampionId { get; set; }
+        public bool BanFallbackArmed { get; set; }
         public int Spell1Id { get; set; }
         public int Spell2Id { get; set; }
         public List<int> BannedChampionIds { get; set; } = new();
@@ -76,6 +79,13 @@ namespace RiotAutoLogin.Models
         public bool IsLocalPlayer { get; set; }
         public string Name { get; set; } = string.Empty;
         public string ImageUrl { get; set; } = string.Empty;
+        public string PlayerName { get; set; } = string.Empty;
+        public string ProfileUrl { get; set; } = string.Empty;
+        [JsonIgnore] public string PlayerPuuid { get; set; } = string.Empty;
+        [JsonIgnore] public string PlayerSummonerId { get; set; } = string.Empty;
+        [JsonIgnore] public bool IsPlayerNameVisible { get; set; }
+        [JsonIgnore] public string RiotGameName { get; set; } = string.Empty;
+        [JsonIgnore] public string RiotTagLine { get; set; } = string.Empty;
     }
 
     public class RemoteChampionDto
@@ -166,5 +176,6 @@ namespace RiotAutoLogin.Models
         public string Message { get; set; } = string.Empty;
         public int ConfirmedChampionId { get; set; }
         public string ConfirmedChampionSource { get; set; } = string.Empty;
+        public bool AutoBanArmed { get; set; }
     }
 }

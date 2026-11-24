@@ -1,6 +1,7 @@
 using RiotAutoLogin.Models;
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -39,6 +40,15 @@ namespace RiotAutoLogin.Services
         private sealed record RuneMetadata(string Name, string IconUrl);
         private sealed record RuneMetadataCache(DateTime ExpiresUtc, Dictionary<int, RuneMetadata> Values);
         private RuneMetadataCache? _runeMetadataCache;
+        private readonly ConcurrentDictionary<string, PlayerProfileCache> _playerProfiles = new();
+        private sealed record PlayerProfileCache(string GameName, string TagLine, DateTime ExpiresUtc);
+        private string _profileRegion = string.Empty;
+        private DateTime _profileRegionExpiresUtc;
+        private readonly SemaphoreSlim _banActionGate = new(1, 1);
+        private readonly object _banFallbackSync = new();
+        private CancellationTokenSource? _banFallbackCts;
+        private string _banFallbackActionId = string.Empty;
+        private int _banFallbackChampionId;
 
         public bool IsRunning { get; private set; }
         public int Port { get; private set; } = DefaultPort;
@@ -67,6 +77,7 @@ namespace RiotAutoLogin.Services
                 return;
 
             IsRunning = false;
+            CancelBanFallback();
             try
             {
                 _cts?.Cancel();
@@ -177,6 +188,8 @@ namespace RiotAutoLogin.Services
                     await WriteJsonResponseAsync(stream, 200, "OK", await GetStateAsync(), cancellationToken);
                 else if (method == "POST" && path.StartsWith("/api/pick", StringComparison.OrdinalIgnoreCase))
                     await WriteActionResponseAsync(stream, await PickChampionAsync(body), cancellationToken);
+                else if (method == "POST" && path.StartsWith("/api/ban-hover", StringComparison.OrdinalIgnoreCase))
+                    await WriteActionResponseAsync(stream, await HoverBanChampionAsync(body), cancellationToken);
                 else if (method == "POST" && path.StartsWith("/api/ban", StringComparison.OrdinalIgnoreCase))
                     await WriteActionResponseAsync(stream, await BanChampionAsync(body), cancellationToken);
                 else if (method == "POST" && path.StartsWith("/api/hover", StringComparison.OrdinalIgnoreCase))
@@ -243,7 +256,10 @@ namespace RiotAutoLogin.Services
             }
 
             if (state.IsInChampSelect)
+            {
                 await AddChampionSpellAndRuneListsAsync(state, new HashSet<int>(state.BannedChampionIds), pickedChampionIds, allyPickedChampionIds, enemyPickedChampionIds);
+                await LoadPlayerProfilesAsync(state);
+            }
 
             return state;
         }
@@ -319,11 +335,13 @@ namespace RiotAutoLogin.Services
             ParseLocalPlayerSelection(root, state);
             ParseTeamSlots(root, state);
             EnrichTeamSlots(state);
+            FillCachedPlayerProfiles(state);
             ParseQueueAndMode(root, state);
             ParseAvailableChampionIds(root, state);
             ParseAvailableSpellIds(root, state);
             ParseTimer(root, state);
             ParseActions(root, state);
+            state.BanFallbackArmed = IsBanFallbackArmed(state.ActionId, state.HoveredBanChampionId);
             if (state.HoveredChampionId <= 0 && state.SelectedChampionId > 0 &&
                 state.ChampSelectPhase.Contains("PLANNING", StringComparison.OrdinalIgnoreCase))
                 {
@@ -426,16 +444,152 @@ namespace RiotAutoLogin.Services
             if (request == null)
                 return Failure("Invalid champion.");
 
-            RemotePickState state = await GetTimerStateAsync();
-            if (!state.IsInChampSelect)
-                return Failure("You are not in champion select.");
-            if (!state.CanBan)
-                return Failure("It is not your ban turn.");
-            if (state.BannedChampionIds.Contains(request.ChampionId))
-                return Failure("This champion is already banned.");
+            await _banActionGate.WaitAsync();
+            try
+            {
+                RemotePickState state = await GetTimerStateAsync();
+                if (!state.IsInChampSelect)
+                    return Failure("You are not in champion select.");
+                if (!state.CanBan)
+                    return Failure("It is not your ban turn.");
+                if (state.BannedChampionIds.Contains(request.ChampionId))
+                    return Failure("This champion is already banned.");
 
-            bool success = LCUService.SelectChampion(request.ChampionId, state.ActionId, complete: true);
-            return new RemotePickActionResult { Success = success, Message = success ? "Champion banned." : "League Client rejected the ban request." };
+                bool success = LCUService.SelectChampion(request.ChampionId, state.ActionId, complete: true);
+                if (success) CancelBanFallback();
+                return new RemotePickActionResult { Success = success, Message = success ? "Champion banned." : "League Client rejected the ban request." };
+            }
+            finally { _banActionGate.Release(); }
+        }
+
+        public async Task<RemotePickActionResult> HoverBanChampionAsync(string body)
+        {
+            RemotePickRequest? request = ParseChampionRequest(body);
+            if (request == null)
+                return Failure("Invalid champion.");
+
+            await _banActionGate.WaitAsync();
+            try
+            {
+                RemotePickState state = await GetTimerStateAsync();
+                if (!state.CanBan || string.IsNullOrWhiteSpace(state.ActionId))
+                    return Failure("It is not your ban turn.");
+                if (state.BannedChampionIds.Contains(request.ChampionId))
+                    return Failure("This champion is already banned.");
+
+                RemotePickState? observed = state;
+                if (state.HoveredBanChampionId != request.ChampionId)
+                {
+                    string payload = JsonSerializer.Serialize(new { championId = request.ChampionId, completed = false }, _jsonOptions);
+                    string[] reply = await LCUService.ClientRequestAsync("PATCH", $"lol-champ-select/v1/session/actions/{state.ActionId}", payload);
+                    if (!reply[0].StartsWith("2"))
+                        return Failure("League Client did not accept this ban preview.");
+
+                    observed = null;
+                    for (int attempt = 0; attempt < 3; attempt++)
+                    {
+                        if (attempt > 0) await Task.Delay(80);
+                        RemotePickState? latest = await ReadClientHoverAsync();
+                        if (latest?.ActionId == state.ActionId && latest.CanBan && latest.HoveredBanChampionId == request.ChampionId)
+                        {
+                            observed = latest;
+                            break;
+                        }
+                    }
+                }
+
+                if (observed == null)
+                    return Failure("League Client did not confirm this ban preview.");
+                bool armed = ArmBanFallback(observed, request.ChampionId);
+                return new RemotePickActionResult
+                {
+                    Success = true,
+                    ConfirmedChampionId = request.ChampionId,
+                    ConfirmedChampionSource = "BanSlot",
+                    AutoBanArmed = armed,
+                    Message = armed ? "Ban preview confirmed. It will lock near the end of your turn if you do not ban sooner." :
+                        "Ban preview confirmed. Confirm the ban yourself in this mode."
+                };
+            }
+            finally { _banActionGate.Release(); }
+        }
+
+        private bool ArmBanFallback(RemotePickState state, int championId)
+        {
+            CancelBanFallback();
+            if (!state.CanBan || state.HoveredBanChampionId != championId || state.IsTimerInfinite || state.TimeLeftInPhaseMs < 0)
+                return false;
+
+            var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_cts?.Token ?? CancellationToken.None);
+            lock (_banFallbackSync)
+            {
+                _banFallbackCts = cancellation;
+                _banFallbackActionId = state.ActionId;
+                _banFallbackChampionId = championId;
+            }
+            _ = AutoCompleteBanAsync(state.ActionId, championId, Math.Max(0, state.TimeLeftInPhaseMs - 1800), cancellation);
+            return true;
+        }
+
+        private void CancelBanFallback()
+        {
+            lock (_banFallbackSync)
+            {
+                _banFallbackCts?.Cancel();
+                _banFallbackCts = null;
+                _banFallbackActionId = string.Empty;
+                _banFallbackChampionId = 0;
+            }
+        }
+
+        private bool IsBanFallbackArmed(string actionId, int championId)
+        {
+            lock (_banFallbackSync)
+                return championId > 0 && _banFallbackCts is { IsCancellationRequested: false } &&
+                    _banFallbackActionId == actionId && _banFallbackChampionId == championId;
+        }
+
+        private async Task AutoCompleteBanAsync(string actionId, int championId, int delayMs, CancellationTokenSource cancellation)
+        {
+            try
+            {
+                while (true)
+                {
+                    await Task.Delay(delayMs, cancellation.Token);
+                    await _banActionGate.WaitAsync(cancellation.Token);
+                    try
+                    {
+                        if (!IsBanFallbackArmed(actionId, championId)) return;
+                        RemotePickState fresh = await GetTimerStateAsync();
+                        if (!fresh.CanBan || fresh.ActionId != actionId || fresh.HoveredBanChampionId != championId ||
+                            fresh.BannedChampionIds.Contains(championId) || fresh.IsTimerInfinite || fresh.TimeLeftInPhaseMs < 0)
+                            return;
+                        if (fresh.TimeLeftInPhaseMs <= 3000)
+                        {
+                            if (!cancellation.IsCancellationRequested)
+                                LCUService.SelectChampion(championId, actionId, complete: true);
+                            return;
+                        }
+                        delayMs = Math.Max(250, fresh.TimeLeftInPhaseMs - 1800);
+                    }
+                    finally { _banActionGate.Release(); }
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Debug.WriteLine($"Remote Pick backup ban failed: {ex.Message}"); }
+            finally
+            {
+                lock (_banFallbackSync)
+                {
+                    if (ReferenceEquals(_banFallbackCts, cancellation))
+                    {
+                        _banFallbackCts = null;
+                        _banFallbackActionId = string.Empty;
+                        _banFallbackChampionId = 0;
+                    }
+                }
+                cancellation.Dispose();
+            }
         }
 
         public async Task<RemotePickActionResult> HoverChampionAsync(string body)
@@ -1175,11 +1329,12 @@ namespace RiotAutoLogin.Services
         private static void ParseTeamSlots(JsonElement root, RemotePickState state)
         {
             int localCellId = TryGetPropertyInt(root, "localPlayerCellId", out int id) ? id : -1;
-            state.AllySlots = ReadTeamSlots(root, "myTeam", localCellId);
-            state.EnemySlots = ReadTeamSlots(root, "theirTeam", -1);
+            bool isCustomGame = GetBoolProperty(root, "isCustomGame");
+            state.AllySlots = ReadTeamSlots(root, "myTeam", localCellId, isCustomGame);
+            state.EnemySlots = ReadTeamSlots(root, "theirTeam", -1, isCustomGame);
         }
 
-        private static List<RemoteTeamSlotDto> ReadTeamSlots(JsonElement root, string propertyName, int localCellId)
+        private static List<RemoteTeamSlotDto> ReadTeamSlots(JsonElement root, string propertyName, int localCellId, bool isCustomGame)
         {
             var slots = new List<RemoteTeamSlotDto>();
             if (!root.TryGetProperty(propertyName, out JsonElement team) || team.ValueKind != JsonValueKind.Array)
@@ -1187,15 +1342,123 @@ namespace RiotAutoLogin.Services
 
             foreach (JsonElement player in team.EnumerateArray())
             {
+                int cellId = GetIntProperty(player, "cellId");
+                string gameName = GetStringProperty(player, "gameName", "riotIdGameName") ?? string.Empty;
+                string tagLine = GetStringProperty(player, "tagLine", "riotIdTagLine", "riotIdTagline") ?? string.Empty;
+                string riotId = GetStringProperty(player, "riotId") ?? string.Empty;
+                int separator = riotId.LastIndexOf('#');
+                if (string.IsNullOrEmpty(tagLine) && separator > 0)
+                {
+                    gameName = riotId[..separator];
+                    tagLine = riotId[(separator + 1)..];
+                }
+                string visibility = GetStringProperty(player, "nameVisibilityType") ?? string.Empty;
+                bool visible = cellId == localCellId || visibility.Equals("VISIBLE", StringComparison.OrdinalIgnoreCase) ||
+                    (string.IsNullOrEmpty(visibility) &&
+                        (isCustomGame || (!string.IsNullOrEmpty(gameName) && !string.IsNullOrEmpty(tagLine))));
                 slots.Add(new RemoteTeamSlotDto
                 {
-                    CellId = GetIntProperty(player, "cellId"),
+                    CellId = cellId,
                     ChampionId = GetIntProperty(player, "championId"),
                     IntentChampionId = GetIntProperty(player, "championPickIntent"),
-                    IsLocalPlayer = localCellId >= 0 && GetIntProperty(player, "cellId") == localCellId
+                    IsLocalPlayer = localCellId >= 0 && cellId == localCellId,
+                    PlayerPuuid = GetStringProperty(player, "puuid") ?? string.Empty,
+                    PlayerSummonerId = player.TryGetProperty("summonerId", out JsonElement summonerId) ? GetJsonValueAsString(summonerId) : string.Empty,
+                    IsPlayerNameVisible = visible,
+                    RiotGameName = visible ? gameName : string.Empty,
+                    RiotTagLine = visible ? tagLine : string.Empty
                 });
             }
             return slots;
+        }
+
+        private string GetProfileRegion()
+        {
+            if (DateTime.UtcNow < _profileRegionExpiresUtc)
+                return _profileRegion;
+
+            _profileRegionExpiresUtc = DateTime.UtcNow.AddSeconds(15);
+            string[] response = LCUService.ClientRequest("GET", "riotclient/region-locale");
+            if (response[0] == "200")
+            {
+                try
+                {
+                    using JsonDocument document = JsonDocument.Parse(response[1]);
+                    _profileRegion = GetStringProperty(document.RootElement, "region", "webRegion") ?? string.Empty;
+                    _profileRegionExpiresUtc = DateTime.UtcNow.AddMinutes(5);
+                }
+                catch (Exception ex) { Debug.WriteLine($"Could not read player region: {ex.Message}"); _profileRegion = string.Empty; }
+            }
+            else _profileRegion = string.Empty;
+            return _profileRegion;
+        }
+
+        private async Task LoadPlayerProfilesAsync(RemotePickState state)
+        {
+            if (string.IsNullOrEmpty(GetProfileRegion())) return;
+
+            string[] missing = state.AllySlots.Concat(state.EnemySlots)
+                .Where(slot => slot.IsPlayerNameVisible && !string.IsNullOrWhiteSpace(GetPlayerCacheKey(slot)) &&
+                    (string.IsNullOrWhiteSpace(slot.RiotGameName) || string.IsNullOrWhiteSpace(slot.RiotTagLine)))
+                .Select(GetPlayerCacheKey).Distinct().ToArray();
+            await Task.WhenAll(missing.Select(ResolvePlayerProfileAsync));
+            FillCachedPlayerProfiles(state);
+        }
+
+        private static string GetPlayerCacheKey(RemoteTeamSlotDto slot)
+            => !string.IsNullOrWhiteSpace(slot.PlayerPuuid) ? "p:" + slot.PlayerPuuid :
+                !string.IsNullOrWhiteSpace(slot.PlayerSummonerId) && slot.PlayerSummonerId.All(char.IsDigit) ? "s:" + slot.PlayerSummonerId : string.Empty;
+
+        private async Task ResolvePlayerProfileAsync(string key)
+        {
+            if (_playerProfiles.TryGetValue(key, out PlayerProfileCache? cached) && cached.ExpiresUtc > DateTime.UtcNow)
+                return;
+
+            string value = key[2..];
+            string path = Uri.EscapeDataString(value);
+            string[] response = key.StartsWith("p:", StringComparison.Ordinal)
+                ? await LCUService.ClientRequestAsync("GET", $"lol-summoner/v2/summoners/puuid/{path}")
+                : await LCUService.ClientRequestAsync("GET", $"lol-summoner/v1/summoners/{path}");
+            if (response[0] != "200" && key.StartsWith("p:", StringComparison.Ordinal))
+                response = await LCUService.ClientRequestAsync("GET", $"lol-summoner/v1/summoners-by-puuid-cached/{path}");
+
+            string gameName = string.Empty, tagLine = string.Empty;
+            if (response[0] == "200")
+            {
+                try
+                {
+                    using JsonDocument document = JsonDocument.Parse(response[1]);
+                    JsonElement root = document.RootElement;
+                    string returnedPuuid = GetStringProperty(root, "puuid") ?? string.Empty;
+                    if (!key.StartsWith("p:", StringComparison.Ordinal) || string.IsNullOrEmpty(returnedPuuid) || returnedPuuid == value)
+                    {
+                        gameName = GetStringProperty(root, "gameName", "riotIdGameName") ?? string.Empty;
+                        tagLine = GetStringProperty(root, "tagLine", "riotIdTagLine", "riotIdTagline") ?? string.Empty;
+                    }
+                }
+                catch (Exception ex) { Debug.WriteLine($"Could not read player profile: {ex.Message}"); }
+            }
+            _playerProfiles[key] = new PlayerProfileCache(gameName, tagLine,
+                DateTime.UtcNow.AddSeconds(string.IsNullOrEmpty(gameName) || string.IsNullOrEmpty(tagLine) ? 15 : 120));
+        }
+
+        private void FillCachedPlayerProfiles(RemotePickState state)
+        {
+            foreach (RemoteTeamSlotDto slot in state.AllySlots.Concat(state.EnemySlots))
+            {
+                if (!slot.IsPlayerNameVisible) continue;
+                string gameName = slot.RiotGameName, tagLine = slot.RiotTagLine;
+                if ((string.IsNullOrWhiteSpace(gameName) || string.IsNullOrWhiteSpace(tagLine)) &&
+                    !string.IsNullOrEmpty(GetPlayerCacheKey(slot)) &&
+                    _playerProfiles.TryGetValue(GetPlayerCacheKey(slot), out PlayerProfileCache? cached) && cached.ExpiresUtc > DateTime.UtcNow)
+                {
+                    gameName = cached.GameName;
+                    tagLine = cached.TagLine;
+                }
+                if (string.IsNullOrWhiteSpace(gameName) || string.IsNullOrWhiteSpace(tagLine)) continue;
+                slot.ProfileUrl = RemotePlayerProfileLinks.Create(_profileRegion, gameName, tagLine);
+                if (!string.IsNullOrEmpty(slot.ProfileUrl)) slot.PlayerName = $"{gameName}#{tagLine}";
+            }
         }
 
         private void EnrichTeamSlots(RemotePickState state)
@@ -1393,6 +1656,9 @@ namespace RiotAutoLogin.Services
                             state.HoveredChampionSource = "ActivePick";
                         }
                     }
+                    if (actionType == "ban" && inProgress && !GetBoolProperty(action, "completed") &&
+                        TryGetPropertyInt(action, "championId", out int hoveredBanId) && hoveredBanId > 0)
+                        state.HoveredBanChampionId = hoveredBanId;
                     if (!inProgress)
                         continue;
 

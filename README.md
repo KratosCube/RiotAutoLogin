@@ -43,7 +43,7 @@ A modern, feature-rich application for automating Riot Client logins with secure
 ### 🎯 **Champion Select Automation**
 - **Auto-Pick:** Automatically select your preferred champions
 - **Pick-Turn Alert:** Notifies you when your champion pick becomes active
-- **Remote Pick:** Enable the phone page in Settings, then copy its link to a phone on the same Wi-Fi/LAN. The mobile page has Champions, Picks and Loadout sections for hovering, picking, banning, summoner spells and rune pages. Turn the server off when you finish.
+- **Remote Pick:** Enable the phone page in Settings, then copy its link to a phone on the same Wi-Fi/LAN. Champions, Picks and Loadout are separate mobile tabs with controls along the bottom. Tapping a champion on your ban turn previews it in the client ban slot; once confirmed, Remote Pick locks that ban near the end of the turn if you have not locked it yourself. In modes without a finite ban timer, confirm the ban manually. Visible teammates can open their League of Graphs profile from the Picks tab. Turn the server off when you finish.
 - **Per-Alert Sounds:** Assign a different MP4 or audio file to each alert
 - **Flash Warning:** Warns when Flash is on the opposite preferred spell slot
 
