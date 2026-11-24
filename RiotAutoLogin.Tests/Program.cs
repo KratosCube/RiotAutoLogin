@@ -32,6 +32,10 @@ Equal("https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/7201_Preci
     RemoteRuneAssets.ToDataDragonUrl("perk-images/Styles/7201_Precision.png"), "Relative rune style icons use the same asset host");
 Equal(string.Empty, RemoteRuneAssets.ToDataDragonUrl("https://example.com/evil.png"), "Only rune assets can be exposed to the web page");
 Equal(string.Empty, RemoteRuneAssets.ToDataDragonUrl("perk-images/../outside.png"), "Rune image paths cannot escape the asset directory");
+Equal("https://www.leagueofgraphs.com/summoner/eune/Cycata%2BMariola-EUNE",
+    RemotePlayerProfileLinks.Create("EUN1", "Cycata Mariola", "EUNE"), "Visible teammates link to the right region and Riot ID");
+Equal(string.Empty, RemotePlayerProfileLinks.Create("unknown", "Player", "TAG"), "Unknown regions never create a misleading profile link");
+Equal(string.Empty, RemotePlayerProfileLinks.Create("EUW1", "Player", ""), "A missing Riot tag does not guess a profile");
 
 string directory = Path.Combine(Path.GetTempPath(), "RiotAutoLogin-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(directory);
