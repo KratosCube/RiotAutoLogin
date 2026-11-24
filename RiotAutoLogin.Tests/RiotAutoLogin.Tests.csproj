@@ -16,6 +16,7 @@
     <Compile Include="../RiotAutoLogin/Services/RemotePhaseClock.cs" Link="RemotePhaseClock.cs" />
     <Compile Include="../RiotAutoLogin/Services/RemoteRuneAssets.cs" Link="RemoteRuneAssets.cs" />
     <Compile Include="../RiotAutoLogin/Services/RemotePlayerProfileLinks.cs" Link="RemotePlayerProfileLinks.cs" />
+    <Compile Include="../RiotAutoLogin/Services/LcuRankLookup.cs" Link="LcuRankLookup.cs" />
     <Compile Include="../RiotAutoLogin/Services/LiveGameStartService.cs" Link="LiveGameStartService.cs" />
     <Compile Include="../RiotAutoLogin/Models/UpdateModels.cs" Link="UpdateModels.cs" />
     <Compile Include="../RiotAutoLogin/Services/ReleasePolicy.cs" Link="ReleasePolicy.cs" />

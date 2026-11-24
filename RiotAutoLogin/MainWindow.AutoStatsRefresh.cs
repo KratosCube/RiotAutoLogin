@@ -8,7 +8,7 @@ namespace RiotAutoLogin
     public partial class MainWindow
     {
         private CancellationTokenSource? _autoStatsRefreshCts;
-        private bool _autoStatsRefreshRunning;
+        private int _autoStatsRefreshRunning;
         private bool _hasSeenActiveGameForStatsRefresh;
         private DateTime _lastAutomaticStatsRefreshUtc = DateTime.MinValue;
 
@@ -45,7 +45,7 @@ namespace RiotAutoLogin
 
                     if (_accounts != null && _accounts.Count > 0)
                     {
-                        await RefreshAccountInfoAutomaticallyAsync("startup");
+                        await RefreshAccountInfoAutomaticallyAsync("startup", onlyStale: true);
                         return;
                     }
                 }
@@ -61,6 +61,7 @@ namespace RiotAutoLogin
 
         private async Task MonitorAutomaticAccountInfoRefreshAsync(CancellationToken cancellationToken)
         {
+            bool refreshOnConnect = false;
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
@@ -68,6 +69,7 @@ namespace RiotAutoLogin
                     if (!LCUService.CheckIfLeagueClientIsOpen())
                     {
                         _hasSeenActiveGameForStatsRefresh = false;
+                        refreshOnConnect = true;
                         await Task.Delay(5000, cancellationToken);
                         continue;
                     }
@@ -75,10 +77,13 @@ namespace RiotAutoLogin
                     string? json = await LCUService.GetGameflowSessionAsync(cancellationToken);
                     if (json == null)
                     {
+                        refreshOnConnect = true;
                         await Task.Delay(5000, cancellationToken);
                         continue;
                     }
                     string phase = Models.GameflowSnapshot.Parse(json).Phase;
+                    if (refreshOnConnect && await RefreshAccountInfoAutomaticallyAsync("client connected", onlyStale: true))
+                        refreshOnConnect = false;
 
                     if (phase is "GameStart" or "InProgress")
                     {
@@ -110,26 +115,22 @@ namespace RiotAutoLogin
             return phase is "EndOfGame" or "Lobby" or "None";
         }
 
-        private async Task RefreshAccountInfoAutomaticallyAsync(string reason)
+        private async Task<bool> RefreshAccountInfoAutomaticallyAsync(string reason, bool onlyStale = false)
         {
-            if (_autoStatsRefreshRunning)
-                return;
-
-            if ((DateTime.UtcNow - _lastAutomaticStatsRefreshUtc).TotalSeconds < 5)
-                return;
-
-            if (_accounts == null || _accounts.Count == 0)
-                return;
-
-            _autoStatsRefreshRunning = true;
-            _lastAutomaticStatsRefreshUtc = DateTime.UtcNow;
+            if (Interlocked.CompareExchange(ref _autoStatsRefreshRunning, 1, 0) != 0)
+                return false;
 
             try
             {
+                if ((DateTime.UtcNow - _lastAutomaticStatsRefreshUtc).TotalSeconds < 5)
+                    return false;
+                if (_accounts.Count == 0)
+                    return true;
+                _lastAutomaticStatsRefreshUtc = DateTime.UtcNow;
                 Console.WriteLine($"Automatic account info refresh started: {reason}");
 
-                await UpdateAllAccountsAsync(onlyStale: reason == "startup");
-                if (reason != "startup")
+                await UpdateAllAccountsAsync(onlyStale);
+                if (!onlyStale)
                 {
                     var accounts = await Dispatcher.InvokeAsync(() => new System.Collections.Generic.List<Models.Account>(_accounts));
                     await UIService.TrySyncGreyscreenStatsAsync(accounts);
@@ -150,8 +151,9 @@ namespace RiotAutoLogin
             }
             finally
             {
-                _autoStatsRefreshRunning = false;
+                Interlocked.Exchange(ref _autoStatsRefreshRunning, 0);
             }
+            return true;
         }
     }
 }

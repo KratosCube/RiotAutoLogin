@@ -41,6 +41,7 @@ internal static class Program
             if (!ReferenceEquals(tabs.SelectedItem, accountsTab) || cards.Items.Count != 1)
                 throw new Exception("The Accounts tab did not display the saved account.");
             Console.WriteLine("Accounts tab rendered with a saved account.");
+            AccountGridChecks.Run(window, tabs);
 
             var chooser = new QuickLoginWindow((List<Account>)saved.ItemsSource);
             try

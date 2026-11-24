@@ -39,6 +39,7 @@
     <ApplicationDefinition Remove="App.xaml" />
     <Page Include="App.xaml" />
     <Resource Include="resources\logoAcc.ico" />
+    <Resource Include="resources\ranks\*.png" />
     <EmbeddedResource Include="Services\RemotePickPage.html" />
   </ItemGroup>
 

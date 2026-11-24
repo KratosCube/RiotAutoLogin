@@ -415,10 +415,34 @@ namespace RiotAutoLogin.Services
             if (string.IsNullOrWhiteSpace(gameName) || string.IsNullOrWhiteSpace(tagLine) || string.IsNullOrWhiteSpace(region))
                 throw new InvalidOperationException("A Riot ID and region are required.");
 
+            gameName = gameName.Trim();
+            tagLine = tagLine.Trim();
+            var ranks = new Dictionary<RankedQueue, RankData>();
             string apiKey = await GetApiKeyAsync();
-            if (string.IsNullOrWhiteSpace(apiKey))
-                throw new InvalidOperationException("Set your Riot API key in Settings to refresh ranks.");
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                try
+                {
+                    ranks = await GetPublicRanksAsync(gameName, tagLine, region, apiKey).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException or JsonException)
+                {
+                    Debug.WriteLine($"Public rank lookup failed: {ex.Message}");
+                }
+            }
 
+            if (!ranks.ContainsKey(RankedQueue.RankedFives) && await Task.Run(LCUService.CheckIfLeagueClientIsOpen).ConfigureAwait(false))
+            {
+                var localRanks = await LcuRankLookup.ReadAsync(gameName, tagLine, region,
+                    path => LCUService.ClientRequestAsync("GET", path)).ConfigureAwait(false);
+                foreach (var (queue, rank) in localRanks)
+                    ranks.TryAdd(queue, rank);
+            }
+            return ranks;
+        }
+
+        private static async Task<Dictionary<RankedQueue, RankData>> GetPublicRanksAsync(string gameName, string tagLine, string region, string apiKey)
+        {
             string identity = $"{region}/{gameName}#{tagLine}";
             if (!PuuidCache.TryGetValue(identity, out string? puuid))
             {
