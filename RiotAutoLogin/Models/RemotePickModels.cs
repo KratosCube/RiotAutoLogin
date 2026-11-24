@@ -12,6 +12,7 @@ namespace RiotAutoLogin.Models
         public string PhaseLabel { get; set; } = "Waiting";
         public int TimeLeftInPhaseMs { get; set; } = -1;
         public int TotalTimeInPhaseMs { get; set; } = -1;
+        public double PhaseElapsedSeconds { get; set; } = -1;
         public bool IsTimerInfinite { get; set; }
         public bool IsInChampSelect { get; set; }
         public bool IsMyTurn { get; set; }
@@ -110,9 +111,13 @@ namespace RiotAutoLogin.Models
         public bool IsEditable { get; set; }
         public bool IsDeletable { get; set; }
         public string KeystoneName { get; set; } = string.Empty;
+        public string KeystoneIconUrl { get; set; } = string.Empty;
         public string PrimaryStyleName { get; set; } = string.Empty;
+        public string PrimaryStyleIconUrl { get; set; } = string.Empty;
         public string SecondaryStyleName { get; set; } = string.Empty;
+        public string SecondaryStyleIconUrl { get; set; } = string.Empty;
         public List<string> KeyRuneNames { get; set; } = new();
+        public List<string> KeyRuneIconUrls { get; set; } = new();
     }
 
     public class RemoteRecommendedRunePageDto
@@ -124,9 +129,13 @@ namespace RiotAutoLogin.Models
         public int SubStyleId { get; set; }
         public List<int> SelectedPerkIds { get; set; } = new();
         public string KeystoneName { get; set; } = string.Empty;
+        public string KeystoneIconUrl { get; set; } = string.Empty;
         public string PrimaryStyleName { get; set; } = string.Empty;
+        public string PrimaryStyleIconUrl { get; set; } = string.Empty;
         public string SecondaryStyleName { get; set; } = string.Empty;
+        public string SecondaryStyleIconUrl { get; set; } = string.Empty;
         public List<string> KeyRuneNames { get; set; } = new();
+        public List<string> KeyRuneIconUrls { get; set; } = new();
         public bool CanApply => PrimaryStyleId > 0 && SubStyleId > 0 && SelectedPerkIds.Count > 0;
     }
 

@@ -33,10 +33,12 @@ namespace RiotAutoLogin.Services
         private Dictionary<int, RemoteChampionDto>? _allChampionMetadata;
         private DateTime _nextChampionMetadataAttemptUtc;
         private List<RemoteSummonerSpellDto>? _remoteSpellCache;
+        private readonly RemotePhaseClock _phaseClock = new();
         private sealed record RecommendedRuneCache(string Key, DateTime ExpiresUtc, List<RemoteRecommendedRunePageDto> Pages);
         private RecommendedRuneCache? _recommendedRuneCache;
-        private sealed record RuneNameCache(DateTime ExpiresUtc, Dictionary<int, string> Names);
-        private RuneNameCache? _runeNameCache;
+        private sealed record RuneMetadata(string Name, string IconUrl);
+        private sealed record RuneMetadataCache(DateTime ExpiresUtc, Dictionary<int, RuneMetadata> Values);
+        private RuneMetadataCache? _runeMetadataCache;
 
         public bool IsRunning { get; private set; }
         public int Port { get; private set; } = DefaultPort;
@@ -252,12 +254,16 @@ namespace RiotAutoLogin.Services
 
             if (!LCUService.CheckIfLeagueClientIsOpen())
             {
+                _phaseClock.Observe("Closed", Environment.TickCount64);
                 state.PhaseLabel = "League Closed";
                 state.Message = "League Client is not running.";
                 return state;
             }
 
             state.Phase = await LCUService.GetCurrentGamePhaseAsync();
+            RemotePhaseObservation phase = _phaseClock.Observe(state.Phase, Environment.TickCount64);
+            state.Phase = phase.Phase;
+            state.PhaseElapsedSeconds = phase.ElapsedSeconds;
             state.IsInChampSelect = state.Phase == "ChampSelect";
             state.CanLeave = state.Phase == "Lobby" || state.Phase == "Matchmaking" || state.Phase == "ReadyCheck" || state.Phase == "ChampSelect";
             TryLoadQueueFromGameflowOrLobby(state);
@@ -688,14 +694,14 @@ namespace RiotAutoLogin.Services
                 if (pagesDoc.RootElement.ValueKind != JsonValueKind.Array)
                     return;
 
-                Dictionary<int, string> perkNames = GetRuneNames();
+                Dictionary<int, RuneMetadata> perks = GetRuneMetadata();
                 foreach (JsonElement page in pagesDoc.RootElement.EnumerateArray())
                 {
                     if (!TryGetPropertyLong(page, "id", out long pageId))
                         continue;
 
-                    List<string> keyRunes = GetPerkIds(page).Take(4)
-                        .Select(id => GetNameOrId(perkNames, id)).ToList();
+                    List<int> keyIds = GetPerkIds(page).Take(4).ToList();
+                    List<string> keyRunes = keyIds.Select(id => GetNameOrId(perks, id)).ToList();
                     int primaryId = GetIntProperty(page, "primaryStyleId");
                     int secondaryId = GetIntProperty(page, "subStyleId");
                     var dto = new RemoteRunePageDto
@@ -706,9 +712,13 @@ namespace RiotAutoLogin.Services
                         IsEditable = GetBoolProperty(page, "isEditable"),
                         IsDeletable = GetBoolProperty(page, "isDeletable"),
                         KeystoneName = keyRunes.FirstOrDefault() ?? string.Empty,
-                        PrimaryStyleName = primaryId > 0 ? GetNameOrId(perkNames, primaryId) : string.Empty,
-                        SecondaryStyleName = secondaryId > 0 ? GetNameOrId(perkNames, secondaryId) : string.Empty,
-                        KeyRuneNames = keyRunes
+                        KeystoneIconUrl = keyIds.Count > 0 ? GetIconUrl(perks, keyIds[0]) : string.Empty,
+                        PrimaryStyleName = primaryId > 0 ? GetNameOrId(perks, primaryId) : string.Empty,
+                        PrimaryStyleIconUrl = GetIconUrl(perks, primaryId),
+                        SecondaryStyleName = secondaryId > 0 ? GetNameOrId(perks, secondaryId) : string.Empty,
+                        SecondaryStyleIconUrl = GetIconUrl(perks, secondaryId),
+                        KeyRuneNames = keyRunes,
+                        KeyRuneIconUrls = keyIds.Select(id => GetIconUrl(perks, id)).ToList()
                     };
 
                     state.RunePages.Add(dto);
@@ -841,22 +851,26 @@ namespace RiotAutoLogin.Services
             if (pages.Count == 0 || !LCUService.CheckIfLeagueClientIsOpen())
                 return;
 
-            Dictionary<int, string> perkNames = GetRuneNames();
+            Dictionary<int, RuneMetadata> perks = GetRuneMetadata();
 
             foreach (RemoteRecommendedRunePageDto page in pages)
             {
                 string originalSubtitle = page.Subtitle;
-                string primaryStyle = GetNameOrId(perkNames, page.PrimaryStyleId);
-                string secondaryStyle = GetNameOrId(perkNames, page.SubStyleId);
+                string primaryStyle = GetNameOrId(perks, page.PrimaryStyleId);
+                string secondaryStyle = GetNameOrId(perks, page.SubStyleId);
 
                 var runeNames = page.SelectedPerkIds
-                    .Select(id => GetNameOrId(perkNames, id))
+                    .Select(id => GetNameOrId(perks, id))
                     .ToList();
 
                 page.KeystoneName = runeNames.FirstOrDefault() ?? string.Empty;
+                page.KeystoneIconUrl = page.SelectedPerkIds.Count > 0 ? GetIconUrl(perks, page.SelectedPerkIds[0]) : string.Empty;
                 page.KeyRuneNames = runeNames.Take(4).ToList();
+                page.KeyRuneIconUrls = page.SelectedPerkIds.Take(4).Select(id => GetIconUrl(perks, id)).ToList();
                 page.PrimaryStyleName = primaryStyle;
+                page.PrimaryStyleIconUrl = GetIconUrl(perks, page.PrimaryStyleId);
                 page.SecondaryStyleName = secondaryStyle;
+                page.SecondaryStyleIconUrl = GetIconUrl(perks, page.SubStyleId);
                 if (!string.IsNullOrWhiteSpace(page.KeystoneName))
                     page.Name = page.KeystoneName;
 
@@ -866,23 +880,26 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        private Dictionary<int, string> GetRuneNames()
+        private Dictionary<int, RuneMetadata> GetRuneMetadata()
         {
-            RuneNameCache? cached = _runeNameCache;
+            RuneMetadataCache? cached = _runeMetadataCache;
             if (cached != null && cached.ExpiresUtc > DateTime.UtcNow)
-                return cached.Names;
+                return cached.Values;
 
-            Dictionary<int, string> names = GetLcuIdNameMap("lol-game-data/assets/v1/perks.json");
-            foreach (KeyValuePair<int, string> pair in GetLcuIdNameMap("lol-perks/v1/styles"))
-                names.TryAdd(pair.Key, pair.Value);
+            Dictionary<int, RuneMetadata> metadata = GetLcuRuneMetadata("lol-game-data/assets/v1/perks.json");
+            foreach (KeyValuePair<int, RuneMetadata> pair in GetLcuRuneMetadata("lol-perks/v1/styles"))
+            {
+                if (!metadata.TryGetValue(pair.Key, out RuneMetadata? existing) || string.IsNullOrEmpty(existing.IconUrl))
+                    metadata[pair.Key] = pair.Value;
+            }
 
-            _runeNameCache = new RuneNameCache(DateTime.UtcNow.AddSeconds(30), names);
-            return names;
+            _runeMetadataCache = new RuneMetadataCache(DateTime.UtcNow.AddSeconds(30), metadata);
+            return metadata;
         }
 
-        private static Dictionary<int, string> GetLcuIdNameMap(string endpoint)
+        private static Dictionary<int, RuneMetadata> GetLcuRuneMetadata(string endpoint)
         {
-            var map = new Dictionary<int, string>();
+            var map = new Dictionary<int, RuneMetadata>();
             string[] result = LCUService.ClientRequest("GET", endpoint);
             if (result[0] != "200")
                 return map;
@@ -894,12 +911,12 @@ namespace RiotAutoLogin.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Could not parse LCU id/name map from {endpoint}: {ex.Message}");
+                Debug.WriteLine($"Could not parse LCU rune metadata from {endpoint}: {ex.Message}");
             }
             return map;
         }
 
-        private static void CollectIdNamePairs(JsonElement element, Dictionary<int, string> map)
+        private static void CollectIdNamePairs(JsonElement element, Dictionary<int, RuneMetadata> map)
         {
             if (element.ValueKind == JsonValueKind.Object)
             {
@@ -907,7 +924,7 @@ namespace RiotAutoLogin.Services
                 {
                     string? name = GetStringProperty(element, "name", "displayName");
                     if (id > 0 && !string.IsNullOrWhiteSpace(name) && !map.ContainsKey(id))
-                        map[id] = name;
+                        map[id] = new RuneMetadata(name, RemoteRuneAssets.ToDataDragonUrl(GetStringProperty(element, "iconPath", "icon")));
                 }
 
                 foreach (JsonProperty property in element.EnumerateObject())
@@ -923,8 +940,11 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        private static string GetNameOrId(Dictionary<int, string> names, int id)
-            => names.TryGetValue(id, out string? name) && !string.IsNullOrWhiteSpace(name) ? name : id.ToString();
+        private static string GetNameOrId(Dictionary<int, RuneMetadata> metadata, int id)
+            => metadata.TryGetValue(id, out RuneMetadata? rune) && !string.IsNullOrWhiteSpace(rune.Name) ? rune.Name : id.ToString();
+
+        private static string GetIconUrl(Dictionary<int, RuneMetadata> metadata, int id)
+            => metadata.TryGetValue(id, out RuneMetadata? rune) ? rune.IconUrl : string.Empty;
 
         private static string BuildAppliedRunePageName(RemoteRecommendedRunePageDto page)
         {

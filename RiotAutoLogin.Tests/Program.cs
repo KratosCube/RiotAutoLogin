@@ -15,6 +15,24 @@ void Equal<T>(T expected, T actual, string reason)
     checks++;
 }
 
+var remoteClock = new RemotePhaseClock();
+Equal(0.0, remoteClock.Observe("Lobby", 1000).ElapsedSeconds, "A custom lobby starts an elapsed clock when first observed");
+Equal(5.5, remoteClock.Observe("Lobby", 6500).ElapsedSeconds, "The lobby clock increases while the phase is unchanged");
+Equal(0.0, remoteClock.Observe("Matchmaking", 7000).ElapsedSeconds, "Leaving the lobby starts a new queue clock");
+Equal(-1.0, remoteClock.Observe("ChampSelect", 8000).ElapsedSeconds, "Champion select uses its own countdown");
+Equal(0.0, remoteClock.Observe("Lobby", 9000).ElapsedSeconds, "A new lobby does not inherit the previous time");
+Equal("Lobby", remoteClock.Observe("None", 9200).Phase, "A brief gameflow outage keeps the lobby phase visible");
+Equal(0.5, remoteClock.Observe("Lobby", 9500).ElapsedSeconds, "A short gameflow outage keeps the lobby clock running");
+Equal(0.0, remoteClock.Observe("Lobby", 100).ElapsedSeconds, "A monotonic clock reset cannot make time negative");
+Equal("None", remoteClock.Observe("None", 5200).Phase, "A prolonged outage ends the previous lobby clock");
+Equal(0.0, remoteClock.Observe("Lobby", 6200).ElapsedSeconds, "A lobby after a prolonged outage starts a fresh clock");
+Equal("https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Precision/PressTheAttack.png",
+    RemoteRuneAssets.ToDataDragonUrl("/lol-game-data/assets/v1/perk-images/Styles/Precision/PressTheAttack.png"), "Rune images use the client asset path on Data Dragon");
+Equal("https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/7201_Precision.png",
+    RemoteRuneAssets.ToDataDragonUrl("perk-images/Styles/7201_Precision.png"), "Relative rune style icons use the same asset host");
+Equal(string.Empty, RemoteRuneAssets.ToDataDragonUrl("https://example.com/evil.png"), "Only rune assets can be exposed to the web page");
+Equal(string.Empty, RemoteRuneAssets.ToDataDragonUrl("perk-images/../outside.png"), "Rune image paths cannot escape the asset directory");
+
 string directory = Path.Combine(Path.GetTempPath(), "RiotAutoLogin-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(directory);
 try
