@@ -61,7 +61,7 @@ namespace RiotAutoLogin
 
         private async Task MonitorAutomaticAccountInfoRefreshAsync(CancellationToken cancellationToken)
         {
-            bool refreshOnConnect = false;
+            bool refreshOnConnect = true;
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
@@ -74,16 +74,20 @@ namespace RiotAutoLogin
                         continue;
                     }
 
+                    if (refreshOnConnect)
+                    {
+                        var summoner = await LCUService.ClientRequestAsync("GET", "lol-summoner/v1/current-summoner", cancellationToken: cancellationToken);
+                        if (summoner[0] == "200" && await RefreshAccountInfoAutomaticallyAsync("client connected", onlyStale: true))
+                            refreshOnConnect = false;
+                    }
+
                     string? json = await LCUService.GetGameflowSessionAsync(cancellationToken);
                     if (json == null)
                     {
-                        refreshOnConnect = true;
                         await Task.Delay(5000, cancellationToken);
                         continue;
                     }
                     string phase = Models.GameflowSnapshot.Parse(json).Phase;
-                    if (refreshOnConnect && await RefreshAccountInfoAutomaticallyAsync("client connected", onlyStale: true))
-                        refreshOnConnect = false;
 
                     if (phase is "GameStart" or "InProgress")
                     {

@@ -418,7 +418,7 @@ namespace RiotAutoLogin.Services
             gameName = gameName.Trim();
             tagLine = tagLine.Trim();
             var ranks = new Dictionary<RankedQueue, RankData>();
-            string apiKey = await GetApiKeyAsync();
+            string apiKey = await Task.Run(ApiKeyManager.GetApiKey).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
                 try
@@ -455,12 +455,6 @@ namespace RiotAutoLogin.Services
             string response = await SendRiotGetAsync(url, apiKey);
             using var doc = JsonDocument.Parse(response);
             return RankedQueues.ParseRanks(doc.RootElement);
-        }
-
-        private static Task<string> GetApiKeyAsync()
-        {
-            string apiKey = ApiKeyManager.GetApiKey()?.Trim() ?? string.Empty;
-            return Task.FromResult(apiKey);
         }
 
         private static async Task<string> SendRiotGetAsync(string url, string apiKey)

@@ -58,6 +58,12 @@ internal static class AccountGridChecks
                 png.Save(file);
             }
 
+            var twoRowHeight = Element<Border>(0, "AccountCard").ActualHeight;
+            list.SetCurrentValue(ItemsControl.ItemsSourceProperty, accounts.Take(1).ToList());
+            window.UpdateLayout();
+            if (Math.Abs(Element<Border>(0, "AccountCard").ActualHeight - twoRowHeight) > 1)
+                throw new Exception("A single account was stretched to fill the grid.");
+
             list.SetCurrentValue(ItemsControl.ItemsSourceProperty, accounts);
             window.UpdateLayout();
             for (int i = 0; i < tiers.Length; i++)
