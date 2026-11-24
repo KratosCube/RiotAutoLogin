@@ -64,8 +64,8 @@ jobs:
           )
           if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
             $base = git rev-parse HEAD^1
-            $packagingChanges = git diff --name-only $base HEAD -- scripts/Build-Release.ps1 RiotAutoLogin/RiotAutoLogin.csproj
-            if ($packagingChanges) {
+            $startupChanges = git diff --name-only $base HEAD -- scripts/Build-Release.ps1 RiotAutoLogin/RiotAutoLogin.csproj RiotAutoLogin/App.xaml RiotAutoLogin/App.xaml.cs RiotAutoLogin/MainWindow.xaml RiotAutoLogin/MainWindow.xaml.cs RiotAutoLogin/Models RiotAutoLogin/Services/AccountService.cs
+            if ($startupChanges) {
               $baseline = Join-Path $env:RUNNER_TEMP 'startup-baseline'
               git worktree add --detach $baseline $base
               Push-Location $baseline
@@ -77,7 +77,7 @@ jobs:
               $paths += Join-Path $baseline 'build/assets/RiotAutoLogin-v1.5.1-win-x64.exe'
             }
           }
-          ./RiotAutoLogin.UiChecks/Measure-Startup.ps1 -Executable $paths
+          ./RiotAutoLogin.UiChecks/Measure-Startup.ps1 -Executable $paths -SampleAccounts
 
       - name: Retain packaging diagnostics
         if: always()
@@ -92,6 +92,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: account-grid-preview
-          path: build/account-grid-preview.png
+          path: |
+            build/account-grid-preview.png
+            build/quick-login-preview.png
           if-no-files-found: ignore
           retention-days: 7

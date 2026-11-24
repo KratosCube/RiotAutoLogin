@@ -1,6 +1,7 @@
 using RiotAutoLogin.Models;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -40,6 +41,8 @@ namespace RiotAutoLogin
         {
             InitializeComponent();
             AccountList.ItemsSource = accounts;
+            var queue = accounts.Count > 0 ? accounts[0].SelectedQueue : RankedQueue.SoloDuo;
+            QueueLabel.Text = RankedQueues.Options.First(option => option.Key == queue).Name;
         }
 
         public void ShowCenteredOnCursor()

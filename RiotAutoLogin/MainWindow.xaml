@@ -24,7 +24,6 @@
     <Window.Resources>
         <conv:RankInfoConverter x:Key="RankInfoConverter"/>
         <conv:RankEmblemConverter x:Key="RankEmblemConverter"/>
-        <conv:StringToImageSourceConverter x:Key="StringToImageSourceConverter"/>
         <Style x:Key="GhostIconButton" TargetType="Button">
             <Setter Property="Width" Value="34"/>
             <Setter Property="Height" Value="34"/>
@@ -469,7 +468,7 @@
                                                                 <TextBlock FontSize="13" HorizontalAlignment="Right" Foreground="#F58582" ToolTip="Losses"><Run Text="{Binding DisplayLosses, Mode=OneWay}" FontWeight="SemiBold"/><Run Text=" L" FontSize="11"/></TextBlock>
                                                             </UniformGrid>
                                                         </Border>
-                                                        <ContentPresenter Margin="0,4,0,0" Content="{Binding}" ContentTemplate="{StaticResource AccountWinRate}"/>
+                                                        <ContentPresenter x:Name="WinRate" Margin="0,4,0,0" Content="{Binding}" ContentTemplate="{StaticResource AccountWinRate}"/>
                                                     </StackPanel>
                                                 </Border>
                                                 <DataTemplate.Triggers>

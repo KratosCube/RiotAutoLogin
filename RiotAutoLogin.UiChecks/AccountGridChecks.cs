@@ -49,13 +49,7 @@ internal static class AccountGridChecks
             {
                 UIService.UpdateTotalGameStats(window, eight, RankedQueue.SoloDuo);
                 window.UpdateLayout();
-                var image = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth), (int)Math.Ceiling(window.ActualHeight), 96, 96, PixelFormats.Pbgra32);
-                image.Render(window);
-                var png = new PngBitmapEncoder();
-                png.Frames.Add(BitmapFrame.Create(image));
-                Directory.CreateDirectory("build");
-                using var file = File.Create("build/account-grid-preview.png");
-                png.Save(file);
+                Capture(window, "account-grid-preview.png");
             }
 
             var twoRowHeight = Element<Border>(0, "AccountCard").ActualHeight;
@@ -76,6 +70,13 @@ internal static class AccountGridChecks
             accounts[0].ApplyRanks(new() { [RankedQueue.RankedFives] = new RankData { Tier = "EMERALD", Wins = 9 } });
             window.UpdateLayout();
             CheckEmblem(0, "EMERALD");
+            CheckWinRate(Element<ContentPresenter>(0, "WinRate"), 1);
+            accounts[0].ApplyRanks(new() { [RankedQueue.RankedFives] = new RankData { Tier = "EMERALD", Losses = 9 } });
+            window.UpdateLayout();
+            CheckWinRate(Element<ContentPresenter>(0, "WinRate"), 0);
+            accounts[0].ApplyRanks(new() { [RankedQueue.RankedFives] = new RankData { Tier = "UNRANKED" } });
+            window.UpdateLayout();
+            CheckWinRate(Element<ContentPresenter>(0, "WinRate"), null);
             if (viewer.ScrollableHeight <= 0)
                 throw new Exception("The overflow fixture did not create a scrollable account grid.");
             viewer.ScrollToBottom();
@@ -102,9 +103,11 @@ internal static class AccountGridChecks
         {
             Rect card = Bounds(Element<Border>(index, "AccountCard"));
             Rect stats = Bounds(Element<Border>(index, "AccountStats"));
+            Rect winRate = Bounds(Element<ContentPresenter>(index, "WinRate"));
             Rect viewport = Bounds(viewer);
             viewport.Inflate(1, 1); // Allow layout rounding at non-integer display scales.
-            if (card.IsEmpty || stats.Height < 12 || !viewport.Contains(card) || !card.Contains(stats) || card.Bottom > Bounds(summary).Top + 1)
+            if (card.IsEmpty || stats.Height < 12 || winRate.Height < 10 || !viewport.Contains(card) ||
+                !card.Contains(stats) || !card.Contains(winRate) || card.Bottom > Bounds(summary).Top + 1)
                 throw new Exception($"Account {index + 1} or its stats are clipped at {window.ActualWidth} × {window.ActualHeight}. Card {card}, stats {stats}, viewport {viewport}.");
         }
         void CheckEmblem(int index, string tier)
@@ -114,5 +117,27 @@ internal static class AccountGridChecks
                 !bitmap.UriSource.AbsolutePath.EndsWith($"/{tier.ToLowerInvariant()}.png", StringComparison.Ordinal))
                 throw new Exception($"Missing or incorrect {tier} emblem.");
         }
+    }
+
+    public static void CheckWinRate(ContentPresenter presenter, double? expected)
+    {
+        var label = (TextBlock)presenter.ContentTemplate.FindName("WinRateLabel", presenter);
+        var wins = (Border)presenter.ContentTemplate.FindName("Wins", presenter);
+        string expectedLabel = expected.HasValue ? $"{expected.Value:0%} WR" : "—";
+        if (label.Text != expectedLabel || Math.Abs(((ScaleTransform)wins.RenderTransform).ScaleX - (expected ?? 0)) > 0.001)
+            throw new Exception($"Win-rate text and graphic disagree for {expectedLabel}.");
+    }
+
+    public static void Capture(Window window, string name)
+    {
+        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true") return;
+        window.UpdateLayout();
+        var image = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth), (int)Math.Ceiling(window.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+        image.Render(window);
+        var png = new PngBitmapEncoder();
+        png.Frames.Add(BitmapFrame.Create(image));
+        Directory.CreateDirectory("build");
+        using var file = File.Create(Path.Combine("build", name));
+        png.Save(file);
     }
 }

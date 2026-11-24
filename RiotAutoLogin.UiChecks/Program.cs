@@ -50,6 +50,13 @@ internal static class Program
             if (image is not BitmapSource { PixelWidth: 192, PixelHeight: 96, IsFrozen: true } ||
                 !ReferenceEquals(image, account.AvatarThumbnail))
                 throw new Exception("Account cards did not decode a proportional thumbnail.");
+            if (!ReferenceEquals(image, Task.Run(() => account.AvatarThumbnail).GetAwaiter().GetResult()))
+                throw new Exception("The background binding did not reuse the frozen thumbnail.");
+            account.AvatarPath = string.Empty;
+            if (account.AvatarThumbnail != null)
+                throw new Exception("Clearing the avatar left the old image visible.");
+            // The loaded thumbnail must release the user's file.
+            using var exclusive = System.IO.File.Open(path, System.IO.FileMode.Open, System.IO.FileAccess.ReadWrite, System.IO.FileShare.None);
         }
         finally { System.IO.File.Delete(path); }
     }
@@ -94,11 +101,21 @@ internal static class Program
             Console.WriteLine("Accounts tab rendered with a saved account.");
             AccountGridChecks.Run(window, tabs);
 
-            var chooser = new QuickLoginWindow((List<Account>)saved.ItemsSource);
+            var popupAccounts = new List<Account>
+            {
+                new() { GameName = "Ashen Fox", TagLine = "EUW", Region = "euw1",
+                    QueueRanks = new() { [RankedQueue.SoloDuo] = new RankData { Tier = "EMERALD", Rank = "II", Wins = 24, Losses = 16 } } },
+                new() { GameName = "North Star", TagLine = "R2", Region = "eun1",
+                    QueueRanks = new() { [RankedQueue.SoloDuo] = new RankData { Tier = "GRANDMASTER", Wins = 6, Losses = 4 } } },
+                new() { GameName = "A longer summoner name", TagLine = "R3", Region = "eun1",
+                    QueueRanks = new() { [RankedQueue.SoloDuo] = new RankData { Tier = "SILVER", Rank = "IV", Wins = 3, Losses = 7 } } },
+                new() { GameName = "New account", TagLine = "R4", Region = "euw1" }
+            };
+            var chooser = new QuickLoginWindow(popupAccounts);
             try
             {
                 chooser.ShowCenteredOnCursor();
-                if (chooser.FindName("AccountList") is not ItemsControl choices || choices.Items.Count != 1)
+                if (chooser.FindName("AccountList") is not ItemsControl choices || choices.Items.Count != popupAccounts.Count)
                     throw new Exception("Quick Login did not display the saved account.");
                 var bounds = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Control.MousePosition).WorkingArea;
                 var handle = new System.Windows.Interop.WindowInteropHelper(chooser).Handle;
@@ -107,6 +124,20 @@ internal static class Program
                     Math.Abs((rect.Top + rect.Bottom) / 2.0 - (bounds.Top + bounds.Bottom) / 2.0) > 2)
                     throw new Exception("Quick Login is not centered in the cursor monitor's work area.");
                 Console.WriteLine("Quick Login rendered with a saved account.");
+                for (int i = 0; i < popupAccounts.Count; i++)
+                {
+                    var presenter = (ContentPresenter)choices.ItemContainerGenerator.ContainerFromIndex(i);
+                    var rate = (ContentPresenter)choices.ItemTemplate.FindName("WinRate", presenter);
+                    AccountGridChecks.CheckWinRate(rate, popupAccounts[i].WinFraction);
+                    var emblem = (System.Windows.Controls.Image)choices.ItemTemplate.FindName("RankEmblem", presenter);
+                    if ((emblem.Source != null) != (i < 3))
+                        throw new Exception("The popup rank emblem does not match the saved account.");
+                    var button = (System.Windows.Controls.Button)choices.ItemTemplate.FindName("AccountChoice", presenter);
+                    var rateBounds = rate.TransformToAncestor(button).TransformBounds(new Rect(rate.RenderSize));
+                    if (!new Rect(button.RenderSize).Contains(rateBounds))
+                        throw new Exception("The popup win rate extends past the account button.");
+                }
+                AccountGridChecks.Capture(chooser, "quick-login-preview.png");
             }
             finally { chooser.Close(); }
 
