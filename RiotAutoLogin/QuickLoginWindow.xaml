@@ -16,7 +16,7 @@
         UseLayoutRounding="True"
         FontFamily="Segoe UI Variable Text, Segoe UI">
     <Window.Resources>
-        <conv:StringToImageSourceConverter x:Key="AvatarConverter"/>
+        <conv:RankEmblemConverter x:Key="EmblemConverter"/>
         <conv:RankInfoConverter x:Key="RankConverter"/>
         <Style x:Key="AccountChoiceStyle" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}"/>
@@ -81,9 +81,6 @@
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1"
                 CornerRadius="20">
-            <Border.Effect>
-                <DropShadowEffect ShadowDepth="0" BlurRadius="18" Opacity="0.3"/>
-            </Border.Effect>
             <Grid Margin="18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -104,7 +101,7 @@
                                 Background="{StaticResource SecondaryBackgroundBrush}"
                                 BorderBrush="{StaticResource BorderBrush}"
                                 BorderThickness="1" Padding="5" Margin="0,0,12,0">
-                            <Image Source="pack://application:,,,/resources/logoAcc.ico" Stretch="Uniform"/>
+                            <Image Source="pack://application:,,,/RiotAutoLogin;component/resources/logoAcc.ico" Stretch="Uniform"/>
                         </Border>
                         <TextBlock Grid.Column="1" Text="Quick Login" FontSize="17" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextColorBrush}" VerticalAlignment="Center"/>
@@ -116,8 +113,12 @@
                     </Grid>
                 </Border>
 
-                <TextBlock Grid.Row="1" Text="Choose an account" FontSize="15" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextColorBrush}" Margin="3,0,0,12"/>
+                <DockPanel Grid.Row="1" Margin="3,0,0,12">
+                    <TextBlock x:Name="QueueLabel" DockPanel.Dock="Right" FontSize="12"
+                               Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Text="Choose an account" FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextColorBrush}"/>
+                </DockPanel>
 
                 <ScrollViewer x:Name="AccountScrollViewer" Grid.Row="2"
                               Style="{StaticResource DarkScrollViewerStyle}"
@@ -127,7 +128,7 @@
                     <ItemsControl x:Name="AccountList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Button Tag="{Binding}" Style="{StaticResource AccountChoiceStyle}"
+                                <Button x:Name="AccountChoice" Tag="{Binding}" Style="{StaticResource AccountChoiceStyle}"
                                         Click="Account_Click" AutomationProperties.Name="{Binding GameName}">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -140,35 +141,40 @@
                                                 BorderBrush="{StaticResource BorderBrush}"
                                                 BorderThickness="1" Margin="0,0,12,0">
                                             <Grid>
-                                                <TextBlock Text="●" Foreground="{StaticResource AccentBrush}"
-                                                           FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                <Image Source="{Binding AvatarPath, Converter={StaticResource AvatarConverter}}"
+                                                <Path Data="M 12,4 A 4,4 0 1 1 11.99,4 M 4,20 C 4,12 20,12 20,20 Z"
+                                                      Width="20" Height="20" Stretch="Uniform" Fill="#647489"/>
+                                                <Image Source="{Binding AvatarThumbnail, IsAsync=True}"
                                                        Stretch="UniformToFill"/>
                                             </Grid>
                                         </Border>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding GameName}" FontSize="14" FontWeight="SemiBold"
+                                            <TextBlock Text="{Binding GameName}" ToolTip="{Binding GameName}" FontSize="14" FontWeight="SemiBold"
                                                        Foreground="{StaticResource TextColorBrush}"
                                                        TextTrimming="CharacterEllipsis"/>
                                             <TextBlock FontSize="11" Foreground="{StaticResource MutedTextBrush}"
                                                        TextTrimming="CharacterEllipsis" Margin="0,3,0,0">
-                                                <Run Text="#"/><Run Text="{Binding TagLine}"/>
+                                                <Run Text="#"/><Run Text="{Binding TagLine}"/><Run Text="  ·  "/><Run Text="{Binding Region}"/>
                                             </TextBlock>
                                         </StackPanel>
                                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="10,0,0,0"
                                                     HorizontalAlignment="Right">
-                                            <Border CornerRadius="7" Background="{StaticResource SecondaryBackgroundBrush}"
-                                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                                                    Padding="7,3" HorizontalAlignment="Right">
-                                                <TextBlock Text="{Binding Region}" FontSize="10" FontWeight="SemiBold"
-                                                           Foreground="{StaticResource MutedTextBrush}"/>
-                                            </Border>
-                                            <TextBlock Text="{Binding DisplayRankInfo, Converter={StaticResource RankConverter}}"
-                                                       FontSize="10" Foreground="{StaticResource MutedTextBrush}"
-                                                       HorizontalAlignment="Right" Margin="0,6,0,0"/>
+                                            <DockPanel HorizontalAlignment="Right">
+                                                <Image x:Name="RankEmblem" Width="28" Height="24" Margin="0,0,5,0" Stretch="Uniform"
+                                                       Source="{Binding DisplayRank, Converter={StaticResource EmblemConverter}}"/>
+                                                <TextBlock VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextColorBrush}"
+                                                           Text="{Binding DisplayRankInfo, Converter={StaticResource RankConverter}}"/>
+                                            </DockPanel>
+                                            <ContentPresenter x:Name="WinRate" MinWidth="100" Margin="0,3,0,0" Content="{Binding}"
+                                                              ContentTemplate="{StaticResource AccountWinRate}"/>
                                         </StackPanel>
                                     </Grid>
                                 </Button>
+                                <DataTemplate.Triggers>
+                                    <Trigger SourceName="RankEmblem" Property="Source" Value="{x:Null}">
+                                        <Setter TargetName="RankEmblem" Property="Visibility" Value="Collapsed"/>
+                                    </Trigger>
+                                </DataTemplate.Triggers>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

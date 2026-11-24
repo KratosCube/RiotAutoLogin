@@ -21,7 +21,7 @@ namespace RiotAutoLogin.Services
             try
             {
                 if (!File.Exists(ConfigFilePath)) return new();
-                var accounts = JsonSerializer.Deserialize<List<Account>>(File.ReadAllText(ConfigFilePath)) ?? new();
+                var accounts = JsonSerializer.Deserialize(File.ReadAllText(ConfigFilePath), StartupJson.Default.ListAccount) ?? new();
                 foreach (Account account in accounts) account.MigrateLegacyRank();
                 return accounts;
             }
@@ -40,7 +40,7 @@ namespace RiotAutoLogin.Services
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(ConfigFilePath)!);
                     string temporary = ConfigFilePath + ".tmp";
-                    File.WriteAllText(temporary, JsonSerializer.Serialize(accounts, new JsonSerializerOptions { WriteIndented = true }));
+                    File.WriteAllText(temporary, JsonSerializer.Serialize(accounts, StartupJson.Default.ListAccount));
                     File.Move(temporary, ConfigFilePath, true);
                     return true;
                 }

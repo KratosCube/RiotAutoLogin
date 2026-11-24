@@ -1702,7 +1702,7 @@ namespace RiotAutoLogin
                     }
                     else
                     {
-                        var loadedSettings = JsonSerializer.Deserialize<HotkeySettings>(json);
+                        var loadedSettings = JsonSerializer.Deserialize(json, StartupJson.Default.HotkeySettings);
                         if (loadedSettings != null)
                         {
                             _hotkeySettings = loadedSettings;
@@ -1769,7 +1769,7 @@ namespace RiotAutoLogin
                 _hotkeySettings.DisplayName = $"Ctrl + Alt + {txtHotkeyKey.Text.ToUpper()}";
                 // RunOnStartup is already set in _hotkeySettings by its toggle's event handler
 
-                string json = JsonSerializer.Serialize(_hotkeySettings, new JsonSerializerOptions { WriteIndented = true });
+                string json = JsonSerializer.Serialize(_hotkeySettings, StartupJson.Default.HotkeySettings);
                 Directory.CreateDirectory(Path.GetDirectoryName(_hotkeySettingsFilePath)!); 
                 File.WriteAllText(_hotkeySettingsFilePath, json);
                 Console.WriteLine($"Settings saved: Hotkey={_hotkeySettings.DisplayName}, RunOnStartup={_hotkeySettings.RunOnStartup}");

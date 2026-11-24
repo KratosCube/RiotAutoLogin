@@ -24,7 +24,6 @@
     <Window.Resources>
         <conv:RankInfoConverter x:Key="RankInfoConverter"/>
         <conv:RankEmblemConverter x:Key="RankEmblemConverter"/>
-        <conv:StringToImageSourceConverter x:Key="StringToImageSourceConverter"/>
         <Style x:Key="GhostIconButton" TargetType="Button">
             <Setter Property="Width" Value="34"/>
             <Setter Property="Height" Value="34"/>
@@ -276,9 +275,6 @@
                 BorderBrush="#303A49"
                 BorderThickness="1"
                 CornerRadius="24">
-            <Border.Effect>
-                <DropShadowEffect ShadowDepth="0" BlurRadius="18" Opacity="0.22"/>
-            </Border.Effect>
 
             <Grid>
                 <Grid.RowDefinitions>
@@ -441,7 +437,7 @@
                                                                           Width="20" Height="20" Stretch="Uniform" Fill="#647489"/>
                                                                     <Border CornerRadius="9">
                                                                         <Border.Background>
-                                                                            <ImageBrush ImageSource="{Binding AvatarPath, Converter={StaticResource StringToImageSourceConverter}}" Stretch="UniformToFill"/>
+                                                                            <ImageBrush ImageSource="{Binding AvatarThumbnail, IsAsync=True}" Stretch="UniformToFill"/>
                                                                         </Border.Background>
                                                                     </Border>
                                                                 </Grid>
@@ -472,6 +468,7 @@
                                                                 <TextBlock FontSize="13" HorizontalAlignment="Right" Foreground="#F58582" ToolTip="Losses"><Run Text="{Binding DisplayLosses, Mode=OneWay}" FontWeight="SemiBold"/><Run Text=" L" FontSize="11"/></TextBlock>
                                                             </UniformGrid>
                                                         </Border>
+                                                        <ContentPresenter x:Name="WinRate" Margin="0,4,0,0" Content="{Binding}" ContentTemplate="{StaticResource AccountWinRate}"/>
                                                     </StackPanel>
                                                 </Border>
                                                 <DataTemplate.Triggers>
@@ -708,7 +705,7 @@
                                         CornerRadius="37"
                                         Background="#10151C"
                                         Margin="0,0,14,0">
-                                                                    <Image Source="{Binding AvatarPath, Converter={StaticResource StringToImageSourceConverter}}"
+                                                                    <Image Source="{Binding AvatarThumbnail, IsAsync=True}"
                                            Stretch="UniformToFill"/>
                                                                 </Border>
 

@@ -48,7 +48,7 @@ A modern, feature-rich application for automating Riot Client logins with secure
 - **Flash Warning:** Warns when Flash is on the opposite preferred spell slot
 
 ### 📊 **Queue Statistics & Waiting Time**
-- The queue switch shows the selected ladder's rank emblem, LP, wins and losses on each Quick Login card. Two full rows fit at the minimum window size. Additional accounts scroll above the statistics panel. [Preview with eight sample accounts](images/login_tab.png)
+- The queue switch shows the selected ladder's rank emblem, LP, wins and losses on each Quick Login card. Cards and the shortcut popup include a win-rate bar and percentage. An unknown record or zero games shows a neutral bar. The popup also shows the rank emblem and selected queue. Two full rows fit at the minimum window size. Additional accounts scroll above the statistics panel. [Preview with eight sample accounts](images/login_tab.png) · [Shortcut popup preview](images/quick_login.png)
 - **Sliding statistics:** Use the arrows beside the bottom metrics to slide between ranked totals and Queue / Champ select / Loading / Total waiting / In game. No extra tab or taller footer.
 - **Today or all time:** On the time page, click Today / All time. Totals cover the selected ranked queue across accounts on this PC.
 - **Local history:** Time is recorded while this app runs, including in the tray. It starts with this version's observations, cannot be backfilled from match history, and excludes sleep, client outages and time with the app closed.
