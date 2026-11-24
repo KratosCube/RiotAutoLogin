@@ -31,6 +31,12 @@ internal static class AccountGridChecks
                 Wins = 24 + i, Losses = 16 + i
             } }
         }).ToList();
+        for (int i = 0; i < 7; i++)
+            accounts[i].ApplyOpponentRanks(RankedQueue.SoloDuo, new OpponentRankSummary
+            {
+                MeanRankPosition = 350 + i * 400, Games = 10, RankedOpponents = 45,
+                TotalOpponents = 50, UpdatedUtc = DateTime.UtcNow
+            });
         try
         {
             tabs.SelectedIndex = 0;
@@ -65,11 +71,18 @@ internal static class AccountGridChecks
             accounts[0].SelectedQueue = RankedQueue.RankedFives;
             accounts[0].RefreshRankDisplay();
             window.UpdateLayout();
+            CheckOpponentRank(Element<ContentPresenter>(0, "OpponentRank"), "—");
             if (Element<Image>(0, "RankEmblem").IsVisible)
                 throw new Exception("The Solo/Duo emblem remained on an unsynced Ranked 5s card.");
             accounts[0].ApplyRanks(new() { [RankedQueue.RankedFives] = new RankData { Tier = "EMERALD", Wins = 9 } });
             window.UpdateLayout();
             CheckEmblem(0, "EMERALD");
+            accounts[0].ApplyOpponentRanks(RankedQueue.RankedFives, new OpponentRankSummary
+            {
+                MeanRankPosition = 2100, Games = 8, RankedOpponents = 40, TotalOpponents = 40, UpdatedUtc = DateTime.UtcNow
+            });
+            window.UpdateLayout();
+            CheckOpponentRank(Element<ContentPresenter>(0, "OpponentRank"), "EMERALD III");
             CheckWinRate(Element<ContentPresenter>(0, "WinRate"), 1);
             accounts[0].ApplyRanks(new() { [RankedQueue.RankedFives] = new RankData { Tier = "EMERALD", Losses = 9 } });
             window.UpdateLayout();
@@ -104,10 +117,11 @@ internal static class AccountGridChecks
             Rect card = Bounds(Element<Border>(index, "AccountCard"));
             Rect stats = Bounds(Element<Border>(index, "AccountStats"));
             Rect winRate = Bounds(Element<ContentPresenter>(index, "WinRate"));
+            Rect opponents = Bounds(Element<ContentPresenter>(index, "OpponentRank"));
             Rect viewport = Bounds(viewer);
             viewport.Inflate(1, 1); // Allow layout rounding at non-integer display scales.
             if (card.IsEmpty || stats.Height < 12 || winRate.Height < 10 || !viewport.Contains(card) ||
-                !card.Contains(stats) || !card.Contains(winRate) || card.Bottom > Bounds(summary).Top + 1)
+                !card.Contains(stats) || !card.Contains(winRate) || !card.Contains(opponents) || card.Bottom > Bounds(summary).Top + 1)
                 throw new Exception($"Account {index + 1} or its stats are clipped at {window.ActualWidth} × {window.ActualHeight}. Card {card}, stats {stats}, viewport {viewport}.");
         }
         void CheckEmblem(int index, string tier)
@@ -117,6 +131,13 @@ internal static class AccountGridChecks
                 !bitmap.UriSource.AbsolutePath.EndsWith($"/{tier.ToLowerInvariant()}.png", StringComparison.Ordinal))
                 throw new Exception($"Missing or incorrect {tier} emblem.");
         }
+    }
+
+    public static void CheckOpponentRank(ContentPresenter presenter, string expected)
+    {
+        var label = (TextBlock)presenter.ContentTemplate.FindName("OpponentRankLabel", presenter);
+        if (label.Text != expected)
+            throw new Exception("The opponent rank display belongs to a different queue.");
     }
 
     public static void CheckWinRate(ContentPresenter presenter, double? expected)

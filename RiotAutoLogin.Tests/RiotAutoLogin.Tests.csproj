@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../RiotAutoLogin/Models/Account.cs" Link="Account.cs" />
+    <Compile Include="../RiotAutoLogin/Models/OpponentRankSummary.cs" Link="OpponentRankSummary.cs" />
     <Compile Include="../RiotAutoLogin/Models/RankedQueue.cs" Link="RankedQueue.cs" />
     <Compile Include="../RiotAutoLogin/Models/GameflowSnapshot.cs" Link="GameflowSnapshot.cs" />
     <Compile Include="../RiotAutoLogin/Models/LoadingAttemptTracker.cs" Link="LoadingAttemptTracker.cs" />
@@ -17,6 +18,7 @@
     <Compile Include="../RiotAutoLogin/Services/RemoteRuneAssets.cs" Link="RemoteRuneAssets.cs" />
     <Compile Include="../RiotAutoLogin/Services/RemotePlayerProfileLinks.cs" Link="RemotePlayerProfileLinks.cs" />
     <Compile Include="../RiotAutoLogin/Services/LcuRankLookup.cs" Link="LcuRankLookup.cs" />
+    <Compile Include="../RiotAutoLogin/Services/LcuOpponentRankService.cs" Link="LcuOpponentRankService.cs" />
     <Compile Include="../RiotAutoLogin/Services/LiveGameStartService.cs" Link="LiveGameStartService.cs" />
     <Compile Include="../RiotAutoLogin/Models/UpdateModels.cs" Link="UpdateModels.cs" />
     <Compile Include="../RiotAutoLogin/Services/ReleasePolicy.cs" Link="ReleasePolicy.cs" />

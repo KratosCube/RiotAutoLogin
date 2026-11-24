@@ -452,7 +452,7 @@
                                                                 </TextBlock>
                                                             </StackPanel>
                                                         </Grid>
-                                                        <DockPanel Margin="0,13,0,9" MinHeight="28" ToolTip="{Binding DisplayRankInfo}">
+                                                        <DockPanel Margin="0,7,0,3" MinHeight="28" ToolTip="{Binding DisplayRankInfo}">
                                                             <Image x:Name="RankEmblem" DockPanel.Dock="Left" Width="30" Height="26"
                                                                    Margin="0,0,6,0" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
                                                                    Source="{Binding DisplayRank, Converter={StaticResource RankEmblemConverter}}"/>
@@ -460,6 +460,8 @@
                                                                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12"
                                                                        FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}"/>
                                                         </DockPanel>
+                                                        <ContentPresenter x:Name="OpponentRank" Margin="0,0,0,4" Content="{Binding}"
+                                                                          ContentTemplate="{StaticResource OpponentRank}"/>
                                                         <Border x:Name="AccountStats" BorderThickness="0,1,0,0" Padding="0,7,0,1"
                                                                 BorderBrush="{StaticResource BorderBrush}">
                                                             <UniformGrid Rows="1" Columns="3">

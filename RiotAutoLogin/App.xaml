@@ -83,6 +83,16 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <DataTemplate x:Key="OpponentRank">
+            <DockPanel ToolTip="{Binding OpponentRankTooltip}">
+                <TextBlock Text="{Binding OpponentSampleLabel}" DockPanel.Dock="Right" Margin="5,0,0,0"
+                           FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                <TextBlock Text="Opp. avg" DockPanel.Dock="Left" Margin="0,0,6,0" FontSize="10"
+                           Foreground="{StaticResource MutedTextBrush}"/>
+                <TextBlock x:Name="OpponentRankLabel" Text="{Binding OpponentRankLabel}" FontSize="10"
+                           Foreground="{StaticResource TextColorBrush}" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+        </DataTemplate>
         <DataTemplate x:Key="AccountWinRate">
             <DockPanel ToolTip="Win rate for the selected ranked queue" LastChildFill="True">
                 <TextBlock x:Name="WinRateLabel" DockPanel.Dock="Right" Margin="6,0,0,0" FontSize="11"

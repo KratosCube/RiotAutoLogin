@@ -29,7 +29,11 @@ namespace RiotAutoLogin
                 RefreshAccountLists();
                 UpdateTotalGameStats();
                 RefreshWaitingStats();
-                if (_startupInitialized) SaveHotkeySettings();
+                if (_startupInitialized)
+                {
+                    SaveHotkeySettings();
+                    StartOpponentRankRefresh();
+                }
             }
         }
 

@@ -24,6 +24,7 @@ namespace RiotAutoLogin.Models
         public string AvatarPath { get => _avatarPath; set => SetDisplayField(ref _avatarPath, value); }
         public Dictionary<RankedQueue, RankData> QueueRanks { get; set; } = new();
         public Dictionary<RankedQueue, GreyscreenData> QueueGreyscreens { get; set; } = new();
+        public Dictionary<RankedQueue, OpponentRankSummary> QueueOpponentRanks { get; set; } = new();
         public DateTime? RanksUpdatedUtc { get; set; }
 
         [JsonIgnore] public RankedQueue SelectedQueue { get; set; }
@@ -41,6 +42,11 @@ namespace RiotAutoLogin.Models
         [JsonIgnore] public string DisplayLeaguePoints => DisplayRank?.LeaguePoints.ToString() ?? "—";
         [JsonIgnore] public string DisplayWins => DisplayRank?.Wins.ToString() ?? "—";
         [JsonIgnore] public string DisplayLosses => DisplayRank?.Losses.ToString() ?? "—";
+        [JsonIgnore] public OpponentRankSummary? DisplayOpponents => QueueOpponentRanks.GetValueOrDefault(SelectedQueue);
+        [JsonIgnore] public string OpponentRankLabel => DisplayOpponents?.Label ?? "—";
+        [JsonIgnore] public string OpponentSampleLabel => DisplayOpponents is { } sample ? $"{sample.Games}g" : "";
+        [JsonIgnore] public string OpponentRankTooltip => DisplayOpponents?.Tooltip ??
+            "Average opponent rank from up to 10 recent games in this queue. Open League Client on this account's region, then refresh account stats to sync.";
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -56,7 +62,8 @@ namespace RiotAutoLogin.Models
 
         public void RefreshRankDisplay()
         {
-            foreach (string name in new[] { nameof(DisplayRank), nameof(WinFraction), nameof(DisplayRankInfo), nameof(DisplayLeaguePoints), nameof(DisplayWins), nameof(DisplayLosses) })
+            foreach (string name in new[] { nameof(DisplayRank), nameof(WinFraction), nameof(DisplayRankInfo), nameof(DisplayLeaguePoints), nameof(DisplayWins), nameof(DisplayLosses),
+                nameof(DisplayOpponents), nameof(OpponentRankLabel), nameof(OpponentSampleLabel), nameof(OpponentRankTooltip) })
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
@@ -64,6 +71,7 @@ namespace RiotAutoLogin.Models
         {
             QueueRanks ??= new();
             QueueGreyscreens ??= new();
+            QueueOpponentRanks ??= new();
             // Older releases persisted this empty record when League-V4 omitted Ranked 5s.
             if (QueueRanks.GetValueOrDefault(RankedQueue.RankedFives) is
                 { Tier: "", Rank: "", LegacyLabel: null, LeaguePoints: 0, Wins: 0, Losses: 0 })
@@ -104,9 +112,16 @@ namespace RiotAutoLogin.Models
             if (samePlayer) return;
 
             QueueRanks = new();
+            QueueOpponentRanks = new();
             RanksUpdatedUtc = null;
             RankInfo = string.Empty;
             LeaguePoints = Wins = Losses = 0;
+            RefreshRankDisplay();
+        }
+
+        public void ApplyOpponentRanks(RankedQueue queue, OpponentRankSummary summary)
+        {
+            QueueOpponentRanks = new(QueueOpponentRanks) { [queue] = summary };
             RefreshRankDisplay();
         }
     }

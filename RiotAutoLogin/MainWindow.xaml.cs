@@ -456,6 +456,7 @@ namespace RiotAutoLogin
             UpdateTotalGameStats();
 
             System.Windows.MessageBox.Show("Account added successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+            StartOpponentRankRefresh(force: true);
         }
 
         private void btnUpdateAccount_Click(object sender, RoutedEventArgs e)
@@ -476,6 +477,7 @@ namespace RiotAutoLogin
                 SaveAccounts();
                 RefreshAccountLists();
                 UpdateTotalGameStats();
+                StartOpponentRankRefresh(force: true);
             }
             else
             {
@@ -707,7 +709,11 @@ namespace RiotAutoLogin
         }
         // Account edits, applying completed lookups and saving the cards share the UI dispatcher.
         private Task UpdateAllAccountsAsync(bool onlyStale = false) =>
-            Dispatcher.InvokeAsync<Task>(() => AccountService.UpdateAllAccountsAsync(_accounts.ToList(), onlyStale)).Task.Unwrap();
+            Dispatcher.InvokeAsync<Task>(() =>
+            {
+                StartOpponentRankRefresh(force: !onlyStale);
+                return AccountService.UpdateAllAccountsAsync(_accounts.ToList(), onlyStale);
+            }).Task.Unwrap();
 
         private void UpdateTotalGameStats()
         {
