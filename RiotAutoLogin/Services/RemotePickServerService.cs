@@ -35,6 +35,7 @@ namespace RiotAutoLogin.Services
         private DateTime _nextChampionMetadataAttemptUtc;
         private List<RemoteSummonerSpellDto>? _remoteSpellCache;
         private readonly RemotePhaseClock _phaseClock = new();
+        private readonly SemaphoreSlim _lobbyActionGate = new(1, 1);
         private sealed record RecommendedRuneCache(string Key, DateTime ExpiresUtc, List<RemoteRecommendedRunePageDto> Pages);
         private RecommendedRuneCache? _recommendedRuneCache;
         private sealed record RuneMetadata(string Name, string IconUrl);
@@ -200,8 +201,14 @@ namespace RiotAutoLogin.Services
                     await WriteActionResponseAsync(stream, await SelectRecommendedRunePageAsync(body), cancellationToken);
                 else if (method == "POST" && path.StartsWith("/api/rune-page", StringComparison.OrdinalIgnoreCase))
                     await WriteActionResponseAsync(stream, await SelectRunePageAsync(body), cancellationToken);
+                else if (method == "POST" && path == "/api/start-queue")
+                    await WriteActionResponseAsync(stream, await StartLobbyAsync(custom: false), cancellationToken);
+                else if (method == "POST" && path == "/api/start-custom")
+                    await WriteActionResponseAsync(stream, await StartLobbyAsync(custom: true), cancellationToken);
+                else if (method == "POST" && path == "/api/accept-match")
+                    await WriteActionResponseAsync(stream, await AcceptMatchAsync(), cancellationToken);
                 else if (method == "POST" && path.StartsWith("/api/leave", StringComparison.OrdinalIgnoreCase))
-                    await WriteActionResponseAsync(stream, await LeaveLobbyAsync(), cancellationToken);
+                    await WriteActionResponseAsync(stream, await LeaveLobbyAsync(body), cancellationToken);
                 else
                     await WriteTextResponseAsync(stream, 404, "Not Found", "Not found", cancellationToken);
             }
@@ -270,19 +277,47 @@ namespace RiotAutoLogin.Services
 
             if (!LCUService.CheckIfLeagueClientIsOpen())
             {
-                _phaseClock.Observe("Closed", Environment.TickCount64);
+                _phaseClock.Reset(state.LiveSampleTickMs);
+                state.Phase = "Closed";
                 state.PhaseLabel = "League Closed";
                 state.Message = "League Client is not running.";
                 return state;
             }
 
             state.Phase = await LCUService.GetCurrentGamePhaseAsync();
-            RemotePhaseObservation phase = _phaseClock.Observe(state.Phase, Environment.TickCount64);
-            state.Phase = phase.Phase;
-            state.PhaseElapsedSeconds = phase.ElapsedSeconds;
             state.IsInChampSelect = state.Phase == "ChampSelect";
             state.CanLeave = state.Phase == "Lobby" || state.Phase == "Matchmaking" || state.Phase == "ReadyCheck" || state.Phase == "ChampSelect";
-            TryLoadQueueFromGameflowOrLobby(state);
+            if (!state.IsInChampSelect) _phaseClock.Reset(state.LiveSampleTickMs);
+            if (state.Phase == "Lobby")
+            {
+                using var document = await ReadClientObjectAsync("lol-lobby/v2/lobby");
+                if (document != null && RemoteLobby.Read(document.RootElement) is { } lobby)
+                {
+                    state.QueueId = lobby.QueueId;
+                    state.QueueName = lobby.IsCustom ? "Custom game" : GetQueueName(lobby.QueueId, false);
+                    state.CanStartLobby = lobby.CanStart;
+                    state.IsCustomLobby = lobby.IsCustom;
+                    state.PartySize = lobby.PartySize;
+                    state.LobbyHint = lobby.StartHint;
+                }
+            }
+            else
+            {
+                TryLoadQueueFromGameflowOrLobby(state);
+                if (state.Phase == "Matchmaking")
+                {
+                    using var search = await ReadClientObjectAsync("lol-matchmaking/v1/search");
+                    state.TimerMeasuredTickMs = Environment.TickCount64;
+                    if (search != null) state.PhaseElapsedSeconds = RemoteLobby.QueueSeconds(search.RootElement);
+                }
+                else if (state.Phase == "ReadyCheck")
+                {
+                    using var ready = await ReadClientObjectAsync("lol-matchmaking/v1/ready-check");
+                    string? response = ready == null ? null : GetStringProperty(ready.RootElement, "playerResponse");
+                    state.CanAcceptMatch = response == "None";
+                    state.MatchAccepted = response == "Accepted";
+                }
+            }
 
             if (state.Phase == "GameStart" || state.Phase == "InProgress")
                 TryReadLiveGameState(state);
@@ -330,17 +365,18 @@ namespace RiotAutoLogin.Services
 
             using JsonDocument doc = JsonDocument.Parse(sessionResult[1]);
             JsonElement root = doc.RootElement;
+            ParseLocalPlayerSelection(root, state);
+            ParseTimer(root, state);
+            ParseActions(root, state);
+            await SyncDraftClockAsync(root, state);
             var bannedChampionIds = new HashSet<int>();
             ParseBans(root, bannedChampionIds);
-            ParseLocalPlayerSelection(root, state);
             ParseTeamSlots(root, state);
             EnrichTeamSlots(state);
             FillCachedPlayerProfiles(state);
             ParseQueueAndMode(root, state);
             ParseAvailableChampionIds(root, state);
             ParseAvailableSpellIds(root, state);
-            ParseTimer(root, state);
-            ParseActions(root, state);
             state.BanFallbackArmed = IsBanFallbackArmed(state.ActionId, state.HoveredBanChampionId);
             if (state.HoveredChampionId <= 0 && state.SelectedChampionId > 0 &&
                 state.ChampSelectPhase.Contains("PLANNING", StringComparison.OrdinalIgnoreCase))
@@ -767,16 +803,71 @@ namespace RiotAutoLogin.Services
             };
         }
 
-        public async Task<RemotePickActionResult> LeaveLobbyAsync()
+        private static async Task<JsonDocument?> ReadClientObjectAsync(string endpoint)
+        {
+            string[] result = await LCUService.ClientRequestAsync("GET", endpoint);
+            if (result[0] != "200") return null;
+            try
+            {
+                var document = JsonDocument.Parse(result[1]);
+                if (document.RootElement.ValueKind == JsonValueKind.Object) return document;
+                document.Dispose();
+            }
+            catch (JsonException) { }
+            return null;
+        }
+
+        private async Task<RemotePickActionResult> StartLobbyAsync(bool custom)
+        {
+            if (!await _lobbyActionGate.WaitAsync(0)) return Failure("A lobby action is already in progress.");
+            try
+            {
+                if (await LCUService.GetCurrentGamePhaseAsync() != "Lobby") return Failure("The lobby has changed.");
+                using var doc = await ReadClientObjectAsync("lol-lobby/v2/lobby");
+                var lobby = doc == null ? null : RemoteLobby.Read(doc.RootElement);
+                if (lobby == null || lobby.IsCustom != custom) return Failure("The lobby has changed.");
+                if (!lobby.CanStart) return Failure(lobby.StartHint);
+                string endpoint = custom ? "lol-lobby/v1/lobby/custom/start-champ-select" : "lol-lobby/v2/lobby/matchmaking/search";
+                var result = await LCUService.ClientRequestAsync("POST", endpoint);
+                return result[0].StartsWith("2")
+                    ? new RemotePickActionResult { Success = true, Message = custom ? "Custom game started." : "Queue started." }
+                    : Failure("League Client could not start this lobby. Check its queue requirements.");
+            }
+            finally { _lobbyActionGate.Release(); }
+        }
+
+        private async Task<RemotePickActionResult> AcceptMatchAsync()
+        {
+            if (await LCUService.GetCurrentGamePhaseAsync() != "ReadyCheck") return Failure("The ready check has ended.");
+            using var ready = await ReadClientObjectAsync("lol-matchmaking/v1/ready-check");
+            string? response = ready == null ? null : GetStringProperty(ready.RootElement, "playerResponse");
+            if (response == "Accepted") return new RemotePickActionResult { Success = true, Message = "Match accepted." };
+            if (response != "None") return Failure("The match is no longer awaiting your response.");
+            var result = await LCUService.ClientRequestAsync("POST", "lol-matchmaking/v1/ready-check/accept");
+            return result[0].StartsWith("2") ? new RemotePickActionResult { Success = true, Message = "Match accepted." } : Failure("League Client could not accept this match.");
+        }
+
+        public async Task<RemotePickActionResult> LeaveLobbyAsync(string body = "")
         {
             if (!LCUService.CheckIfLeagueClientIsOpen())
                 return Failure("League Client is not running.");
 
             string phase = await LCUService.GetCurrentGamePhaseAsync();
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                try
+                {
+                    using var request = JsonDocument.Parse(body);
+                    if (request.RootElement.ValueKind != JsonValueKind.Object) return Failure("Invalid lobby action.");
+                    string? expected = GetStringProperty(request.RootElement, "phase");
+                    if (expected != null && expected != phase) return Failure("The lobby has changed.");
+                }
+                catch (JsonException) { return Failure("Invalid lobby action."); }
+            }
             if (phase == "ReadyCheck")
                 return RequestLeave("ReadyCheck", LCUService.ClientRequest("POST", "lol-matchmaking/v1/ready-check/decline"));
             if (phase == "Matchmaking")
-                return RequestLeave("Matchmaking", LCUService.ClientRequest("DELETE", "lol-matchmaking/v1/search"));
+                return RequestLeave("Matchmaking", LCUService.ClientRequest("DELETE", "lol-lobby/v2/lobby/matchmaking/search"));
             if (phase == "Lobby")
                 return RequestLeave("Lobby", LCUService.ClientRequest("DELETE", "lol-lobby/v2/lobby"));
             if (phase == "ChampSelect")
@@ -1603,14 +1694,46 @@ namespace RiotAutoLogin.Services
             if (!root.TryGetProperty("timer", out JsonElement timerElement) || timerElement.ValueKind != JsonValueKind.Object)
                 return;
 
+            ReadTimerFields(timerElement, state);
+        }
+
+        private static void ReadTimerFields(JsonElement timerElement, RemotePickState state)
+        {
             state.ChampSelectPhase = GetStringProperty(timerElement, "phase") ?? string.Empty;
-            if (TryGetPropertyInt(timerElement, "adjustedTimeLeftInPhase", out int adjustedLeftMs))
-                state.TimeLeftInPhaseMs = Math.Max(0, adjustedLeftMs);
-            else if (TryGetPropertyInt(timerElement, "timeLeftInPhase", out int timeLeftMs))
-                state.TimeLeftInPhaseMs = Math.Max(0, timeLeftMs);
+            if (TryGetPropertyInt(timerElement, "adjustedTimeLeftInPhase", out int adjustedLeftMs) && adjustedLeftMs >= 0)
+                state.TimeLeftInPhaseMs = adjustedLeftMs;
+            else if (TryGetPropertyInt(timerElement, "timeLeftInPhase", out int timeLeftMs) && timeLeftMs >= 0)
+                state.TimeLeftInPhaseMs = timeLeftMs;
             if (TryGetPropertyInt(timerElement, "totalTimeInPhase", out int totalMs))
                 state.TotalTimeInPhaseMs = Math.Max(0, totalMs);
             state.IsTimerInfinite = GetBoolProperty(timerElement, "isInfinite");
+        }
+
+        private async Task SyncDraftClockAsync(JsonElement session, RemotePickState state)
+        {
+            long epoch = 0;
+            if (session.TryGetProperty("timer", out var timer) && timer.ValueKind == JsonValueKind.Object)
+                TryGetPropertyLong(timer, "internalNowInEpochMs", out epoch);
+            if (!state.IsTimerInfinite && (epoch <= 0 || state.TimeLeftInPhaseMs < 0))
+            {
+                using var live = await ReadClientObjectAsync("lol-champ-select/v1/session/timer");
+                if (live != null && (state.ChampSelectPhase.Length == 0 || GetStringProperty(live.RootElement, "phase") == state.ChampSelectPhase))
+                {
+                    ReadTimerFields(live.RootElement, state);
+                    TryGetPropertyLong(live.RootElement, "internalNowInEpochMs", out epoch);
+                }
+            }
+            state.TimerMeasuredTickMs = Environment.TickCount64;
+            if (state.IsTimerInfinite)
+            {
+                _phaseClock.Reset(state.TimerMeasuredTickMs);
+                return;
+            }
+            TryGetPropertyLong(session, "gameId", out long gameId);
+            // The other simultaneous bans finishing does not start a new local turn.
+            string turn = $"{gameId}|{state.ChampSelectPhase}|{state.ActionGroupIndex}";
+            state.TimeLeftInPhaseMs = _phaseClock.Remaining(turn, state.TimeLeftInPhaseMs, epoch,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), state.TimerMeasuredTickMs);
         }
 
         private static void ParseActions(JsonElement root, RemotePickState state)
@@ -1659,7 +1782,7 @@ namespace RiotAutoLogin.Services
                     if (actionType == "ban" && inProgress && !GetBoolProperty(action, "completed") &&
                         TryGetPropertyInt(action, "championId", out int hoveredBanId) && hoveredBanId > 0)
                         state.HoveredBanChampionId = hoveredBanId;
-                    if (!inProgress)
+                    if (!inProgress || GetBoolProperty(action, "completed"))
                         continue;
 
                     state.IsMyTurn = true;

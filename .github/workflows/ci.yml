@@ -31,6 +31,15 @@ jobs:
       - name: Verify queue statistics and time tracking
         run: dotnet run --project RiotAutoLogin.Tests/RiotAutoLogin.Tests.csproj --configuration Release
 
+      - name: Check Remote Pick in mobile and desktop Chrome
+        shell: pwsh
+        run: |
+          $tools = Join-Path $env:RUNNER_TEMP "remote-pick-check"
+          npm install --prefix $tools --no-audit --no-fund --ignore-scripts playwright-core@1.56.1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:NODE_PATH = Join-Path $tools "node_modules"
+          node RiotAutoLogin.UiChecks/remote-pick.cjs
+
       - name: Open Accounts tab on Windows
         run: dotnet run --project RiotAutoLogin.UiChecks/RiotAutoLogin.UiChecks.csproj --configuration Release
 
