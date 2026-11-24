@@ -56,16 +56,11 @@ namespace RiotAutoLogin.Services
         {
             try
             {
-                var ranks = await RiotClientAutomationService.GetRanksAsync(account.GameName, account.TagLine, region);
-                account.QueueRanks = ranks;
-                account.RanksUpdatedUtc = DateTime.UtcNow;
-                // Retain the original Solo/Duo fields for older app versions.
-                var solo = ranks[RankedQueue.SoloDuo];
-                account.RankInfo = solo.Label;
-                account.LeaguePoints = solo.LeaguePoints;
-                account.Wins = solo.Wins;
-                account.Losses = solo.Losses;
-                account.RefreshRankDisplay();
+                string name = account.GameName, tag = account.TagLine;
+                var ranks = await RiotClientAutomationService.GetRanksAsync(name, tag, region);
+                if (ranks.Count == 0 || !account.MatchesRiotId(name, tag, region))
+                    return false;
+                account.ApplyRanks(ranks);
                 return true;
             }
             catch (Exception ex)
@@ -82,7 +77,8 @@ namespace RiotAutoLogin.Services
             try
             {
                 using var concurrency = new SemaphoreSlim(2, 2);
-                var pending = accounts.Where(a => !onlyStale || !a.RanksUpdatedUtc.HasValue || DateTime.UtcNow - a.RanksUpdatedUtc.Value > TimeSpan.FromMinutes(10)).ToArray();
+                var pending = accounts.Where(a => !onlyStale || !a.QueueRanks.ContainsKey(RankedQueue.RankedFives) ||
+                    !a.RanksUpdatedUtc.HasValue || DateTime.UtcNow - a.RanksUpdatedUtc.Value > TimeSpan.FromMinutes(10)).ToArray();
                 await Task.WhenAll(pending.Select(async account =>
                 {
                     await concurrency.WaitAsync();

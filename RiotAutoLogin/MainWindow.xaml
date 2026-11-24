@@ -23,6 +23,7 @@
 
     <Window.Resources>
         <conv:RankInfoConverter x:Key="RankInfoConverter"/>
+        <conv:RankEmblemConverter x:Key="RankEmblemConverter"/>
         <conv:StringToImageSourceConverter x:Key="StringToImageSourceConverter"/>
         <Style x:Key="GhostIconButton" TargetType="Button">
             <Setter Property="Width" Value="34"/>
@@ -311,7 +312,7 @@
                                 Background="{StaticResource SecondaryBackgroundBrush}"
                                 BorderBrush="{StaticResource BorderBrush}"
                                 BorderThickness="1">
-                            <Image Source="pack://application:,,,/resources/logoAcc.ico"
+                            <Image Source="pack://application:,,,/RiotAutoLogin;component/resources/logoAcc.ico"
                                    Stretch="Uniform"/>
                         </Border>
 
@@ -413,168 +414,71 @@
                                                VerticalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
                                 </DockPanel>
 
-                                <ScrollViewer x:Name="svQuickLogin"
-              Grid.Row="1"
-              VerticalScrollBarVisibility="Auto"
-              HorizontalScrollBarVisibility="Disabled"
-              Style="{StaticResource DarkScrollViewerStyle}"
-              ClipToBounds="True"
-              CanContentScroll="False"
-              Padding="0,0,8,16">
-                                    <ItemsControl x:Name="icLoginAccounts"
-                          ItemsSource="{Binding ElementName=lbLoginAccounts, Path=ItemsSource}">
+                                <ScrollViewer x:Name="svQuickLogin" Grid.Row="1"
+                                              Style="{StaticResource DarkScrollViewerStyle}"
+                                              HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                                              CanContentScroll="False" ClipToBounds="True" Padding="2,0,2,2">
+                                    <ItemsControl x:Name="icLoginAccounts" VerticalAlignment="Top"
+                                                  ItemsSource="{Binding ElementName=lbLoginAccounts, Path=ItemsSource}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <UniformGrid Columns="4"/>
-                                            </ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><UniformGrid Columns="4"/></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
-
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Style="{StaticResource InteractiveCardStyle}"
-            Width="208"
-            Height="224"
-            Margin="0,0,12,12"
-            Padding="10"
-            MouseDown="LoginCard_MouseDown"
-            Tag="{Binding}"
-            ToolTip="{Binding Region, StringFormat='Server: {0}'}">
-                                                    <Grid>
-                                                        <Grid.RowDefinitions>
-                                                            <RowDefinition Height="72"/>
-                                                            <RowDefinition Height="38"/>
-                                                            <RowDefinition Height="36"/>
-                                                            <RowDefinition Height="58"/>
-                                                        </Grid.RowDefinitions>
-
-                                                        <!-- Avatar -->
-                                                        <Border Grid.Row="0"
-                    Width="68"
-                    Height="68"
-                    CornerRadius="10"
-                    Background="#0F1621"
-                    BorderBrush="#263447"
-                    BorderThickness="1"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-                                                            <Image Source="{Binding AvatarPath, Converter={StaticResource StringToImageSourceConverter}}"
-                       Stretch="UniformToFill"/>
-                                                        </Border>
-
-                                                        <Border Grid.Row="0"
-                                                                Padding="7,4"
-                                                                CornerRadius="8"
-                                                                Background="#D918202A"
-                                                                BorderBrush="{StaticResource BorderBrush}"
-                                                                BorderThickness="1"
-                                                                HorizontalAlignment="Right"
-                                                                VerticalAlignment="Top">
-                                                            <TextBlock Text="{Binding Region}"
-                                                                       FontSize="9"
-                                                                       FontWeight="Bold"
-                                                                       Foreground="{StaticResource MutedTextBrush}"/>
-                                                        </Border>
-
-                                                        <!-- Name -->
-                                                        <StackPanel Grid.Row="1"
-                                                                    HorizontalAlignment="Center"
-                                                                    VerticalAlignment="Center">
-                                                            <TextBlock Text="{Binding GameName}"
-                                                                       FontSize="15"
-                                                                       FontWeight="SemiBold"
-                                                                       TextAlignment="Center"
-                                                                       HorizontalAlignment="Center"
-                                                                       Foreground="{StaticResource TextColorBrush}"
-                                                                       TextWrapping="NoWrap"
-                                                                       TextTrimming="CharacterEllipsis"
-                                                                       MaxWidth="170"/>
-                                                            <TextBlock Margin="0,1,0,0"
-                                                                       FontSize="10"
-                                                                       HorizontalAlignment="Center"
-                                                                       Foreground="{StaticResource MutedTextBrush}">
-                                                                <Run Text="#"/><Run Text="{Binding TagLine}"/>
-                                                            </TextBlock>
-                                                        </StackPanel>
-
-                                                        <!-- Rank badge -->
-                                                        <Border Grid.Row="2"
-                    Background="#162132"
-                    BorderBrush="#32455E"
-                    BorderThickness="1"
-                    CornerRadius="10"
-                    Padding="10,4"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
+                                                <Border x:Name="AccountCard" Style="{StaticResource InteractiveCardStyle}"
+                                                        Margin="4,3,4,6" Padding="12,16" Tag="{Binding}"
+                                                        MouseDown="LoginCard_MouseDown">
+                                                    <StackPanel>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Border Width="44" Height="44" Margin="0,0,10,0" CornerRadius="9"
+                                                                    Background="{StaticResource SecondaryBackgroundBrush}">
+                                                                <Grid>
+                                                                    <Path Data="M 12,4 A 4,4 0 1 1 11.99,4 M 4,20 C 4,12 20,12 20,20 Z"
+                                                                          Width="20" Height="20" Stretch="Uniform" Fill="#647489"/>
+                                                                    <Border CornerRadius="9">
+                                                                        <Border.Background>
+                                                                            <ImageBrush ImageSource="{Binding AvatarPath, Converter={StaticResource StringToImageSourceConverter}}" Stretch="UniformToFill"/>
+                                                                        </Border.Background>
+                                                                    </Border>
+                                                                </Grid>
+                                                            </Border>
+                                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding GameName}" ToolTip="{Binding GameName}"
+                                                                           Foreground="{StaticResource TextColorBrush}" FontSize="15"
+                                                                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                                <TextBlock Margin="0,2,0,0" FontSize="11" TextTrimming="CharacterEllipsis"
+                                                                           Foreground="{StaticResource MutedTextBrush}">
+                                                                    <Run Text="#"/><Run Text="{Binding TagLine}"/><Run Text="  ·  "/><Run Text="{Binding Region}"/>
+                                                                </TextBlock>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        <DockPanel Margin="0,13,0,9" MinHeight="28" ToolTip="{Binding DisplayRankInfo}">
+                                                            <Image x:Name="RankEmblem" DockPanel.Dock="Left" Width="30" Height="26"
+                                                                   Margin="0,0,6,0" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                                                                   Source="{Binding DisplayRank, Converter={StaticResource RankEmblemConverter}}"/>
                                                             <TextBlock Text="{Binding DisplayRankInfo, Converter={StaticResource RankInfoConverter}}"
-                           FontSize="11"
-                           FontWeight="SemiBold"
-                           Foreground="{StaticResource TextColorBrush}"
-                           TextAlignment="Center"/>
+                                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12"
+                                                                       FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}"/>
+                                                        </DockPanel>
+                                                        <Border x:Name="AccountStats" BorderThickness="0,1,0,0" Padding="0,7,0,1"
+                                                                BorderBrush="{StaticResource BorderBrush}">
+                                                            <UniformGrid Rows="1" Columns="3">
+                                                                <TextBlock FontSize="13" Foreground="{StaticResource TextColorBrush}" ToolTip="League points"><Run Text="{Binding DisplayLeaguePoints, Mode=OneWay}" FontWeight="SemiBold"/><Run Text=" LP" FontSize="11"/></TextBlock>
+                                                                <TextBlock FontSize="13" HorizontalAlignment="Center" Foreground="#49C6B3" ToolTip="Wins"><Run Text="{Binding DisplayWins, Mode=OneWay}" FontWeight="SemiBold"/><Run Text=" W" FontSize="11"/></TextBlock>
+                                                                <TextBlock FontSize="13" HorizontalAlignment="Right" Foreground="#F58582" ToolTip="Losses"><Run Text="{Binding DisplayLosses, Mode=OneWay}" FontWeight="SemiBold"/><Run Text=" L" FontSize="11"/></TextBlock>
+                                                            </UniformGrid>
                                                         </Border>
-
-                                                        <!-- Footer stats -->
-                                                        <Border Grid.Row="3"
-                    Background="#111A27"
-                    BorderBrush="#243246"
-                    BorderThickness="1"
-                    CornerRadius="10"
-                    Padding="8,6"
-                    Margin="0,6,0,0">
-                                                            <Grid>
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="*"/>
-                                                                    <ColumnDefinition Width="*"/>
-                                                                    <ColumnDefinition Width="*"/>
-                                                                </Grid.ColumnDefinitions>
-
-                                                                <StackPanel Grid.Column="0"
-                                VerticalAlignment="Center"
-                                HorizontalAlignment="Center">
-                                                                    <TextBlock Text="LP"
-                                   FontSize="10"
-                                   Opacity="0.7"
-                                   Foreground="{StaticResource TextColorBrush}"
-                                   HorizontalAlignment="Center"/>
-                                                                    <TextBlock Text="{Binding DisplayLeaguePoints}"
-                                   FontSize="14"
-                                   FontWeight="Bold"
-                                   Foreground="{StaticResource TextColorBrush}"
-                                   HorizontalAlignment="Center"/>
-                                                                </StackPanel>
-
-                                                                <StackPanel Grid.Column="1"
-                                VerticalAlignment="Center"
-                                HorizontalAlignment="Center">
-                                                                    <TextBlock Text="W"
-                                   FontSize="10"
-                                   Opacity="0.7"
-                                   Foreground="{StaticResource TextColorBrush}"
-                                   HorizontalAlignment="Center"/>
-                                                                    <TextBlock Text="{Binding DisplayWins}"
-                                   FontSize="14"
-                                   FontWeight="Bold"
-                                   Foreground="#22BABB"
-                                   HorizontalAlignment="Center"/>
-                                                                </StackPanel>
-
-                                                                <StackPanel Grid.Column="2"
-                                VerticalAlignment="Center"
-                                HorizontalAlignment="Center">
-                                                                    <TextBlock Text="L"
-                                   FontSize="10"
-                                   Opacity="0.7"
-                                   Foreground="{StaticResource TextColorBrush}"
-                                   HorizontalAlignment="Center"/>
-                                                                    <TextBlock Text="{Binding DisplayLosses}"
-                                   FontSize="14"
-                                   FontWeight="Bold"
-                                   Foreground="#F24405"
-                                   HorizontalAlignment="Center"/>
-                                                                </StackPanel>
-                                                            </Grid>
-                                                        </Border>
-                                                    </Grid>
+                                                    </StackPanel>
                                                 </Border>
+                                                <DataTemplate.Triggers>
+                                                    <Trigger SourceName="RankEmblem" Property="Source" Value="{x:Null}">
+                                                        <Setter TargetName="RankEmblem" Property="Visibility" Value="Collapsed"/>
+                                                    </Trigger>
+                                                </DataTemplate.Triggers>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>

@@ -28,7 +28,7 @@ namespace RiotAutoLogin.Models
 
         [JsonIgnore] public RankedQueue SelectedQueue { get; set; }
         [JsonIgnore] public RankData? DisplayRank => QueueRanks.GetValueOrDefault(SelectedQueue);
-        [JsonIgnore] public string DisplayRankInfo => DisplayRank?.Label ?? "Not synced";
+        [JsonIgnore] public string DisplayRankInfo => DisplayRank?.Label ?? (SelectedQueue == RankedQueue.RankedFives ? "No Ranked 5s data" : "Not synced");
         [JsonIgnore] public string DisplayLeaguePoints => DisplayRank?.LeaguePoints.ToString() ?? "—";
         [JsonIgnore] public string DisplayWins => DisplayRank?.Wins.ToString() ?? "—";
         [JsonIgnore] public string DisplayLosses => DisplayRank?.Losses.ToString() ?? "—";
@@ -52,8 +52,50 @@ namespace RiotAutoLogin.Models
         {
             QueueRanks ??= new();
             QueueGreyscreens ??= new();
+            // Older releases persisted this empty record when League-V4 omitted Ranked 5s.
+            if (QueueRanks.GetValueOrDefault(RankedQueue.RankedFives) is
+                { Tier: "", Rank: "", LegacyLabel: null, LeaguePoints: 0, Wins: 0, Losses: 0 })
+                QueueRanks.Remove(RankedQueue.RankedFives);
             if (QueueRanks.Count == 0 && !string.IsNullOrWhiteSpace(RankInfo) && !RankInfo.StartsWith("Error:"))
                 QueueRanks[RankedQueue.SoloDuo] = new RankData { LegacyLabel = RankInfo, LeaguePoints = LeaguePoints, Wins = Wins, Losses = Losses };
+        }
+
+        public void ApplyRanks(Dictionary<RankedQueue, RankData> fresh)
+        {
+            if (fresh.Count == 0) return;
+            var merged = new Dictionary<RankedQueue, RankData>(QueueRanks);
+            foreach (var (queue, rank) in fresh)
+                merged[queue] = rank;
+            QueueRanks = merged;
+            RanksUpdatedUtc = DateTime.UtcNow;
+            if (fresh.TryGetValue(RankedQueue.SoloDuo, out var solo))
+            {
+                RankInfo = solo.Label;
+                LeaguePoints = solo.LeaguePoints;
+                Wins = solo.Wins;
+                Losses = solo.Losses;
+            }
+            RefreshRankDisplay();
+        }
+
+        public bool MatchesRiotId(string gameName, string tagLine, string region) =>
+            string.Equals(GameName?.Trim(), gameName?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(TagLine?.Trim(), tagLine?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(Region?.Trim(), region?.Trim(), StringComparison.OrdinalIgnoreCase);
+
+        public void UpdateRiotId(string gameName, string tagLine, string region)
+        {
+            bool samePlayer = MatchesRiotId(gameName, tagLine, region);
+            GameName = gameName;
+            TagLine = tagLine;
+            Region = region;
+            if (samePlayer) return;
+
+            QueueRanks = new();
+            RanksUpdatedUtc = null;
+            RankInfo = string.Empty;
+            LeaguePoints = Wins = Losses = 0;
+            RefreshRankDisplay();
         }
     }
 

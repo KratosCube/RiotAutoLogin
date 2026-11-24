@@ -4,12 +4,10 @@ namespace RiotAutoLogin.Services
 {
     public static class RemotePlayerProfileLinks
     {
-        public static string Create(string? region, string? gameName, string? tagLine)
-        {
-            string platform = region?.Trim().ToUpperInvariant() switch
+        internal static string RegionSlug(string? region) => region?.Trim().ToUpperInvariant() switch
             {
                 "EUW" or "EUW1" => "euw",
-                "EUN" or "EUN1" => "eune",
+                "EUN" or "EUNE" or "EUN1" => "eune",
                 "NA" or "NA1" => "na",
                 "KR" => "kr",
                 "BR" or "BR1" => "br",
@@ -26,6 +24,10 @@ namespace RiotAutoLogin.Services
                 "VN2" or "VN" => "vn",
                 _ => string.Empty
             };
+
+        public static string Create(string? region, string? gameName, string? tagLine)
+        {
+            string platform = RegionSlug(region);
             if (string.IsNullOrEmpty(platform) || string.IsNullOrWhiteSpace(gameName) || string.IsNullOrWhiteSpace(tagLine))
                 return string.Empty;
 

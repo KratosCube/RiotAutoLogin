@@ -48,14 +48,16 @@ A modern, feature-rich application for automating Riot Client logins with secure
 - **Flash Warning:** Warns when Flash is on the opposite preferred spell slot
 
 ### 📊 **Queue Statistics & Waiting Time**
-- **Queue switch:** Solo/Duo, Ranked 5s (the separate weekend ladder), and Flex have their own rank, LP, wins and losses. One refresh retrieves all three; switching uses saved data immediately.
+- The queue switch shows the selected ladder's rank emblem, LP, wins and losses on each Quick Login card. Two full rows fit at the minimum window size. Additional accounts scroll above the statistics panel. [Preview with eight sample accounts](images/login_tab.png)
 - **Sliding statistics:** Use the arrows beside the bottom metrics to slide between ranked totals and Queue / Champ select / Loading / Total waiting / In game. No extra tab or taller footer.
 - **Today or all time:** On the time page, click Today / All time. Totals cover the selected ranked queue across accounts on this PC.
 - **Local history:** Time is recorded while this app runs, including in the tray. It starts with this version's observations, cannot be backfilled from match history, and excludes sleep, client outages and time with the app closed.
 - **Loading detection:** LCU game phases are combined with the Live Client game clock, so a mid-game attach or reconnect is not counted as an initial loading screen. Loading is saved once the game clock confirms the start; delayed clock reads subtract gameplay already elapsed. Unconfirmed loading spans are discarded on outages or shutdown. Queue time includes ready checks and time from dodged drafts is retained.
 - **Greyscreen:** The selected queue's recent client history is shown separately from ranked-period W/L. A `~` marks estimates where Riot omits death duration; the tooltip explains the sample and estimate.
 
-Ranked queues map to `RANKED_SOLO_5x5` / 420, `RANKED_TEAM_5x5` / 710 and `RANKED_FLEX_SR` / 440. Ranked 5s is separate from Clash / 700 and the retired team queue / 42. The client's queue type takes priority when present. See [Riot's Ranked 5s announcement](https://www.leagueoflegends.com/en-us/news/dev/dev-the-return-of-ranked-5s/) and [current queue mapping in Scout](https://github.com/shepherdjerred/monorepo/blob/main/packages/scout-for-lol/packages/data/src/model/core/state.ts).
+Ranked 5s uses `RANKED_PREMADE_5x5` (710), Solo/Duo uses `RANKED_SOLO_5x5` (420), and Flex uses `RANKED_FLEX_SR` (440). Refresh reads League-V4 with your configured key. If the weekend entry is missing or the public API is unavailable, an open League client on the saved account's region can look up its full Riot ID and supply its ranked statistics. Missing weekend data keeps the last known result. An account with no result shows dashes until a source reports it. [League client ranked schema](https://github.com/KebsCS/lcu-and-riotclient-api/blob/e8c7cf2ad885f6af82dfcad87be9afa5792dae66/lcu/swagger.json#L63666) · [Riot's Ranked 5s announcement](https://www.leagueoflegends.com/en-us/news/dev/dev-the-return-of-ranked-5s/)
+
+The ten small rank emblems are bundled locally from Riot Games' ranked artwork. [Riot Developer Portal assets](https://developer.riotgames.com/docs/lol#ranked-info_icons-and-emblems)
 
 Performance changes reuse local HTTP connections and per-process authentication, coalesce short gameflow reads, cache Data Dragon versions, bound concurrent rank updates, and avoid recreating account cards for value-only updates. Greyscreen refresh uses one match-history response rather than fetching each match separately.
 

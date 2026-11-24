@@ -464,9 +464,7 @@ namespace RiotAutoLogin
             {
                 string region = _selectedRegion;
                 selected.AccountName = txtAccountLogin.Text;
-                selected.GameName = txtGameName.Text;
-                selected.TagLine = txtTagLine.Text;
-                selected.Region = region;
+                selected.UpdateRiotId(txtGameName.Text, txtTagLine.Text, region);
                 if (!string.IsNullOrWhiteSpace(txtAccountPassword.Password))
                 {
                     selected.EncryptedPassword = EncryptionService.EncryptString(txtAccountPassword.Password);
@@ -707,11 +705,9 @@ namespace RiotAutoLogin
                 btnRefreshQuickStats.IsEnabled = true;
             }
         }
-        private async Task UpdateAllAccountsAsync(bool onlyStale = false)
-        {
-            var accounts = await Dispatcher.InvokeAsync(() => _accounts.ToList());
-            await AccountService.UpdateAllAccountsAsync(accounts, onlyStale);
-        }
+        // Account edits, applying completed lookups and saving the cards share the UI dispatcher.
+        private Task UpdateAllAccountsAsync(bool onlyStale = false) =>
+            Dispatcher.InvokeAsync<Task>(() => AccountService.UpdateAllAccountsAsync(_accounts.ToList(), onlyStale)).Task.Unwrap();
 
         private void UpdateTotalGameStats()
         {

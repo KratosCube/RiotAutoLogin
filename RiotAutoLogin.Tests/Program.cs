@@ -57,7 +57,8 @@ try
     using var entries = JsonDocument.Parse("""
         [
           {"queueType":"RANKED_SOLO_5x5","tier":"EMERALD","rank":"IV","leaguePoints":78,"wins":41,"losses":40},
-          {"queueType":"RANKED_TEAM_5x5","tier":"GOLD","rank":"II","leaguePoints":30,"wins":6,"losses":3},
+          {"queueType":"RANKED_PREMADE_5x5","tier":"GOLD","rank":"II","leaguePoints":30,"wins":6,"losses":3},
+          {"queueType":"RANKED_TEAM_5x5","tier":"BRONZE","rank":"IV","wins":987},
           {"queueType":"RANKED_FLEX_SR","tier":"SILVER","rank":"I","wins":2,"losses":4},
           {"queueType":"RANKED_TFT","tier":"DIAMOND","wins":999}
         ]
@@ -72,6 +73,35 @@ try
     using var empty = JsonDocument.Parse("[]");
     var unranked = RankedQueues.ParseRanks(empty.RootElement);
     Equal(0, unranked[RankedQueue.SoloDuo].Wins, "A successful unranked refresh clears old wins");
+    Equal(false, unranked.ContainsKey(RankedQueue.RankedFives), "A missing weekend ladder is unknown");
+
+    var localCalls = new List<string>();
+    Task<string[]> GetLcuRankFixture(string path)
+    {
+        localCalls.Add(path);
+        string json = path switch
+        {
+            "riotclient/region-locale" => """{"region":"EUNE"}""",
+            "lol-summoner/v1/alias/lookup?gameName=Two%20Words&tagLine=TAG" =>
+                """{"alias":{"gameName":"Two Words","tagLine":"tag"},"puuid":"client-id"}""",
+            "lol-ranked/v1/ranked-stats/client-id" => """
+                {"queues":[{"queueType":"RANKED_FLEX_SR","tier":"GOLD","division":"II","wins":35}],
+                 "queueMap":{"RANKED_PREMADE_5x5":{"tier":"EMERALD","division":"III","wins":9,"losses":5,"leaguePoints":72}}}
+                """,
+            _ => throw new Exception($"Unexpected rank request: {path}")
+        };
+        return Task.FromResult(new[] { "200", json });
+    }
+    var clientRanks = await LcuRankLookup.ReadAsync("Two Words", "TAG", "eun1", GetLcuRankFixture);
+    Equal("EMERALD III (72 LP, 9W/5L)", clientRanks[RankedQueue.RankedFives].Label, "Look up the saved Riot ID and read its client division");
+    Equal(35, clientRanks[RankedQueue.Flex].Wins, "Read LCU queues and queueMap independently");
+    localCalls.Clear();
+    var otherRegion = await LcuRankLookup.ReadAsync("Two Words", "TAG", "euw1", GetLcuRankFixture);
+    Equal(0, otherRegion.Count, "A different platform cannot contribute rank data");
+    Equal(1, localCalls.Count, "The wrong platform stops before looking up a player");
+    var wrongPlayer = await LcuRankLookup.ReadAsync("Two Words", "TAG", "eun1", path =>
+        path.StartsWith("lol-summoner") ? Task.FromResult(new[] { "200", """{"alias":{"gameName":"Two Words","tagLine":"OTHER"},"puuid":"other"}""" }) : GetLcuRankFixture(path));
+    Equal(0, wrongPlayer.Count, "A matching name and a different tag cannot contribute ranks");
 
     var account = new Account { RankInfo = "GOLD IV (40 LP, 10W/11L)", LeaguePoints = 40, Wins = 10, Losses = 11 };
     account.MigrateLegacyRank();
@@ -82,6 +112,22 @@ try
     Equal("2", account.DisplayWins, "Changing queues uses the matching cached rank");
     var reloadedAccount = JsonSerializer.Deserialize<Account>(JsonSerializer.Serialize(account))!;
     Equal(6, reloadedAccount.QueueRanks[RankedQueue.RankedFives].Wins, "All rank caches survive restart");
+    reloadedAccount.ApplyRanks(unranked);
+    Equal(6, reloadedAccount.QueueRanks[RankedQueue.RankedFives].Wins, "A partial response preserves the last known weekend ladder");
+    reloadedAccount.ApplyRanks(clientRanks);
+    Equal(72, reloadedAccount.QueueRanks[RankedQueue.RankedFives].LeaguePoints, "New client data replaces the old weekend record");
+    using var reset = JsonDocument.Parse("""{"queues":[{"queueType":"RANKED_PREMADE_5x5","tier":"NONE","division":"NA"}]}""");
+    reloadedAccount.ApplyRanks(RankedQueues.ParseClientRanks(reset.RootElement));
+    Equal("Unranked", reloadedAccount.QueueRanks[RankedQueue.RankedFives].Label, "An explicitly unranked client record clears a previous rank");
+    reloadedAccount.QueueRanks[RankedQueue.RankedFives] = new RankData();
+    reloadedAccount.MigrateLegacyRank();
+    Equal(false, reloadedAccount.QueueRanks.ContainsKey(RankedQueue.RankedFives), "Remove synthetic zeroes saved by older releases");
+    reloadedAccount.UpdateRiotId("Two Words", "TAG", "eun1");
+    reloadedAccount.ApplyRanks(clientRanks);
+    reloadedAccount.UpdateRiotId("two words", "tag", "EUN1");
+    Equal(72, reloadedAccount.QueueRanks[RankedQueue.RankedFives].LeaguePoints, "Cosmetic Riot ID edits preserve cached ranks");
+    reloadedAccount.UpdateRiotId("Two Words", "OTHER", "eun1");
+    Equal(0, reloadedAccount.QueueRanks.Count, "An edited Riot ID cannot inherit another player's weekend rank");
     Equal(false, JsonSerializer.Serialize(account).Contains("DisplayWins"), "Display-only values are not persisted");
     var changes = new List<string?>();
     account.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
@@ -90,7 +136,7 @@ try
     account.GameName = "Renamed player";
     Equal(true, changes.Contains(nameof(Account.GameName)), "Editing an account updates its card without rebuilding it");
 
-    var session = GameflowSnapshot.Parse("""{"phase":"ChampSelect","gameData":{"gameId":123,"queue":{"id":710,"type":"RANKED_TEAM_5x5"},"isSpectator":false}}""");
+    var session = GameflowSnapshot.Parse("""{"phase":"ChampSelect","gameData":{"gameId":123,"queue":{"id":710,"type":"RANKED_PREMADE_5x5"},"isSpectator":false}}""");
     Equal<RankedQueue?>(RankedQueue.RankedFives, session.Queue, "Read queue from LCU session");
     Equal(123L, session.GameId, "Read game identity");
     Equal<bool?>(true, LiveGameStartService.Parse("""{"Events":[{"EventName":"GameStart","EventTime":0.03}]}"""), "GameStart event confirms play");
