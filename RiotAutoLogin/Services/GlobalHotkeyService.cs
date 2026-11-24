@@ -14,9 +14,8 @@ namespace RiotAutoLogin.Services
         [DllImport("user32.dll")]
         private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
-        private readonly Window _window;
         private HwndSource? _source;
-        private int _hotkeyId = 1;
+        private const int HotkeyId = 1;
 
         public event Action? HotkeyPressed;
 
@@ -46,11 +45,10 @@ namespace RiotAutoLogin.Services
         public const uint VK_8 = 0x38;
         public const uint VK_9 = 0x39;
 
-        private IntPtr _windowHandle;
+        private readonly IntPtr _windowHandle;
 
         public GlobalHotkeyService(System.Windows.Window window)
         {
-            _window = window;
             _windowHandle = new WindowInteropHelper(window).EnsureHandle();
             _source = HwndSource.FromHwnd(_windowHandle);
             _source?.AddHook(HwndHook);
@@ -60,7 +58,7 @@ namespace RiotAutoLogin.Services
         {
             try
             {
-                return RegisterHotKey(_windowHandle, _hotkeyId, modifier, virtualKey);
+                return RegisterHotKey(_windowHandle, HotkeyId, modifier, virtualKey);
             }
             catch (Exception ex)
             {
@@ -73,7 +71,7 @@ namespace RiotAutoLogin.Services
         {
             try
             {
-                UnregisterHotKey(_windowHandle, _hotkeyId);
+                UnregisterHotKey(_windowHandle, HotkeyId);
             }
             catch (Exception ex)
             {
@@ -84,7 +82,7 @@ namespace RiotAutoLogin.Services
         private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             const int WM_HOTKEY = 0x0312;
-            if (msg == WM_HOTKEY && wParam.ToInt32() == _hotkeyId)
+            if (msg == WM_HOTKEY && wParam.ToInt32() == HotkeyId)
             {
                 HotkeyPressed?.Invoke();
                 handled = true;
@@ -94,9 +92,12 @@ namespace RiotAutoLogin.Services
 
         public void Dispose()
         {
-            _source?.RemoveHook(HwndHook);
-            _source?.Dispose();
+            if (_source == null)
+                return;
+            // WPF owns the window's HwndSource. This service owns only its hook and hotkey.
             Unregister();
+            _source.RemoveHook(HwndHook);
+            _source = null;
             GC.SuppressFinalize(this);
         }
 
@@ -150,4 +151,4 @@ namespace RiotAutoLogin.Services
             return ""; // Or a default like "L"
         }
     }
-} 
+}

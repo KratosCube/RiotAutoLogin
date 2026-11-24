@@ -10,7 +10,7 @@ namespace RiotAutoLogin.Services
     {
         private const string RegistryKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
         private static readonly string AppName = Assembly.GetEntryAssembly()?.GetName().Name ?? "RiotAutoLogin";
-        private static readonly string AppPath = Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
+        private static readonly string AppPath = Environment.ProcessPath ?? string.Empty;
 
         public static bool IsRegisteredForStartup()
         {

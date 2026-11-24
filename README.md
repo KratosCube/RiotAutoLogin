@@ -74,7 +74,7 @@ To use smaller future updates, choose **Settings → Enable smaller updates** se
 
 The installed version keeps the previous package and applies binary deltas. Unchanged runtime files do not need to be downloaded again. A missing base, an unavailable/corrupt delta, or a large gap between versions can require a full download. Actual sizes are reported in the release workflow summary. Packages are compressed for transport and extracted during installation, so the installed app does not decompress a giant EXE on every startup.
 
-**RiotAutoLogin-Portable.zip** also supports the updater. Its first update may need a full package to seed the local cache. Keep the entire extracted directory. The versioned standalone `.exe` remains a compressed compatibility download for old updaters; it does not support deltas until migrated.
+**RiotAutoLogin-Portable.zip** also supports the updater. Its first update may need a full package to seed the local cache. Keep the entire extracted directory. The versioned standalone `.exe` for older updaters stores its assemblies uncompressed to reduce launch time. This makes that download larger. Delta updates are available after migration.
 
 ### Publishing an announced or quiet release
 

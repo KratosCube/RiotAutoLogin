@@ -48,10 +48,9 @@ namespace RiotAutoLogin
         private string _selectedAvatarPath = string.Empty;
         private string _selectedRegion = "eun1";
         private QuickLoginWindow? _quickLoginWindow;
-        private CancellationTokenSource? _lifetimeCts;
+        private readonly CancellationTokenSource _lifetimeCts = new();
         private CancellationTokenSource? _loginCts;
         private bool _startupInitialized;
-        private bool _deferredServicesInitialized;
         private bool _suppressStartupToggleEvents;
         private bool _isLoginInProgress;
 
@@ -63,20 +62,15 @@ namespace RiotAutoLogin
             LoadAccounts();
             LoadHotkeySettings();
             InitializeStatistics();
-            InitializeUpdateService();
             RefreshUI();
             
             this.Closing += MainWindow_Closing;
             this.KeyDown += MainWindow_KeyDown;
         }
 
-        private void InitializeDeferredServices()
+        protected override void OnSourceInitialized(EventArgs e)
         {
-            if (_deferredServicesInitialized)
-                return;
-
-            _deferredServicesInitialized = true;
-            InitializeNotifyIcon(); 
+            base.OnSourceInitialized(e);
             InitializeHotkeyService();
         }
             
@@ -89,9 +83,9 @@ namespace RiotAutoLogin
             SetAutoAcceptUiPendingClientCheck();
         }
 
-        private void InitializeNotifyIcon()
+        private NotifyIcon CreateNotifyIcon()
         {
-            _notifyIcon = new NotifyIcon();
+            var icon = new NotifyIcon();
 
             try
             {
@@ -99,7 +93,7 @@ namespace RiotAutoLogin
                 var resourceStream = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/resources/logoAcc.ico"));
                 if (resourceStream != null)
                 {
-                    _notifyIcon.Icon = new System.Drawing.Icon(resourceStream.Stream);
+                    icon.Icon = new System.Drawing.Icon(resourceStream.Stream);
                     Console.WriteLine("Custom system tray icon (logoAcc.ico) loaded from resources successfully.");
                 }
                 else
@@ -108,14 +102,14 @@ namespace RiotAutoLogin
                     string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "logoAcc.ico");
                     if (File.Exists(iconPath))
                     {
-                        _notifyIcon.Icon = new System.Drawing.Icon(iconPath);
+                        icon.Icon = new System.Drawing.Icon(iconPath);
                         Console.WriteLine("Custom system tray icon (logoAcc.ico) loaded from file path successfully.");
                     }
                     else
                     {
                         Console.WriteLine($"Custom icon not found at: {iconPath}");
                         // Fallback to system icon
-                        _notifyIcon.Icon = System.Drawing.SystemIcons.Application;
+                        icon.Icon = System.Drawing.SystemIcons.Application;
                         Console.WriteLine("Fallback system tray icon (SystemIcons.Application) loaded.");
                     }
                 }
@@ -126,7 +120,7 @@ namespace RiotAutoLogin
                 try
                 {
                     // Attempt to load a generic system icon as a fallback
-                    _notifyIcon.Icon = System.Drawing.SystemIcons.Application;
+                    icon.Icon = System.Drawing.SystemIcons.Application;
                     Console.WriteLine("Fallback system tray icon (SystemIcons.Application) loaded.");
                 }
                 catch (Exception exSysIcon)
@@ -136,16 +130,16 @@ namespace RiotAutoLogin
                 }
             }
             
-            _notifyIcon.Visible = false; // Initially hidden, will be shown on minimize or X-close
-            _notifyIcon.Text = "Riot Auto Login";
+            icon.Text = "Riot Auto Login";
 
             // Handle double-click to show the main window
-            _notifyIcon.DoubleClick += (s, args) => ShowMainWindow();
+            icon.DoubleClick += (s, args) => ShowMainWindow();
 
             // Context menu for the tray icon
-            _notifyIcon.ContextMenuStrip = new ContextMenuStrip();
-            _notifyIcon.ContextMenuStrip.Items.Add("Show", null, (s, args) => ShowMainWindow());
-            _notifyIcon.ContextMenuStrip.Items.Add("Exit", null, (s, args) => ExitApplication());
+            icon.ContextMenuStrip = new ContextMenuStrip();
+            icon.ContextMenuStrip.Items.Add("Show", null, (s, args) => ShowMainWindow());
+            icon.ContextMenuStrip.Items.Add("Exit", null, (s, args) => ExitApplication());
+            return icon;
         }
 
         private void InitializeHotkeyService()
@@ -163,13 +157,21 @@ namespace RiotAutoLogin
             else
             {
                 Console.WriteLine($"Failed to register hotkey {_hotkeySettings.DisplayName}. It might be in use by another application.");
-                System.Windows.MessageBox.Show($"Failed to register hotkey: {_hotkeySettings.DisplayName}. It might already be in use.", "Hotkey Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                string shortcut = _hotkeySettings.DisplayName;
+                Dispatcher.InvokeAsync(() =>
+                {
+                    if (IsVisible)
+                        System.Windows.MessageBox.Show(this, $"Failed to register hotkey: {shortcut}. It might already be in use.", "Hotkey Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }, System.Windows.Threading.DispatcherPriority.ContextIdle);
             }
             UpdateHotkeyDisplay(); // Update the label in settings
         }
 
-        private void InitializeUpdateService()
+        private UpdateService EnsureUpdateService()
         {
+            if (_updateService != null)
+                return _updateService;
+
             // Configured for GitHub repository: https://github.com/KratosCube/RiotAutoLogin
             _updateService = new UpdateService("KratosCube", "RiotAutoLogin");
             
@@ -183,6 +185,7 @@ namespace RiotAutoLogin
                     "Update failed", MessageBoxButton.OK, MessageBoxImage.Warning)));
             
             Console.WriteLine("Update service initialized");
+            return _updateService;
         }
 
         private void OnUpdateAvailable(UpdateInfo updateInfo)
@@ -323,30 +326,25 @@ namespace RiotAutoLogin
                 return;
 
             _startupInitialized = true;
+            CancellationToken lifetimeToken = _lifetimeCts.Token;
             Console.WriteLine("🚀 Application shell loaded. Starting deferred services...");
 
-            // Give WPF a chance to paint the shell before initializing tray, hotkey,
-            // LCU, network, and Data Dragon work.
+            // Let the account cards paint before starting client monitors.
             await System.Windows.Threading.Dispatcher.Yield(
                 System.Windows.Threading.DispatcherPriority.ContextIdle);
+            if (lifetimeToken.IsCancellationRequested)
+                return;
 
-            InitializeDeferredServices();
-            InitializeSettingsExtras();
-            if (_leagueConfigSettings.Enabled)
+            if (_leagueConfigSettings.Value.Enabled)
                 _ = RefreshPersistentSettingsAsync();
             LoadAutoPickSettings();
             UpdateCurrentVersionDisplay();
-
-            _lifetimeCts = new CancellationTokenSource();
-            CancellationToken lifetimeToken = _lifetimeCts.Token;
 
             AutoAcceptDeclineGuardService.Start();
             _ = Task.Run(() => MonitorLeagueClientAsync(lifetimeToken), lifetimeToken);
             StartAutomaticAccountInfoRefresh();
             StartWaitingTimeTracking();
 
-            _ = PreloadGameDataSafelyAsync(lifetimeToken);
-            _ = LoadApiKeyForDisplayAsync(lifetimeToken);
             _ = SyncGreyscreenStatsAfterStartupAsync(lifetimeToken);
             _ = CheckForUpdatesAfterStartupAsync(lifetimeToken);
 
@@ -357,41 +355,6 @@ namespace RiotAutoLogin
             }
 
             Console.WriteLine("🎉 Application is ready; background initialization is running.");
-        }
-
-        private static async Task PreloadGameDataSafelyAsync(CancellationToken cancellationToken)
-        {
-            try
-            {
-                await Task.Run(() => GameData.PreloadAllDataAsync(), cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Game data preload failed: {ex.Message}");
-            }
-        }
-
-        private async Task LoadApiKeyForDisplayAsync(CancellationToken cancellationToken)
-        {
-            try
-            {
-                string apiKey = await Task.Run(ApiKeyManager.GetApiKey, cancellationToken);
-                if (string.IsNullOrEmpty(apiKey))
-                    return;
-
-                txtApiKey.Text = "••••••••••••••••••••" + apiKey.Substring(Math.Max(0, apiKey.Length - 4));
-                txtApiKey.ToolTip = "API key is saved. Enter a new key to update.";
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"API key display load failed: {ex.Message}");
-            }
         }
 
         private async Task SyncGreyscreenStatsAfterStartupAsync(CancellationToken cancellationToken)
@@ -420,8 +383,10 @@ namespace RiotAutoLogin
             try
             {
                 await Task.Delay(1500, cancellationToken);
-                if (_updateService?.ShouldCheckForUpdates() == true)
-                    await _updateService.CheckForUpdatesAsync(manual: false, cancellationToken: cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                var service = EnsureUpdateService();
+                if (service.ShouldCheckForUpdates())
+                    await service.CheckForUpdatesAsync(manual: false, cancellationToken: cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -761,38 +726,25 @@ namespace RiotAutoLogin
 
         private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (e.Source is System.Windows.Controls.TabControl tabControl && tabControl.SelectedItem is TabItem selectedTab)
-            {
-                // Check if the SettingsTab is selected by its Name property
-                if (selectedTab.Name == "SettingsTab") 
-                {
-                    // Load and display API Key
-                    try
-                    {
-                        var apiKeyTextBox = VisualTreeHelperExtensions.FindVisualChildren<System.Windows.Controls.TextBox>(selectedTab)
-                            .FirstOrDefault(tb => tb.Name == "txtApiKey");
-                        if (apiKeyTextBox != null)
-                        {
-                            string apiKey = ApiKeyManager.GetApiKey();
-                            if (!string.IsNullOrEmpty(apiKey))
-                            {
-                                apiKeyTextBox.Text = "••••••••••••••••••••" + apiKey.Substring(Math.Max(0, apiKey.Length - 4));
-                                apiKeyTextBox.ToolTip = "API key is saved. Enter a new key to update.";
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine("Error loading API key for display: " + ex.Message);
-                    }
+            if (SettingsTab == null || e.Source != mainTabs || mainTabs.SelectedItem != SettingsTab)
+                return;
 
-                    // Load and display Hotkey settings & Run on Startup
-                    LoadHotkeySettings(); // This now also loads RunOnStartup setting
-                    UpdateHotkeyDisplay(); 
-                    UpdateRunOnStartupToggleUI(); // Update the new toggle
-                    _ = RefreshPersistentSettingsAsync();
-                }
+            LoadHotkeySettings();
+            UpdateHotkeyDisplay();
+            UpdateRunOnStartupToggleUI();
+            InitializeSettingsExtras();
+            EnsureClientAlertSettingsCard();
+            UpdateClientAlertSettingsUi();
+            EnsureUpdateService();
+
+            string apiKey = ApiKeyManager.GetApiKey();
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                txtApiKey.Text = "••••••••••••••••••••" + apiKey.Substring(Math.Max(0, apiKey.Length - 4));
+                txtApiKey.ToolTip = "API key is saved. Enter a new key to update.";
             }
+
+            _ = RefreshPersistentSettingsAsync();
         }
 
         private void btnSaveApiKey_Click(object sender, RoutedEventArgs e)
@@ -899,8 +851,8 @@ namespace RiotAutoLogin
             _waitingTimeMonitor?.Dispose();
             _loginCts?.Cancel();
             _loginCts?.Dispose();
-            _lifetimeCts?.Cancel();
-            _lifetimeCts?.Dispose();
+            _lifetimeCts.Cancel();
+            _lifetimeCts.Dispose();
             _hotkeyService?.Dispose(); 
             _notifyIcon?.Dispose(); 
             
@@ -1484,7 +1436,7 @@ namespace RiotAutoLogin
             txtBanHoverDelay.Text = _autoPickSettings.BanHoverDelayMs.ToString();
             txtBanLockDelay.Text = _autoPickSettings.BanLockDelayMs.ToString();
 
-            // Update champion and spell names/images
+            // Restore the saved selections for the auto-pick monitor.
             PrimaryChampionName = string.IsNullOrEmpty(_autoPickSettings.PickChampionName) ?
                 "Select Champion" : _autoPickSettings.PickChampionName;
 
@@ -1499,51 +1451,6 @@ namespace RiotAutoLogin
 
             Spell2Name = string.IsNullOrEmpty(_autoPickSettings.SummonerSpell2Name) ?
                 "Select Spell" : _autoPickSettings.SummonerSpell2Name;
-
-            // Load images if needed
-            LoadChampionAndSpellImages();
-        }
-
-        private async void LoadChampionAndSpellImages()
-        {
-            try
-            {
-                // Load champion images
-                if (!string.IsNullOrEmpty(_autoPickSettings.PickChampionName) && PrimaryChampionImage == null)
-                {
-                    string imageUrl = await DataDragonService.GetChampionImageUrlAsync(_autoPickSettings.PickChampionName);
-                    PrimaryChampionImage = await DataDragonService.DownloadImageAsync(imageUrl);
-                }
-
-                if (!string.IsNullOrEmpty(_autoPickSettings.SecondaryChampionName) && SecondaryChampionImage == null)
-                {
-                    string imageUrl = await DataDragonService.GetChampionImageUrlAsync(_autoPickSettings.SecondaryChampionName);
-                    SecondaryChampionImage = await DataDragonService.DownloadImageAsync(imageUrl);
-                }
-
-                if (!string.IsNullOrEmpty(_autoPickSettings.BanChampionName) && BanChampionImage == null)
-                {
-                    string imageUrl = await DataDragonService.GetChampionImageUrlAsync(_autoPickSettings.BanChampionName);
-                    BanChampionImage = await DataDragonService.DownloadImageAsync(imageUrl);
-                }
-
-                // Load spell images
-                if (!string.IsNullOrEmpty(_autoPickSettings.SummonerSpell1Name) && Spell1Image == null)
-                {
-                    string imageUrl = await DataDragonService.GetSummonerSpellImageUrlAsync(_autoPickSettings.SummonerSpell1Name);
-                    Spell1Image = await DataDragonService.DownloadImageAsync(imageUrl);
-                }
-
-                if (!string.IsNullOrEmpty(_autoPickSettings.SummonerSpell2Name) && Spell2Image == null)
-                {
-                    string imageUrl = await DataDragonService.GetSummonerSpellImageUrlAsync(_autoPickSettings.SummonerSpell2Name);
-                    Spell2Image = await DataDragonService.DownloadImageAsync(imageUrl);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error loading images: {ex.Message}");
-            }
         }
 
         private BitmapImage? _secondaryChampionImage;
@@ -1760,11 +1667,9 @@ namespace RiotAutoLogin
             if (this.IsVisible) // Or any other condition that implies it's not a true exit
             {
                 e.Cancel = true; // Prevent the window from closing
-                this.Hide();     // Hide it instead
-                if (_notifyIcon != null)
-                {
-                    _notifyIcon.Visible = true; // Show tray icon
-                }
+                _notifyIcon ??= CreateNotifyIcon();
+                _notifyIcon.Visible = true;
+                this.Hide();
                 Console.WriteLine("MainWindow_Closing: Hid to system tray.");
             }
             else
@@ -1843,6 +1748,9 @@ namespace RiotAutoLogin
                 // RunOnStartup is false by default
                  // DO NOT SAVE here to avoid overwriting a potentially recoverable file
             }
+            if (_hotkeySettings.PreferredFlashSlot is not (1 or 2))
+                _hotkeySettings.PreferredFlashSlot = 2;
+            _hotkeySettings.GameStartAlertRepeatCount = ClampGameStartAlertRepeatCount(_hotkeySettings.GameStartAlertRepeatCount);
             _hotkeySettings.RunOnStartup = StartupManager.IsRegisteredForStartup();
             // UI updates are now handled by the caller (e.g., constructor or TabControl_SelectionChanged)
         }

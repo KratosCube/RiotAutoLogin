@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -40,7 +42,7 @@ jobs:
           $env:NODE_PATH = Join-Path $tools "node_modules"
           node RiotAutoLogin.UiChecks/remote-pick.cjs
 
-      - name: Open Accounts tab on Windows
+      - name: Check Quick Login at startup and open Accounts and Settings on Windows
         run: dotnet run --project RiotAutoLogin.UiChecks/RiotAutoLogin.UiChecks.csproj --configuration Release
 
       - name: Restore packaging tool
@@ -52,6 +54,30 @@ jobs:
           ./scripts/Build-Release.ps1 -Version 1.5.0 -AssetDir build/assets-base -SkipCompatibilityExe
           ./scripts/Build-Release.ps1 -Version 1.5.1 -AssetDir build/assets-new
           dotnet run --project RiotAutoLogin.Tests/RiotAutoLogin.Tests.csproj -c Release -- --packages build/packages
+
+      - name: Measure launch to a responsive window for both Windows distributions
+        shell: pwsh
+        run: |
+          $paths = @(
+            'build/publish-1.5.1/RiotAutoLogin.exe',
+            'build/assets-new/RiotAutoLogin-v1.5.1-win-x64.exe'
+          )
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            $base = git rev-parse HEAD^1
+            $packagingChanges = git diff --name-only $base HEAD -- scripts/Build-Release.ps1 RiotAutoLogin/RiotAutoLogin.csproj
+            if ($packagingChanges) {
+              $baseline = Join-Path $env:RUNNER_TEMP 'startup-baseline'
+              git worktree add --detach $baseline $base
+              Push-Location $baseline
+              try {
+                dotnet tool restore
+                ./scripts/Build-Release.ps1 -Version 1.5.1
+              } finally { Pop-Location }
+              $paths += Join-Path $baseline 'build/publish-1.5.1/RiotAutoLogin.exe'
+              $paths += Join-Path $baseline 'build/assets/RiotAutoLogin-v1.5.1-win-x64.exe'
+            }
+          }
+          ./RiotAutoLogin.UiChecks/Measure-Startup.ps1 -Executable $paths
 
       - name: Retain packaging diagnostics
         if: always()
