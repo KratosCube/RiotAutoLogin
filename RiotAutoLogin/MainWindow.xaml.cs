@@ -709,10 +709,10 @@ namespace RiotAutoLogin
         }
         // Account edits, applying completed lookups and saving the cards share the UI dispatcher.
         private Task UpdateAllAccountsAsync(bool onlyStale = false) =>
-            Dispatcher.InvokeAsync<Task>(async () =>
+            Dispatcher.InvokeAsync<Task>(() =>
             {
-                await AccountService.UpdateAllAccountsAsync(_accounts.ToList(), onlyStale);
                 StartOpponentRankRefresh(force: !onlyStale);
+                return AccountService.UpdateAllAccountsAsync(_accounts.ToList(), onlyStale);
             }).Task.Unwrap();
 
         private void UpdateTotalGameStats()

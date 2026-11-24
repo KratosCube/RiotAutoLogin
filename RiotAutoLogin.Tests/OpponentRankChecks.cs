@@ -32,6 +32,15 @@ internal static class OpponentRankChecks
         calls.Clear();
         await service.ReadAsync("Two Words", "TAG", "euw1", RankedQueue.SoloDuo, default);
         Require(!calls.Any(path => path.StartsWith("lol-ranked/")), "A repeat refresh must reuse the rank cache.");
+        var fullRemake = new LcuOpponentRankService((path, token) =>
+        {
+            if (path != "lol-match-history/v1/games/12") return Read(path, token);
+            var game = Game(12);
+            game["participants"]![6]!["stats"]!["gameEndedInEarlySurrender"] = true;
+            return Reply(game.ToJsonString());
+        });
+        Require((await fullRemake.ReadAsync("Two Words", "TAG", "euw1", RankedQueue.SoloDuo, default))?.Games == 10,
+            "A remake discovered in match details must be replaced by the next eligible game.");
         calls.Clear();
         Require(await service.ReadAsync("Two Words", "TAG", "eun1", RankedQueue.SoloDuo, default) == null &&
                 calls.SequenceEqual(["riotclient/region-locale"]), "A different client region must stop before identity or history requests.");

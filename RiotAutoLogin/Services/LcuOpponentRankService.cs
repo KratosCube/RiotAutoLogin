@@ -44,10 +44,12 @@ internal sealed class LcuOpponentRankService(Func<string, CancellationToken, Tas
             }
             if (games.ValueKind != JsonValueKind.Array) return null;
 
-            var recent = games.EnumerateArray().Where(game => CompletedInQueue(game, queue))
+            var recent = games.EnumerateArray()
                 .OrderByDescending(game => Number(game, "gameCreation"))
                 .ThenByDescending(game => Number(game, "gameId"))
                 .DistinctBy(game => Number(game, "gameId"))
+                .Take(100)
+                .Where(game => CompletedInQueue(game, queue))
                 .ToArray();
             var result = new OpponentRankSummary();
             double totalPosition = 0;
