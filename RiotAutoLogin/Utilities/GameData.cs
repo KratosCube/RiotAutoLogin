@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using RiotAutoLogin.Models;
 using RiotAutoLogin.Services;
@@ -16,18 +17,17 @@ namespace RiotAutoLogin.Utilities
         public static List<ChampionModel> Champions { get; private set; } = new List<ChampionModel>();
         public static List<SummonerSpellModel> Spells { get; private set; } = new List<SummonerSpellModel>();
 
-        private static bool _isLoading = false;
-        private static bool _isLoaded = false;
+        private static readonly SemaphoreSlim LoadGate = new(1, 1);
+        private static bool _isLoaded;
 
-        public static async Task PreloadAllDataAsync()
+        public static async Task EnsureLoadedAsync()
         {
-            if (_isLoading || _isLoaded)
-                return;
-
-            _isLoading = true;
-
+            await LoadGate.WaitAsync().ConfigureAwait(false);
             try
             {
+                if (_isLoaded)
+                    return;
+
                 Debug.WriteLine("Starting data preloading...");
 
                 // CHANGE THIS PART - Use Data Dragon directly instead of LCU
@@ -171,7 +171,7 @@ namespace RiotAutoLogin.Utilities
             }
             finally
             {
-                _isLoading = false;
+                LoadGate.Release();
             }
         }
 

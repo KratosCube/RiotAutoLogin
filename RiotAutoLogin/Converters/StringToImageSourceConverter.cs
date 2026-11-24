@@ -20,6 +20,8 @@ namespace RiotAutoLogin.Converters
                 bmp.BeginInit();
                 bmp.UriSource = new Uri(path, UriKind.Absolute);
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
+                // The largest account avatar is 74 DIPs. Keep a high-DPI thumbnail.
+                bmp.DecodePixelWidth = 192;
                 bmp.EndInit();
                 return bmp;
             }

@@ -38,8 +38,6 @@ namespace RiotAutoLogin
                 return;
 
             _clientAlertsInitialized = true;
-            EnsureClientAlertSettingsCard();
-            UpdateClientAlertSettingsUi();
             StartClientAlertMonitor();
             Closed += (_, _) => StopClientAlertMonitor();
         }
@@ -49,8 +47,9 @@ namespace RiotAutoLogin
             if (_clientAlertsSettingsCard != null)
                 return;
 
-            _clientAlertsSettingsCard = clientAlertsSettingsCard;
+            _clientAlertsSettingsCard = new ClientAlertsSettingsCard();
             HookClientAlertSettingsEvents(_clientAlertsSettingsCard);
+            clientAlertsSettingsHost.Content = _clientAlertsSettingsCard;
         }
 
         private void HookClientAlertSettingsEvents(ClientAlertsSettingsCard card)
@@ -157,11 +156,6 @@ namespace RiotAutoLogin
         {
             if (_clientAlertsSettingsCard == null)
                 return;
-
-            if (_hotkeySettings.PreferredFlashSlot != 1 && _hotkeySettings.PreferredFlashSlot != 2)
-                _hotkeySettings.PreferredFlashSlot = 2;
-
-            _hotkeySettings.GameStartAlertRepeatCount = ClampGameStartAlertRepeatCount(_hotkeySettings.GameStartAlertRepeatCount);
 
             _suppressClientAlertSettingEvents = true;
             try

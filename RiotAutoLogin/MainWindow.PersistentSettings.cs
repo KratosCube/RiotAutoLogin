@@ -9,7 +9,7 @@ namespace RiotAutoLogin;
 
 public partial class MainWindow
 {
-    private readonly LeagueConfigSettingsService _leagueConfigSettings = new();
+    private readonly Lazy<LeagueConfigSettingsService> _leagueConfigSettings = new(() => new LeagueConfigSettingsService());
     private bool _suppressPersistentSettingsEvents;
 
     private async Task RefreshPersistentSettingsAsync()
@@ -17,11 +17,11 @@ public partial class MainWindow
         tglPersistentSettings.IsEnabled = false;
         try
         {
-            ShowLeagueConfigState(await Task.Run(_leagueConfigSettings.Refresh));
+            ShowLeagueConfigState(await Task.Run(_leagueConfigSettings.Value.Refresh));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            try { ShowLeagueConfigState(await Task.Run(_leagueConfigSettings.Inspect)); }
+            try { ShowLeagueConfigState(await Task.Run(_leagueConfigSettings.Value.Inspect)); }
             catch { tglPersistentSettings.IsEnabled = false; }
             txtPersistentSettingsStatus.Text = $"Could not check League settings: {ex.Message}";
         }
@@ -57,11 +57,11 @@ public partial class MainWindow
         tglPersistentSettings.IsEnabled = false;
         try
         {
-            ShowLeagueConfigState(await Task.Run(() => _leagueConfigSettings.SetEnabled(enabled)));
+            ShowLeagueConfigState(await Task.Run(() => _leagueConfigSettings.Value.SetEnabled(enabled)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            try { ShowLeagueConfigState(await Task.Run(_leagueConfigSettings.Inspect)); }
+            try { ShowLeagueConfigState(await Task.Run(_leagueConfigSettings.Value.Inspect)); }
             catch { tglPersistentSettings.IsEnabled = false; }
             txtPersistentSettingsStatus.Text = $"Could not change League settings: {ex.Message}";
         }
@@ -78,7 +78,7 @@ public partial class MainWindow
         if (picker.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
         try
         {
-            ShowLeagueConfigState(await Task.Run(() => _leagueConfigSettings.ChooseDirectory(picker.SelectedPath)));
+            ShowLeagueConfigState(await Task.Run(() => _leagueConfigSettings.Value.ChooseDirectory(picker.SelectedPath)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {

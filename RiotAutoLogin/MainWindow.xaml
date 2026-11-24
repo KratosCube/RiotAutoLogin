@@ -1265,8 +1265,7 @@
                                             </StackPanel>
                                         </Border>
 
-                                        <!-- Client Alerts (single reusable implementation) -->
-                                        <controls:ClientAlertsSettingsCard x:Name="clientAlertsSettingsCard"/>
+                                        <ContentControl x:Name="clientAlertsSettingsHost" HorizontalContentAlignment="Stretch"/>
                                         <!-- Hotkey -->
                                         <Border Style="{StaticResource SettingsCardStyle}">
                                             <StackPanel>

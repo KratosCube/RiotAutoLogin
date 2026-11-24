@@ -45,6 +45,10 @@ namespace RiotAutoLogin
 
         private async void ChampionSelectWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            await Task.Run(GameData.EnsureLoadedAsync);
+            if (!IsVisible)
+                return;
+
             if (_isChampionSelect)
             {
                 await LoadChampionsAsync();

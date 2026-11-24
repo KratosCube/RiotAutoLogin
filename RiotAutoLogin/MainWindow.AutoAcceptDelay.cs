@@ -13,14 +13,9 @@ namespace RiotAutoLogin
 
         private void InitializeSettingsExtras()
         {
-            AutoAcceptSettingsService.Load();
             txtAutoAcceptDelaySeconds.Text = AutoAcceptSettingsService.DelaySeconds
                 .ToString(CultureInfo.InvariantCulture);
             UpdateAutoAcceptDelayHint(AutoAcceptSettingsService.DelaySeconds);
-
-            tglRemotePick.IsChecked = false;
-            btnCopyRemotePickLink.IsEnabled = false;
-            UpdateRemotePickStatus("Stopped. Enable Remote Pick only when you want to use your phone.");
 
             InitializeApplicationLocation();
         }

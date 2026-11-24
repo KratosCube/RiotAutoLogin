@@ -47,7 +47,7 @@ if (!$SkipCompatibilityExe) {
     $legacyDir = "build/standalone-$Version"
     dotnet publish $project -c Release -r win-x64 --self-contained true -o $legacyDir `
         /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true `
-        /p:EnableCompressionInSingleFile=true /p:PublishReadyToRun=true /p:DebugType=None `
+        /p:PublishReadyToRun=true /p:DebugType=None `
         "/p:Version=$Version" "/p:AssemblyVersion=$Version.0" "/p:FileVersion=$Version.0"
     Copy-Item (Join-Path $legacyDir 'RiotAutoLogin.exe') `
         (Join-Path $AssetDir "RiotAutoLogin-v$Version-win-x64.exe") -Force
