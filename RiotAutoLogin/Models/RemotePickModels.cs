@@ -14,12 +14,21 @@ namespace RiotAutoLogin.Models
         public int TimeLeftInPhaseMs { get; set; } = -1;
         public int TotalTimeInPhaseMs { get; set; } = -1;
         public double PhaseElapsedSeconds { get; set; } = -1;
+        public long LiveSampleTickMs { get; } = System.Environment.TickCount64;
+        [JsonIgnore] public long TimerMeasuredTickMs { get; set; } = System.Environment.TickCount64;
+        public long TimerSampleAgeMs => System.Math.Max(0, System.Environment.TickCount64 - TimerMeasuredTickMs);
         public bool IsTimerInfinite { get; set; }
         public bool IsInChampSelect { get; set; }
         public bool IsMyTurn { get; set; }
         public bool CanPick => (IsMyTurn && ActionType == "pick") || (IsInChampSelect && IsRandomChampionMode);
         public bool CanBan => IsMyTurn && ActionType == "ban";
         public bool CanLeave { get; set; }
+        public bool CanStartLobby { get; set; }
+        public bool IsCustomLobby { get; set; }
+        public int PartySize { get; set; }
+        public string LobbyHint { get; set; } = string.Empty;
+        public bool CanAcceptMatch { get; set; }
+        public bool MatchAccepted { get; set; }
         public string ActionId { get; set; } = string.Empty;
         public string ActionType { get; set; } = string.Empty;
         public string PickActionId { get; set; } = string.Empty;

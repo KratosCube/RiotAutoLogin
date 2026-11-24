@@ -16,16 +16,29 @@ void Equal<T>(T expected, T actual, string reason)
 }
 
 var remoteClock = new RemotePhaseClock();
-Equal(0.0, remoteClock.Observe("Lobby", 1000).ElapsedSeconds, "A custom lobby starts an elapsed clock when first observed");
-Equal(5.5, remoteClock.Observe("Lobby", 6500).ElapsedSeconds, "The lobby clock increases while the phase is unchanged");
-Equal(0.0, remoteClock.Observe("Matchmaking", 7000).ElapsedSeconds, "Leaving the lobby starts a new queue clock");
-Equal(-1.0, remoteClock.Observe("ChampSelect", 8000).ElapsedSeconds, "Champion select uses its own countdown");
-Equal(0.0, remoteClock.Observe("Lobby", 9000).ElapsedSeconds, "A new lobby does not inherit the previous time");
-Equal("Lobby", remoteClock.Observe("None", 9200).Phase, "A brief gameflow outage keeps the lobby phase visible");
-Equal(0.5, remoteClock.Observe("Lobby", 9500).ElapsedSeconds, "A short gameflow outage keeps the lobby clock running");
-Equal(0.0, remoteClock.Observe("Lobby", 100).ElapsedSeconds, "A monotonic clock reset cannot make time negative");
-Equal("None", remoteClock.Observe("None", 5200).Phase, "A prolonged outage ends the previous lobby clock");
-Equal(0.0, remoteClock.Observe("Lobby", 6200).ElapsedSeconds, "A lobby after a prolonged outage starts a fresh clock");
+Equal(5000, remoteClock.Remaining("plan", 8000, 100000, 103000, 1000), "Opening mid-planning deducts the age of the LCU snapshot");
+Equal(3100, remoteClock.Remaining("plan", 8000, 100000, 104900, 2900), "Polling the same dated snapshot cannot restart a phase");
+Equal(28000, remoteClock.Remaining("ban", 28000, 0, 105000, 3000), "A new turn gets its own deadline");
+Equal(26000, remoteClock.Remaining("ban", 28000, 0, 107000, 5000), "An undated repeat counts down across polls");
+Equal(1800, remoteClock.Remaining("ban", 1800, 0, 107100, 5100), "An authoritative correction reaches the backup ban window");
+Equal(0, remoteClock.Remaining("ban", 1800, 0, 110000, 8000), "Expired time stops at zero");
+remoteClock.Reset(8100);
+Equal(1800, remoteClock.Remaining("ban", 1800, 0, 110200, 8200), "A later game can reuse an action id and duration");
+Equal(-1, remoteClock.Remaining("pick", -1, 0, 110400, 8400), "An absent clock stays unknown");
+foreach (var (json, canStart, custom) in new[] {
+    ("""{"gameConfig":{"queueId":400,"isCustom":false},"canStartActivity":true,"localMember":{"allowedStartActivity":true}}""", true, false),
+    ("""{"gameConfig":{"queueId":400},"canStartActivity":false,"localMember":{"isLeader":true}}""", false, false),
+    ("""{"gameConfig":{"queueId":420},"canStartActivity":true,"localMember":{"allowedStartActivity":false,"isLeader":true}}""", false, false),
+    ("""{"gameConfig":{"isCustom":true},"canStartActivity":true,"localMember":{"isLeader":true}}""", true, true) })
+{
+    using var lobby = JsonDocument.Parse(json);
+    var settings = RemoteLobby.Read(lobby.RootElement)!;
+    Equal((canStart, custom), (settings.CanStart, settings.IsCustom), "Matchmaking and custom starts respect client permissions");
+}
+using (var search = JsonDocument.Parse("""{"timeInQueue":93.25,"isCurrentlyInQueue":true}"""))
+    Equal(93.25, RemoteLobby.QueueSeconds(search.RootElement), "A phone opening mid-search uses the actual queue time");
+using (var inactive = JsonDocument.Parse("""{"timeInQueue":93.25,"isCurrentlyInQueue":false}"""))
+    Equal(-1.0, RemoteLobby.QueueSeconds(inactive.RootElement), "Inactive searches do not display a stale queue time");
 Equal("https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Precision/PressTheAttack.png",
     RemoteRuneAssets.ToDataDragonUrl("/lol-game-data/assets/v1/perk-images/Styles/Precision/PressTheAttack.png"), "Rune images use the client asset path on Data Dragon");
 Equal("https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/7201_Precision.png",

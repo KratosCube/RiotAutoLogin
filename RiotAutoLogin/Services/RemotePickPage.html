@@ -57,16 +57,29 @@
     .status-main { min-width: 0; padding: 11px 16px; }
     .phase { color: var(--cyan); font-size: .83rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
     .message { margin: 6px 0 0; color: var(--red); font-size: .84rem; line-height: 1.3; }
-    .status-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 8px; }
+    .status-heading, .status-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .status-heading { justify-content: space-between; }
+    .status-actions:empty { display: none; }
+    .room-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .main-command, .secondary-command { min-height: 44px; padding: 8px 20px; font-weight: 750; border: 1px solid transparent; }
+    .main-command { color: #102521; background: #6ad9cb; }
+    .main-command:hover:not(:disabled) { background: #97ecdf; }
+    .main-command.ban { color: #34171b; background: #ecaaa7; }
+    .secondary-command { color: var(--muted); background: #11202e; border-color: var(--line); }
+    body[data-screen="room"] .app { max-width: 740px; }
+    body[data-screen="room"] .status { position: static; border-top: 2px solid var(--cyan); }
+    body[data-screen="room"] .status-main { padding: clamp(18px, 4vw, 34px); }
+    #roomTitle { margin: 7px 0 0; color: var(--text); font: 500 clamp(1.65rem, 4vw, 2.35rem)/1.15 Georgia, serif; }
+    #roomDetail { margin-top: 10px; color: var(--muted); font-size: .88rem; }
+    .room-controls { margin: 12px 0 0; }
+    .draft-controls { position: sticky; z-index: 24; bottom: 14px; width: max-content; max-width: 100%; margin: 0 auto; }
+    .draft-controls .main-command { min-width: 165px; box-shadow: 0 3px 16px #0009; }
+    .mobile-nav { display: none; }
     .loadout-shortcut { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 34px; padding: 3px 8px; color: var(--text); background: rgba(57, 213, 197, .07); border: 1px solid rgba(57, 213, 197, .38); text-align: left; font-size: .78rem; }
     .loadout-shortcut strong { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .loadout-shortcut > img { width: 25px; height: 25px; object-fit: contain; }
     .shortcut-spells { display: flex; gap: 2px; margin-left: 2px; }
     .shortcut-spells img { width: 20px; height: 20px; border: 1px solid var(--line); }
-    .turn-pill { padding: 6px 10px; color: #d9fff9; border: 1px solid rgba(57, 213, 197, .48); background: rgba(57, 213, 197, .11); font-size: .76rem; font-weight: 800; }
-    .turn-pill.waiting { color: var(--gold-light); border-color: var(--line); background: rgba(200, 170, 110, .08); }
-    .turn-pill.ban { color: #ffd5d8; border-color: rgba(242, 138, 145, .53); background: rgba(242, 138, 145, .12); }
-    .turn-pill.loading { color: var(--gold-light); }
     .leave-button { min-height: 34px; padding: 6px 11px; color: #ffd5d8; border-color: rgba(242, 138, 145, .48); background: rgba(242, 138, 145, .08); }
     .leave-button:hover:not(:disabled) { background: rgba(242, 138, 145, .2); }
     .timer-box { min-width: 125px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 18px; border-left: 1px solid var(--line); background: rgba(0, 0, 0, .18); }
@@ -119,10 +132,9 @@
     .mini-card .sub { margin-top: 3px; color: var(--muted); font-size: .76rem; }
     .player-link { color: var(--cyan); text-decoration: none; overflow-wrap: anywhere; }
     .player-link:hover { text-decoration: underline; }
-    .search-wrap { display: grid; gap: 9px; margin-bottom: 14px; }
-    .search-heading { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-    .count { color: var(--muted); font-size: .84rem; font-variant-numeric: tabular-nums; }
-    .search-controls { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .search-wrap { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .count { white-space: nowrap; color: var(--muted); font-size: .84rem; font-variant-numeric: tabular-nums; }
+    .search-controls { flex: 1; min-width: 0; display: flex; gap: 6px; }
     .search-controls input { min-width: 0; min-height: 46px; width: 100%; padding: 10px 14px; color: var(--text); border: 1px solid var(--line); border-radius: 0; background: #0a1723; font-size: 1rem; }
     .search-controls input::placeholder { color: var(--muted); }
     .champion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
@@ -130,7 +142,7 @@
     .champion:hover { border-color: var(--gold); }
     .champion.selected-card { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
     .champion.client-hover { border-color: var(--cyan); box-shadow: inset 0 0 0 1px var(--cyan), 0 0 16px rgba(57, 213, 197, .26); }
-    .card-select { width: 100%; padding: 0; color: var(--text); border: 0; background: transparent; text-align: left; }
+    .card-select { display: block; width: 100%; padding: 0; color: var(--text); border: 0; background: transparent; text-align: left; }
     .portrait { position: relative; display: block; height: clamp(95px, 8vw, 120px); background: linear-gradient(135deg, #152e3b, #08131e); overflow: hidden; }
     .portrait img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .2s; }
     .champion:hover .portrait img { transform: scale(1.04); }
@@ -139,11 +151,6 @@
     .badge { position: absolute; top: 7px; left: 7px; padding: 4px 6px; border: 1px solid var(--line); color: var(--gold-light); background: rgba(4, 9, 15, .91); font-size: .7rem; font-weight: 800; }
     .badge.banned { color: #ffd5d8; border-color: var(--red); }
     .badge.intent { color: #d9fff9; border-color: var(--cyan); }
-    .champion-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 0 7px 7px; }
-    .champion-actions button, .mobile-action-buttons button { min-height: 38px; padding: 5px; color: var(--text); border: 1px solid var(--line); background: #112333; font-size: .76rem; font-weight: 800; }
-    .champion-actions button:hover:not(:disabled), .mobile-action-buttons button:hover:not(:disabled) { background: #204154; }
-    button.lock { color: #dcfffa; border-color: rgba(57, 213, 197, .57); }
-    button.ban { color: #ffd5d8; border-color: rgba(242, 138, 145, .57); }
     .empty-state { padding: 38px 20px; text-align: center; border: 1px dashed var(--line); background: rgba(13, 24, 36, .8); }
     .empty-state strong { display: block; color: var(--gold-light); font: 500 1.3rem Georgia, serif; }
     .empty-state p { margin: 10px auto 0; max-width: 27rem; color: var(--muted); line-height: 1.5; }
@@ -164,7 +171,6 @@
     .rune-button .rune-lead { flex: 1; }
     .rune-button small { display: block; margin-top: 4px; color: var(--muted); font-size: .75rem; line-height: 1.3; }
     .rune-button em { flex: none; color: var(--gold-light); font-size: .74rem; font-style: normal; font-weight: 800; }
-    .mobile-nav, .mobile-action-bar { display: none; }
     .modal-backdrop { position: fixed; inset: 0; z-index: 40; display: flex; justify-content: center; align-items: center; padding: 16px; background: rgba(0, 0, 0, .78); }
     .modal { width: min(100%, 580px); max-height: min(90vh, 750px); overflow-y: auto; border: 1px solid var(--gold); background: #0b1723; box-shadow: 0 24px 70px #000; }
     .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 17px; border-bottom: 1px solid var(--line); }
@@ -179,113 +185,143 @@
     .modal-button.primary { color: #d9fff9; border-color: var(--cyan); }
     .toast { position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: min(400px, calc(100vw - 36px)); padding: 14px 17px; border: 1px solid var(--cyan); background: #102b32; box-shadow: 0 16px 40px #0009; line-height: 1.4; }
     .toast.error { border-color: var(--red); background: #3a1c27; }
-    .busy .champion-actions button, .busy .mobile-action-buttons button, .busy .loadout button, .busy .leave-button, .busy .spell-option { pointer-events: none; opacity: .52; }
     @media (max-width: 1050px) { .layout { grid-template-columns: 145px minmax(0, 1fr) 195px; gap: 10px; } .champion-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); } }
-    @media (max-width: 850px) {
+    @media (max-width: 850px), (max-height: 550px) and (max-width: 1180px) and (orientation: landscape) {
       html, body { height: 100%; overflow: hidden; }
-      .app { height: 100dvh; display: flex; flex-direction: column; min-height: 0; padding: 8px 10px calc(60px + env(safe-area-inset-bottom)); }
-      body.has-selection .app { padding-bottom: calc(158px + env(safe-area-inset-bottom)); }
+      .app {
+        display: flex; flex-direction: column; height: 100vh; height: 100dvh; min-height: 0;
+        padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+                 max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+      }
       .site-header { display: none; }
-      .status { flex: none; position: static; }
-      .status-main { padding: 9px 10px; }
-      .phase { font-size: .75rem; }
-      .message { font-size: .78rem; }
-      .status-actions { margin-top: 5px; gap: 5px; }
+      body[data-screen="room"] .site-header { display: flex; flex: none; margin: 8px 0 15px; }
+      body[data-screen="room"] .room-controls { margin-top: auto; padding-top: 8px; }
+      .room-controls > button { flex: 1; }
+      .status { position: static; flex: none; }
+      .status-main { padding: 6px 8px; }
+      .phase { font-size: .76rem; }
       .status-actions .leave-button { display: none; }
-      .turn-pill { padding: 4px 6px; font-size: .69rem; }
-      .timer-box { min-width: 83px; padding: 8px 9px; }
-      .timer-value { font-size: 1.8rem; }
-      .timer-value.game { font-size: 1.17rem; }
-      .timer-label { font-size: .62rem; }
-      .mobile-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 31; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 38px; gap: 4px; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: #08131e; }
-      .mobile-nav.has-leave { grid-template-columns: repeat(3, minmax(0, 1fr)) 38px 52px; }
-      .mobile-nav button { min-width: 0; min-height: 44px; padding: 4px 2px; color: var(--muted); border: 1px solid var(--line); background: #101e2b; font-size: .76rem; font-weight: 700; }
-      .mobile-nav button[aria-pressed="true"] { color: var(--gold-light); border-color: var(--gold); background: #1b2d3b; }
-      .mobile-nav .nav-tool { font-size: 1.25rem; }
-      .mobile-nav .nav-leave { color: #ffd5d8; font-size: .7rem; }
-      .layout { flex: 1; min-height: 0; overflow: hidden; margin-top: 8px; display: block; }
+      .status-heading { flex-wrap: nowrap; }
+      .status-actions { min-width: 0; }
+      .loadout-shortcut { min-height: 32px; padding: 2px 5px; gap: 3px; }
+      .loadout-shortcut strong { max-width: 82px; font-size: .72rem; }
+      .timer-box { min-width: 58px; padding: 5px 8px; }
+      .timer-value { font-size: 1.55rem; }
+      .timer-value.game { font-size: 1.23rem; }
+      .timer-label { margin-top: 3px; font-size: .58rem; }
+      .hover-readout { margin-top: 4px; padding: 2px 6px 2px 2px; }
+      .hover-readout img { width: 25px; height: 25px; }
+      .hover-readout > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; }
+      .hover-readout small:empty { display: none; }
+      .draft-strip { gap: 8px; padding: 4px 8px; }
+      .draft-team { display: grid; gap: 2px; }
+      .draft-team-label { width: auto; font-size: .59rem; }
+      .draft-slot { width: clamp(21px, 6.4vw, 31px); height: clamp(21px, 6.4vw, 31px); }
+      .draft-slots { gap: 3px; }
+      .layout { flex: 1; min-height: 0; overflow: hidden; margin: 6px 0; display: block; }
       .right-rail { display: contents; }
       .layout:not([data-view="champions"]) #championView,
       .layout:not([data-view="loadout"]) #desktopLoadout,
       .layout:not([data-view="picks"]) #allyPanel,
       .layout:not([data-view="picks"]) #enemyPanel { display: none; }
       .layout[data-view="champions"] #championView { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-      .layout[data-view="loadout"] #desktopLoadout { display: block; height: 100%; overflow-y: auto; overscroll-behavior: contain; }
-      .layout[data-view="picks"] { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 8px; }
-      .layout[data-view="picks"] #allyPanel, .layout[data-view="picks"] #enemyPanel { position: static; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-      .layout[data-view="picks"] #allyPanel { order: 1; }
-      .layout[data-view="picks"] #enemyPanel { order: 2; }
-      .panel h2 { flex: none; padding: 10px 12px; }
-      .rail-list { gap: 4px; padding: 8px; }
-      .mini-card { padding: 4px; min-height: 43px; }
+      .layout[data-view="loadout"] #desktopLoadout { height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+      .layout[data-view="picks"] { display: grid; grid-template: repeat(2, minmax(0, 1fr)) / minmax(0, 1fr); gap: 6px; }
+      .layout[data-view="picks"] #allyPanel, .layout[data-view="picks"] #enemyPanel {
+        position: static; align-self: stretch; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+      }
+      .panel h2 { padding: 8px 10px; }
+      .rail-list { gap: 4px; padding: 6px; }
+      .mini-card { padding: 4px; min-height: 44px; }
       .mini-card img, .rail-placeholder { width: 34px; height: 34px; }
-      .hover-readout { margin-top: 7px; padding: 3px 7px 3px 3px; }
-      .hover-readout img { width: 28px; height: 28px; }
-      .hover-readout small:empty { display: none; }
-      .draft-strip { grid-template-columns: 1fr; gap: 4px; padding: 5px 9px; }
-      .draft-team-label { width: 42px; font-size: .65rem; }
-      .draft-slot { width: 27px; height: 27px; }
-      .draft-slots { gap: 4px; }
-      .search-wrap { flex: none; margin-bottom: 8px; }
-      .search-controls input { min-height: 42px; }
+      .search-wrap { flex: none; margin-bottom: 5px; }
+      .search-controls input { min-height: 40px; padding: 6px 10px; }
       #champions { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; align-content: start; grid-auto-rows: max-content; }
       #champions:empty { display: none; }
-      .empty-state { flex: 1; overflow-y: auto; }
-      .champion-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-      .portrait { height: clamp(76px, 20vw, 105px); }
-      .champion-name { padding: 8px 6px; font-size: .77rem; }
-      .champion-actions { display: none; }
-      .mobile-action-bar { position: fixed; left: 0; right: 0; bottom: calc(56px + env(safe-area-inset-bottom)); z-index: 30; gap: 5px; padding: 6px 10px; border-top: 1px solid var(--gold); background: rgba(6, 14, 22, .98); box-shadow: 0 -12px 35px #0009; }
-      body.has-selection .mobile-action-bar { display: grid; }
-      .mobile-selected { display: flex; align-items: center; gap: 9px; min-width: 0; }
-      .mobile-selected img { width: 30px; height: 30px; object-fit: cover; border: 1px solid var(--line); background: #0a151f; }
-      .mobile-selected strong { display: block; font-size: .85rem; }
-      .mobile-selected span { display: block; margin-top: 2px; color: var(--muted); font-size: .72rem; }
-      .mobile-action-buttons { display: flex; gap: 7px; }
-      .mobile-action-buttons button { flex: 1; min-height: 42px; font-size: .82rem; }
-      body.searching.has-selection .app { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
-      body.searching .mobile-action-bar, body.searching .draft-strip, body.searching .status-actions { display: none; }
-      .toast { right: 10px; bottom: calc(160px + env(safe-area-inset-bottom)); }
-      body:not(.has-selection) .toast { bottom: calc(60px + env(safe-area-inset-bottom)); }
+      .empty-state { overflow-y: auto; padding: 16px; }
+      .champion-grid { grid-template-columns: repeat(auto-fill, minmax(66px, 1fr)); gap: 5px; }
+      .portrait { width: 100%; height: auto; aspect-ratio: 1; }
+      .champion-name { padding: 4px; font-size: .73rem; }
+      .badge { inset: 2px auto auto 2px; padding: 2px 3px; font-size: .6rem; }
+      .draft-controls { flex: none; position: static; display: grid; gap: 5px; width: 100%; margin: 0; }
+      .draft-controls .main-command { width: 100%; box-shadow: none; }
+      body:not([data-view="champions"]) #commitChampion, body.searching #commitChampion { display: none; }
+      .mobile-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; }
+      .mobile-nav.has-leave { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
+      .mobile-nav button { min-width: 0; min-height: 44px; padding: 3px 6px; color: var(--muted); border: 1px solid transparent; background: #101e2b; font-size: .75rem; font-weight: 700; }
+      .mobile-nav button[aria-pressed="true"] { color: var(--gold-light); border-color: var(--gold); background: #1b2d3b; }
+      .mobile-nav .nav-leave { color: #e3a5a9; background: transparent; }
+      body.searching .draft-strip, body.searching .hover-readout { display: none; }
+      .toast { right: max(8px, env(safe-area-inset-right)); bottom: calc(104px + env(safe-area-inset-bottom)); }
     }
-    @media (max-width: 360px) { .timer-box { min-width: 72px; } .champion-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .mobile-nav button { font-size: .68rem; } }
+    @media (orientation: landscape) and (max-height: 550px) and (max-width: 1180px) {
+      .app { padding-top: max(3px, env(safe-area-inset-top)); }
+      .status-main { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 3px 8px; }
+      .status-heading { gap: 12px; }
+      .hover-readout { margin: 0; }
+      .draft-strip { display: flex; gap: 24px; padding-block: 2px; }
+      .draft-team { display: flex; gap: 6px; }
+      .draft-slot { width: 24px; height: 24px; }
+      .timer-box { grid-column: 2; grid-row: 1 / 3; }
+      .draft-strip { grid-column: 1; }
+      .search-controls input { min-height: 36px; }
+      .layout[data-view="picks"] { grid-template: minmax(0, 1fr) / repeat(2, minmax(0, 1fr)); }
+      .draft-controls { display: flex; align-items: stretch; }
+      .draft-controls .main-command { flex: 1; width: auto; }
+      .mobile-nav { flex: 2; }
+      body[data-screen="room"] .status-main { display: block; }
+    }
     @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; } }
   </style>
 </head>
-<body data-view="champions">
+<body data-screen="room" data-view="champions">
   <div class="app">
     <header class="site-header">
       <h1>Remote Pick</h1>
-      <div class="header-actions"><span id="connection" class="connection" role="status" aria-label="Connecting">Connecting</span><button id="refreshButton" class="subtle-button" type="button" aria-label="Refresh" title="Refresh">↻</button></div>
+      <div class="header-actions"><span id="connection" class="connection" role="status" aria-label="Connecting"></span></div>
     </header>
     <section class="status" aria-label="Current match status">
-      <div class="status-main"><div id="phase" class="phase">Remote Pick</div><p id="message" class="message" hidden></p>
+      <div class="status-main">
+        <div class="status-heading"><div id="phase" class="phase">Remote Pick</div>
+          <div class="status-actions">
+            <button id="loadoutShortcut" class="loadout-shortcut" type="button" aria-label="Open loadout" hidden><img id="shortcutRuneIcon" alt="" hidden><strong id="shortcutRuneName">Loadout</strong><span id="shortcutSpells" class="shortcut-spells"></span></button>
+            <button id="leaveButton" class="leave-button" type="button" hidden>Dodge</button>
+          </div>
+        </div>
+        <h2 id="roomTitle" hidden></h2><div id="roomDetail" hidden></div>
+        <p id="message" class="message" hidden></p>
         <div id="hoverReadout" class="hover-readout" role="status" aria-live="polite" hidden><img id="hoverPortrait" alt="" hidden><div><span id="hoverLabel">In client</span><strong id="hoverName"></strong><small id="hoverHint"></small></div></div>
-        <div class="status-actions"><span id="turn" class="turn-pill" hidden></span><span id="gameStatus" class="turn-pill loading" hidden></span><button id="loadoutShortcut" class="loadout-shortcut" type="button" hidden><img id="shortcutRuneIcon" alt="" hidden><strong id="shortcutRuneName">Loadout</strong><span id="shortcutSpells" class="shortcut-spells"></span></button><button id="leaveButton" class="leave-button" type="button" hidden>Leave lobby</button></div>
       </div>
-      <div class="timer-box"><span id="timer" class="timer-value">--</span><span id="timerLabel" class="timer-label">Seconds</span></div>
+      <div id="timerBox" class="timer-box" hidden><span id="timer" class="timer-value"></span><span id="timerLabel" class="timer-label"></span></div>
       <div class="draft-strip" aria-label="Team picks" hidden><div class="draft-team"><span class="draft-team-label">Ally</span><div id="allyStrip" class="draft-slots"></div></div><div class="draft-team"><span class="draft-team-label">Enemy</span><div id="enemyStrip" class="draft-slots"></div></div></div>
     </section>
-    <nav class="mobile-nav" aria-label="Remote Pick sections">
-      <button type="button" data-view-button="champions" aria-controls="championView" aria-pressed="true">Champions</button>
-      <button type="button" data-view-button="picks" aria-controls="allyPanel enemyPanel" aria-pressed="false">Picks</button>
-      <button type="button" data-view-button="loadout" aria-controls="desktopLoadout" aria-pressed="false">Loadout</button>
-      <button id="mobileRefreshButton" class="nav-tool" type="button" aria-label="Refresh" title="Refresh">↻</button>
-      <button id="mobileLeaveButton" class="nav-tool nav-leave" type="button" aria-label="Leave lobby" title="Leave lobby" hidden>Leave</button>
-    </nav>
-    <section id="layout" class="layout" data-view="champions">
+    <section id="layout" class="layout" data-view="champions" hidden>
       <aside id="allyPanel" class="panel"><h2>Ally picks</h2><div id="allyPickedList" class="rail-list"></div></aside>
       <main id="championView">
-        <div class="search-wrap"><div class="search-heading"><label class="field-label" for="search">Champions</label><span id="count" class="count" role="status" aria-live="polite">Loading…</span></div>
-          <div class="search-controls"><input id="search" type="search" placeholder="Search champions" autocomplete="off" spellcheck="false"><button id="clearSearch" class="search-clear" type="button" hidden>Clear</button></div>
+        <div class="search-wrap">
+          <div class="search-controls"><input id="search" type="search" aria-label="Search champions" placeholder="Search champions" autocomplete="off" spellcheck="false"><button id="clearSearch" class="search-clear" type="button" hidden>Clear</button></div>
+          <span id="count" class="count" role="status" aria-live="polite" hidden></span>
         </div>
         <div id="champions" class="champion-grid"></div>
         <div id="emptyState" class="empty-state" hidden><strong id="emptyTitle">Waiting for champion select</strong><p id="emptyMessage">Champions will appear here when the client starts champion select.</p><button id="emptyClear" class="subtle-button" type="button" hidden>Clear search</button></div>
       </main>
       <div class="right-rail"><aside id="enemyPanel" class="panel"><h2>Enemy picks</h2><div id="enemyPickedList" class="rail-list"></div></aside><aside id="desktopLoadout" class="panel loadout-panel" aria-label="Loadout"></aside></div>
     </section>
+    <div id="roomControls" class="room-controls" hidden>
+      <button id="roomAction" type="button" class="main-command" hidden></button>
+      <button id="roomLeave" type="button" class="secondary-command" hidden></button>
+      <button id="refreshButton" type="button" class="secondary-command" hidden>Reconnect</button>
+    </div>
+    <footer id="draftControls" class="draft-controls" hidden>
+      <button id="commitChampion" type="button" class="main-command" hidden></button>
+      <nav class="mobile-nav" aria-label="Remote Pick sections">
+        <button type="button" data-view-button="champions" aria-controls="championView" aria-pressed="true">Champions</button>
+        <button type="button" data-view-button="picks" aria-controls="allyPanel enemyPanel" aria-pressed="false">Picks</button>
+        <button type="button" data-view-button="loadout" aria-controls="desktopLoadout" aria-pressed="false">Loadout</button>
+        <button id="mobileLeaveButton" class="nav-leave" type="button" hidden>Dodge</button>
+      </nav>
+    </footer>
   </div>
-  <div id="mobileActionBar" class="mobile-action-bar"><div class="mobile-selected"><img id="mobileSelectedImage" alt=""><div><strong id="mobileSelectedName">Select champion</strong><span id="mobileSelectedHint">Tap a champion above</span></div></div><div class="mobile-action-buttons"><button id="mobileHoverButton" type="button" disabled>Hover</button><button id="mobileBanButton" class="ban" type="button" disabled>Ban</button><button id="mobilePickButton" class="lock" type="button" disabled>Pick</button></div></div>
   <div id="spellModal" class="modal-backdrop" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="spellModalTitle"><div class="modal-head"><h2 id="spellModalTitle">Choose spell</h2><button id="closeSpellModal" class="subtle-button" type="button">Close</button></div><div id="spellGrid" class="spell-grid"></div></div></div>
   <div id="confirmModal" class="modal-backdrop" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmCopy"><div class="modal-head"><h2 id="confirmTitle">Confirm action</h2></div><p id="confirmCopy" class="confirm-copy"></p><div class="confirm-actions"><button id="cancelConfirm" class="modal-button" type="button">Cancel</button><button id="acceptConfirm" class="modal-button primary" type="button">Confirm</button></div></div></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
@@ -293,7 +329,9 @@
     const $ = id => document.getElementById(id);
     const ui = {
       layout: $('layout'), champions: $('champions'), ally: $('allyPickedList'), enemy: $('enemyPickedList'),
-      phase: $('phase'), message: $('message'), turn: $('turn'), gameStatus: $('gameStatus'),
+      phase: $('phase'), message: $('message'), roomTitle: $('roomTitle'), roomDetail: $('roomDetail'),
+      roomControls: $('roomControls'), roomAction: $('roomAction'), roomLeave: $('roomLeave'), refresh: $('refreshButton'),
+      draftControls: $('draftControls'), commit: $('commitChampion'), timerBox: $('timerBox'),
       timer: $('timer'), timerLabel: $('timerLabel'), connection: $('connection'),
       hoverReadout: $('hoverReadout'), hoverPortrait: $('hoverPortrait'), hoverLabel: $('hoverLabel'), hoverName: $('hoverName'), hoverHint: $('hoverHint'),
       loadoutShortcut: $('loadoutShortcut'), shortcutRuneIcon: $('shortcutRuneIcon'), shortcutRuneName: $('shortcutRuneName'), shortcutSpells: $('shortcutSpells'),
@@ -302,13 +340,13 @@
       empty: $('emptyState'), emptyTitle: $('emptyTitle'), emptyMessage: $('emptyMessage'), emptyClear: $('emptyClear'),
       loadout: $('desktopLoadout'), toast: $('toast'), leave: $('leaveButton'), mobileLeave: $('mobileLeaveButton'),
       spellModal: $('spellModal'), spellGrid: $('spellGrid'), spellTitle: $('spellModalTitle'),
-      confirmModal: $('confirmModal'), confirmTitle: $('confirmTitle'), confirmCopy: $('confirmCopy'), confirmAccept: $('acceptConfirm'),
-      selectedImage: $('mobileSelectedImage'), selectedName: $('mobileSelectedName'), selectedHint: $('mobileSelectedHint'),
-      hover: $('mobileHoverButton'), ban: $('mobileBanButton'), pick: $('mobilePickButton')
+      confirmModal: $('confirmModal'), confirmTitle: $('confirmTitle'), confirmCopy: $('confirmCopy'), confirmAccept: $('acceptConfirm')
     };
     let state = null, hasFullState = false, query = '', selectedChampionId = 0;
     let statePending = false, timerPending = false, actionPending = false;
-    let latestTimer = null, latestTimerAt = 0, gridKey = '', loadoutKey = '', draftKey = '';
+    let latestLive = null, latestRequestAt = -1, latestReceivedAt = -1;
+    let wasDraft = false, wasBan = false;
+    let gridKey = '', loadoutKey = '', draftKey = '';
     let renderedSelectedId = 0, renderedHoveredId = 0, teamRailsKey = '', loadoutShortcutKey = '';
     let hoverTask = null, queuedHoverId = 0, queuedHoverMode = 'pick', hoveringId = 0, hoverConfirmedAt = 0;
     let timerBaseMs = null, timerBasePerf = 0, phaseElapsedBase = null, timerInfinite = false, activeModal = null, returnFocus = null, confirmResolve = null;
@@ -316,6 +354,7 @@
     const liveFields = [
       'phase', 'champSelectPhase', 'phaseLabel', 'timeLeftInPhaseMs', 'totalTimeInPhaseMs', 'phaseElapsedSeconds', 'isTimerInfinite',
       'isInChampSelect', 'isMyTurn', 'canPick', 'canBan', 'canLeave', 'actionType', 'actionId', 'actionGroupIndex',
+      'canStartLobby', 'isCustomLobby', 'partySize', 'lobbyHint', 'canAcceptMatch', 'matchAccepted', 'queueName',
       'timerActionKey', 'isGameClientRunning', 'isGameLoaded', 'gameTimeSeconds', 'gameStatus', 'message',
       'selectedChampionId', 'pickIntentChampionId', 'hoveredChampionId', 'hoveredChampionSource',
       'hoveredBanChampionId', 'banFallbackArmed', 'allySlots', 'enemySlots', 'spell1Id', 'spell2Id'
@@ -340,68 +379,103 @@
       showToast.timeout = setTimeout(() => { ui.toast.hidden = true; }, isError ? 6000 : 3800);
     }
     function setConnection(connected) {
+      ui.refresh.hidden = connected;
       ui.connection.className = `connection ${connected ? 'online' : 'offline'}`;
       ui.connection.textContent = connected ? 'Connected' : 'Reconnecting';
       ui.connection.setAttribute('aria-label', connected ? 'Connected to Remote Pick' : 'Reconnecting to Remote Pick');
     }
-    function syncTimer(snapshot) {
-      timerInfinite = !!snapshot.isTimerInfinite;
-      timerBaseMs = typeof snapshot.timeLeftInPhaseMs === 'number' && snapshot.timeLeftInPhaseMs >= 0
-        ? snapshot.timeLeftInPhaseMs : null;
-      phaseElapsedBase = typeof snapshot.phaseElapsedSeconds === 'number' && snapshot.phaseElapsedSeconds >= 0
-        ? snapshot.phaseElapsedSeconds : null;
-      timerBasePerf = performance.now();
-    }
-    function currentTimerMs() {
-      if (timerInfinite) return Infinity;
-      return timerBaseMs === null ? null : Math.max(0, timerBaseMs - (performance.now() - timerBasePerf));
+    function acceptLiveSample(snapshot, started) {
+      const now = performance.now();
+      if (latestLive && now - latestReceivedAt < 7000) {
+        const tick = snapshot.liveSampleTickMs, lastTick = latestLive.liveSampleTickMs;
+        const older = Number.isFinite(tick) && Number.isFinite(lastTick) && tick !== lastTick
+          ? tick < lastTick : started < latestRequestAt;
+        if (older) return false;
+      }
+      if (state && hoverConfirmedAt > started && state.isInChampSelect && snapshot.isInChampSelect &&
+          snapshot.timerActionKey === state.timerActionKey) {
+        for (const key of ['hoveredChampionId', 'hoveredChampionSource', 'hoveredBanChampionId', 'banFallbackArmed'])
+          snapshot[key] = state[key];
+      }
+      const repeatQueueTime = snapshot.phase === 'Matchmaking' && latestLive?.phase === 'Matchmaking' &&
+        snapshot.phaseElapsedSeconds === latestLive.phaseElapsedSeconds && phaseElapsedBase !== null &&
+        now - latestReceivedAt < 7000;
+      latestLive = snapshot;
+      latestRequestAt = started;
+      latestReceivedAt = now;
+      const age = Math.max(0, snapshot.timerSampleAgeMs || 0);
+      timerInfinite = snapshot.isTimerInfinite;
+      timerBaseMs = Number.isFinite(snapshot.timeLeftInPhaseMs) && snapshot.timeLeftInPhaseMs >= 0
+        ? Math.max(0, snapshot.timeLeftInPhaseMs - age) : null;
+      const observedSeconds = snapshot.phaseElapsedSeconds;
+      if (repeatQueueTime) phaseElapsedBase += (now - timerBasePerf) / 1000;
+      else phaseElapsedBase = Number.isFinite(observedSeconds) && observedSeconds >= 0 ? observedSeconds + age / 1000 : null;
+      timerBasePerf = now;
+      return true;
     }
     function updateTimerDisplay() {
-      if (state && (state.phase === 'Lobby' || state.phase === 'Matchmaking')) {
-        ui.timer.classList.add('game');
-        const elapsed = phaseElapsedBase === null ? 0 : phaseElapsedBase + (performance.now() - timerBasePerf) / 1000;
-        ui.timer.textContent = formatGameClock(elapsed);
-        ui.timerLabel.textContent = state.phase === 'Lobby' ? 'Lobby time' : 'Queue time';
-        return;
+      let value = '', label = '';
+      const elapsed = performance.now() - timerBasePerf;
+      if (state && elapsed < 7000) {
+        if (state.phase === 'Matchmaking' && phaseElapsedBase !== null) {
+          value = formatGameClock(phaseElapsedBase + elapsed / 1000);
+          label = 'In queue';
+        } else if (state.isInChampSelect && (timerInfinite || timerBaseMs !== null)) {
+          value = timerInfinite ? '∞' : String(Math.ceil(Math.max(0, timerBaseMs - elapsed) / 1000));
+          label = timerInfinite ? 'No limit' : 'Seconds';
+        } else if (state.isGameLoaded && state.gameTimeSeconds >= 0) {
+          value = formatGameClock(state.gameTimeSeconds);
+          label = 'Game time';
+        }
       }
-      if (state && !state.isInChampSelect &&
-          (state.phase === 'GameStart' || state.phase === 'InProgress' || state.isGameClientRunning || state.isGameLoaded)) {
-        ui.timer.classList.add('game');
-        if (state.isGameLoaded) { ui.timer.textContent = formatGameClock(state.gameTimeSeconds); ui.timerLabel.textContent = 'Game time'; }
-        else if (state.isGameClientRunning) { ui.timer.textContent = 'LOAD'; ui.timerLabel.textContent = 'Loading'; }
-        else { ui.timer.textContent = 'START'; ui.timerLabel.textContent = 'Game'; }
-        return;
-      }
-      ui.timer.classList.remove('game');
-      ui.timerLabel.textContent = 'Seconds';
-      const ms = currentTimerMs();
-      ui.timer.textContent = ms === Infinity ? '∞' : ms === null ? '--' : String(Math.ceil(ms / 1000));
+      ui.timerBox.hidden = !value;
+      ui.timer.classList.toggle('game', !state?.isInChampSelect);
+      ui.timer.textContent = value;
+      ui.timerLabel.textContent = label;
     }
     function updateStatus() {
       if (!state) return;
-      const canPick = state.canPick || (state.isMyTurn && state.actionType === 'pick');
-      const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
-      ui.phase.textContent = state.phaseLabel && state.phaseLabel !== 'Waiting' ? state.phaseLabel : 'Remote Pick';
-      const error = state.isInChampSelect && (state.message || '').startsWith('Could not read');
+      const draft = !!state.isInChampSelect;
+      if (draft !== wasDraft) {
+        selectedChampionId = 0;
+        queuedHoverId = 0;
+        query = ui.search.value = '';
+        ui.clearSearch.hidden = true;
+        gridKey = '';
+        document.body.classList.remove('searching');
+        setView('champions', false);
+      }
+      if (wasBan !== !!state.canBan) selectedChampionId = 0;
+      wasDraft = draft;
+      wasBan = !!state.canBan;
+      document.body.dataset.screen = draft ? 'draft' : 'room';
+      ui.layout.hidden = ui.draftControls.hidden = !draft;
+      ui.phase.textContent = state.canBan ? 'Your ban' : state.canPick ? 'Your pick'
+        : state.phase === 'Matchmaking' ? 'Finding match' : state.matchAccepted ? 'Match accepted'
+        : state.phaseLabel && state.phaseLabel !== 'Waiting' ? state.phaseLabel : 'League Client';
+      const mode = !draft && ['Lobby', 'Matchmaking', 'ReadyCheck'].includes(state.phase) ? state.queueName : '';
+      ui.roomTitle.textContent = mode || '';
+      ui.roomTitle.hidden = !mode;
+      const details = [];
+      if (state.phase === 'Lobby' && state.partySize > 0)
+        details.push(state.partySize === 1 ? 'Solo' : `${state.partySize} in party`);
+      if (state.phase === 'Lobby' && state.lobbyHint) details.push(state.lobbyHint);
+      if (state.phase === 'None' || state.phase === 'Closed') details.push('Open a lobby in League Client.');
+      ui.roomDetail.textContent = details.join(' · ');
+      ui.roomDetail.hidden = !details.length;
+      const error = draft && (state.message || '').startsWith('Could not read');
       ui.message.hidden = !error;
       ui.message.textContent = error ? 'Cannot read champion select right now.' : '';
-      ui.turn.hidden = !canBan && !canPick;
-      ui.turn.textContent = canBan ? 'Your ban' : 'Your pick';
-      ui.turn.className = `turn-pill ${canBan ? 'ban' : ''}`;
-      ui.gameStatus.hidden = state.isInChampSelect || state.isGameLoaded ||
-        !(state.phase === 'GameStart' || state.phase === 'InProgress');
-      ui.gameStatus.textContent = state.isGameClientRunning ? 'Loading screen' : 'Starting game';
-      ui.leave.disabled = !hasFullState || !state.canLeave || actionPending;
-      ui.leave.hidden = !state.canLeave;
-      ui.mobileLeave.disabled = ui.leave.disabled;
-      ui.mobileLeave.hidden = ui.leave.hidden;
-      ui.nav.classList.toggle('has-leave', state.canLeave);
-      ui.loadoutShortcut.hidden = !state.isInChampSelect;
+      ui.leave.hidden = ui.mobileLeave.hidden = !(draft && state.canLeave);
+      ui.nav.classList.toggle('has-leave', !ui.mobileLeave.hidden);
+      ui.roomLeave.textContent = state.phase === 'Matchmaking' ? 'Cancel queue' : state.phase === 'ReadyCheck' ? 'Decline' : 'Leave lobby';
+      ui.roomLeave.hidden = draft || !state.canLeave || (state.phase === 'ReadyCheck' && !state.canAcceptMatch);
+      ui.roomAction.hidden = !(state.phase === 'Lobby' && state.canStartLobby || state.phase === 'ReadyCheck' && state.canAcceptMatch);
+      ui.roomAction.textContent = state.phase === 'ReadyCheck' ? 'Accept match' : state.isCustomLobby ? 'Start custom game' : 'Start queue';
+      ui.roomControls.hidden = draft || (ui.roomAction.hidden && ui.roomLeave.hidden && ui.refresh.hidden);
+      ui.roomAction.disabled = ui.roomLeave.disabled = ui.leave.disabled = ui.mobileLeave.disabled = !hasFullState || actionPending;
+      ui.loadoutShortcut.hidden = !draft;
       renderHoverReadout();
-      ui.leave.textContent = state.phase === 'Matchmaking' ? 'Cancel queue' : state.phase === 'ReadyCheck' ? 'Decline' : state.phase === 'ChampSelect' ? 'Dodge' : 'Leave lobby';
-      ui.mobileLeave.setAttribute('aria-label', ui.leave.textContent);
-      ui.mobileLeave.title = ui.leave.textContent;
-      ui.mobileLeave.textContent = state.phase === 'Matchmaking' ? 'Cancel' : state.phase === 'ChampSelect' ? 'Dodge' : ui.leave.textContent;
       updateTimerDisplay();
     }
     function getChampionMeta(id) {
@@ -451,7 +525,8 @@
       }
     }
     function renderTeamRails() {
-      const key = JSON.stringify([state?.allySlots, state?.enemySlots]);
+      if (!state?.isInChampSelect) { teamRailsKey = ''; return; }
+      const key = JSON.stringify([state.allySlots, state.enemySlots]);
       if (teamRailsKey === key) return;
       teamRailsKey = key;
       renderRail(ui.ally, state?.allySlots || [], 'Ally');
@@ -462,15 +537,15 @@
       setConnection(false);
       ui.phase.textContent = 'Connection lost';
       ui.message.textContent = 'Check the connection.'; ui.message.hidden = false;
-      ui.turn.hidden = ui.gameStatus.hidden = true;
-      ui.leave.hidden = ui.mobileLeave.hidden = ui.loadoutShortcut.hidden = true;
-      ui.nav.classList.remove('has-leave');
-      timerBaseMs = phaseElapsedBase = null; timerInfinite = false;
-      state = null;
-      gridKey = ''; draftKey = ''; teamRailsKey = ''; loadoutShortcutKey = '';
-      ui.hoverReadout.hidden = true;
-      renderDraftStrip();
-      updateTimerDisplay(); renderChampionGrid(); renderMobileActions();
+      document.body.dataset.screen = 'room';
+      ui.layout.hidden = ui.draftControls.hidden = ui.roomTitle.hidden = ui.roomDetail.hidden = true;
+      ui.leave.hidden = ui.mobileLeave.hidden = ui.roomLeave.hidden = ui.roomAction.hidden = true;
+      ui.roomControls.hidden = false;
+      ui.hoverReadout.hidden = ui.loadoutShortcut.hidden = true;
+      latestLive = state = null;
+      selectedChampionId = queuedHoverId = 0;
+      gridKey = draftKey = teamRailsKey = loadoutShortcutKey = '';
+      renderDraftStrip(); updateTimerDisplay();
     }
     async function getJson(url) {
       const response = await fetch(url, {cache: 'no-store'});
@@ -483,20 +558,16 @@
       const started = performance.now();
       try {
         const next = await getJson('/api/state');
-        if (latestTimer && latestTimerAt > started) mergeLive(next, latestTimer);
-        else syncTimer(next);
-        if (hoverConfirmedAt > started && state) {
-          next.hoveredChampionId = state.hoveredChampionId;
-          next.hoveredChampionSource = state.hoveredChampionSource;
-          next.hoveredBanChampionId = state.hoveredBanChampionId;
-          next.banFallbackArmed = state.banFallbackArmed;
+        if (!acceptLiveSample(next, started)) {
+          if (next.phase !== latestLive.phase) { setTimeout(loadState, 100); return; }
+          mergeLive(next, latestLive);
         }
         state = next;
         hasFullState = true;
         setConnection(true);
         renderAll();
       } catch {
-        if (!hasFullState) showDisconnectedState();
+        if (!hasFullState || performance.now() - latestReceivedAt >= 7000) showDisconnectedState();
         else { setConnection(false); ui.message.hidden = true; }
       }
       finally { statePending = false; }
@@ -507,20 +578,13 @@
       const started = performance.now();
       try {
         const snapshot = await getJson('/api/timer');
-        if (hoverConfirmedAt > started && state) {
-          snapshot.hoveredChampionId = state.hoveredChampionId;
-          snapshot.hoveredChampionSource = state.hoveredChampionSource;
-          snapshot.hoveredBanChampionId = state.hoveredBanChampionId;
-          snapshot.banFallbackArmed = state.banFallbackArmed;
-        }
+        if (!acceptLiveSample(snapshot, started)) return;
         const previousAction = state && `${state.phase}|${state.actionType}|${state.canPick}|${state.canBan}`;
         const previousHover = `${state?.hoveredChampionId}|${state?.hoveredBanChampionId}|${state?.canBan}`;
-        latestTimer = snapshot; latestTimerAt = performance.now();
-        syncTimer(snapshot);
         if (state) mergeLive(state, snapshot);
         else state = snapshot;
         if (hasFullState) setConnection(true);
-        updateStatus(); renderMobileActions(); renderDraftStrip();
+        updateStatus(); renderCommitAction(); renderDraftStrip();
         if (hasFullState) renderLoadoutShortcut();
         if (hasFullState) renderTeamRails();
         if (previousHover !== `${state.hoveredChampionId}|${state.hoveredBanChampionId}|${state.canBan}`) updateChampionDecorations();
@@ -535,8 +599,8 @@
     }
     function renderAll() {
       if (!state) return;
-      if (selectedChampionId && !(state.champions || []).some(champion => champion.id === selectedChampionId)) selectedChampionId = 0;
-      updateStatus(); renderChampionGrid(); renderMobileActions(); renderLoadout(); renderDraftStrip(); renderTeamRails();
+      if (selectedChampionId && !state.champions?.some(champion => champion.id === selectedChampionId && !champion.isDisabled)) selectedChampionId = 0;
+      updateStatus(); renderChampionGrid(); renderCommitAction(); renderLoadout(); renderDraftStrip(); renderTeamRails();
     }
     function renderEmpty(title, message, allowClear = false) {
       ui.empty.hidden = false;
@@ -569,16 +633,17 @@
       const champions = state.champions || [];
       if (!state.isInChampSelect) {
         gridKey = '';
-        ui.champions.replaceChildren(); ui.count.textContent = '0 champions';
-        renderEmpty('Champions', 'Available in champion select.');
+        ui.champions.replaceChildren();
+        ui.empty.hidden = true;
         return;
       }
       const filtered = champions.filter(champion => (champion.name || '').toLocaleLowerCase().includes(query));
-      ui.count.textContent = `${filtered.length} of ${champions.length}`;
+      ui.count.hidden = !query;
+      ui.count.textContent = query ? `${filtered.length} / ${champions.length}` : '';
       if (!champions.length) {
         gridKey = '';
         ui.champions.replaceChildren();
-        renderEmpty('Loading champions', 'Try Refresh in a moment.');
+        renderEmpty('Loading champions', '');
         return;
       }
       if (!filtered.length) {
@@ -602,10 +667,13 @@
         const card = document.createElement('article');
         card.dataset.championId = String(champion.id);
         card.className = `champion${champion.isDisabled ? ' disabled' : ''}`;
-        card.innerHTML = `<button type="button" class="card-select" data-select-id="${champion.id}" aria-pressed="${selectedChampionId === champion.id}" aria-label="${champion.isDisabled ? 'Select' : canBan ? 'Set ban' : 'Preview'} ${escapeAttr(champion.name)}"><span class="portrait">${badge}<img src="${escapeAttr(champion.imageUrl)}" alt="" loading="lazy"></span><span class="champion-name">${escapeHtml(champion.name)}</span></button><div class="champion-actions"><button type="button" class="hover" ${champion.isDisabled || !state.isInChampSelect || (state.actionType === 'ban' && !canBan) ? 'disabled' : ''} aria-label="${canBan ? 'Set ban' : 'Hover'} ${escapeAttr(champion.name)}">${canBan ? 'Set ban' : 'Hover'}</button><button type="button" class="${canBan ? 'ban' : 'lock'}" ${champion.isDisabled || (!canPick && !canBan) ? 'disabled' : ''} aria-label="${canBan ? 'Ban' : 'Pick'} ${escapeAttr(champion.name)}">${canBan ? 'Ban' : 'Pick'}</button></div>`;
+        const description = champion.isBanned ? 'Banned' : champion.isPicked ? 'Picked' : 'Unavailable';
+        const label = champion.isDisabled ? `${champion.name} · ${description}` : `${canBan ? 'Set ban' : 'Preview'} ${champion.name}`;
+        card.innerHTML = `<button type="button" class="card-select" data-select-id="${champion.id}"
+          aria-pressed="${selectedChampionId === champion.id}" aria-label="${escapeAttr(label)}" ${champion.isDisabled ? 'disabled' : ''}>
+          <span class="portrait">${badge}<img src="${escapeAttr(champion.imageUrl)}" alt="" loading="lazy"></span>
+          <span class="champion-name">${escapeHtml(champion.name)}</span></button>`;
         card.querySelector('.card-select').onclick = () => selectChampion(champion.id);
-        card.querySelector('.hover').onclick = () => hoverChampion(champion.id);
-        card.querySelector('.lock, .ban').onclick = () => canBan ? banChampion(champion) : pickChampion(champion);
         fragment.appendChild(card);
       }
       ui.champions.replaceChildren(fragment);
@@ -615,7 +683,7 @@
     }
     function selectChampion(id) {
       selectedChampionId = id;
-      updateChampionDecorations(); renderMobileActions();
+      updateChampionDecorations(); renderCommitAction();
       ui.champions.querySelector(`[data-select-id="${id}"]`)?.focus({preventScroll: true});
       const champion = getSelectedChampion();
       if (champion && !champion.isDisabled && state?.isInChampSelect &&
@@ -623,32 +691,17 @@
             state.actionType !== 'ban' && state.hoveredChampionId !== id))
         hoverChampion(id);
     }
-    function getSelectedChampion() { return (state?.champions || []).find(champion => champion.id === selectedChampionId); }
-    function renderMobileActions() {
+    function getSelectedChampion() {
+      const id = selectedChampionId || (state?.canBan ? state.hoveredBanChampionId : state?.hoveredChampionId);
+      return state?.champions?.find(champion => champion.id === id);
+    }
+    function renderCommitAction() {
       const champion = getSelectedChampion();
-      document.body.classList.toggle('has-selection', !!champion && !!state?.isInChampSelect);
-      if (!champion) {
-        ui.selectedImage.removeAttribute('src'); ui.selectedName.textContent = 'Select champion';
-        ui.selectedHint.textContent = '';
-        ui.hover.disabled = ui.ban.disabled = ui.pick.disabled = true;
-        return;
-      }
-      if (champion.imageUrl && ui.selectedImage.getAttribute('src') !== champion.imageUrl) ui.selectedImage.src = champion.imageUrl;
-      else if (!champion.imageUrl) ui.selectedImage.removeAttribute('src');
-      ui.selectedName.textContent = champion.name;
-      ui.selectedHint.textContent = champion.isBanned ? 'Banned' : champion.isPicked ? 'Picked' :
-        state.canBan && state.hoveredBanChampionId === champion.id ? (state.banFallbackArmed ? 'Ban set · auto near end' : 'Ban slot') :
-        state.hoveredChampionId === champion.id ? 'In client' :
-        state.selectedChampionId === champion.id ? 'Selected' : '';
-      const ready = hasFullState && !actionPending && !champion.isDisabled && state.isInChampSelect;
-      const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
-      const canPick = state.canPick || (state.isMyTurn && state.actionType === 'pick');
-      ui.hover.textContent = canBan ? 'Set ban' : 'Hover';
-      ui.hover.disabled = !ready || (state.actionType === 'ban' && !canBan);
-      ui.ban.hidden = !canBan;
-      ui.pick.hidden = !canPick || canBan;
-      ui.ban.disabled = !ready || !canBan;
-      ui.pick.disabled = !ready || !canPick;
+      ui.commit.hidden = !state?.isInChampSelect || (!state.canPick && !state.canBan) || !champion || champion.isDisabled;
+      if (ui.commit.hidden) return;
+      ui.commit.classList.toggle('ban', !!state.canBan);
+      ui.commit.textContent = `${state.canBan ? 'Ban' : 'Lock in'} ${champion.name}`;
+      ui.commit.disabled = !hasFullState || actionPending;
     }
     function renderRail(target, slots, team) {
       const fragment = document.createDocumentFragment();
@@ -663,7 +716,7 @@
           <div><div class="name">${escapeHtml(id ? meta.name : team + ' ' + (index + 1))}</div>
           <div class="sub">${slot.profileUrl && slot.playerName
             ? `<a class="player-link" href="${escapeAttr(slot.profileUrl)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeAttr('Open ' + slot.playerName + ' on League of Graphs')}">${escapeHtml(slot.playerName)} ↗</a>`
-            : `${team} ${index + 1}${slot.isLocalPlayer ? ' · You' : ''}${id && !slot.championId ? ' · Intent' : ''}`}</div></div>`;
+            : slot.isLocalPlayer ? 'You' : id && !slot.championId ? 'Intent' : ''}</div></div>`;
         fragment.appendChild(row);
       }
       target.replaceChildren(fragment);
@@ -730,7 +783,7 @@
         focused?.runeId ? `[data-rune-id="${focused.runeId}"]` :
         focused?.recommendedIndex ? `[data-recommended-index="${focused.recommendedIndex}"]` : null;
       if (!state.isInChampSelect) {
-        ui.loadout.innerHTML = '<h2>Loadout</h2><div class="loadout"><p class="loadout-note">Available in champion select.</p></div>';
+        ui.loadout.replaceChildren();
         return;
       }
       const spells = state.summonerSpells || [];
@@ -794,7 +847,7 @@
       if (actionPending || !hasFullState) return false;
       actionPending = true;
       document.body.classList.add('busy');
-      renderMobileActions();
+      renderCommitAction(); updateStatus();
       try {
         const response = await fetch(path, {
           method: 'POST',
@@ -806,7 +859,7 @@
           showToast(result.message || 'League Client rejected the action.', true);
           return false;
         }
-        showToast(result.message || fallback);
+        if (!['/api/start-queue', '/api/start-custom', '/api/accept-match', '/api/leave'].includes(path)) showToast(result.message || fallback);
         await loadState();
         await loadTimer();
         return true;
@@ -816,7 +869,7 @@
       } finally {
         actionPending = false;
         document.body.classList.remove('busy');
-        renderMobileActions(); updateStatus();
+        renderCommitAction(); updateStatus();
       }
     }
     async function flushHover() {
@@ -825,7 +878,7 @@
         const mode = queuedHoverMode;
         queuedHoverId = 0;
         hoveringId = id;
-        renderHoverReadout(); renderMobileActions();
+        renderHoverReadout(); renderCommitAction();
         try {
           const response = await fetch(mode === 'ban' ? '/api/ban-hover' : '/api/hover', {
             method: 'POST',
@@ -833,7 +886,7 @@
             body: JSON.stringify({championId: id})
           });
           const result = await response.json();
-          if (state && result.success && typeof result.confirmedChampionId === 'number') {
+          if (state?.isInChampSelect && !!state.canBan === (mode === 'ban') && result.success && typeof result.confirmedChampionId === 'number') {
             if (mode === 'ban') {
               state.hoveredBanChampionId = result.confirmedChampionId;
               state.banFallbackArmed = !!result.autoBanArmed;
@@ -844,14 +897,14 @@
             hoverConfirmedAt = performance.now();
           }
           if (!queuedHoverId && (!response.ok || !result.success)) showToast(result.message || 'Hover was not applied.', true);
-          renderHoverReadout(); renderMobileActions(); renderChampionGrid();
+          renderHoverReadout(); renderCommitAction(); renderChampionGrid();
         } catch {
           if (!queuedHoverId) showToast('Could not verify hover in League Client.', true);
         }
         loadTimer();
       }
       hoveringId = 0;
-      renderHoverReadout(); renderMobileActions();
+      renderHoverReadout(); renderCommitAction();
     }
     function hoverChampion(id) {
       if (!hasFullState || !state?.isInChampSelect || actionPending) return Promise.resolve(false);
@@ -863,14 +916,16 @@
     async function pickChampion(champion) {
       if (hoverTask) await hoverTask;
       const current = state?.hoveredChampionId ? getChampionMeta(state.hoveredChampionId).name : 'none';
+      const actionId = state?.actionId;
       const message = state?.hoveredChampionId === champion.id
-        ? `${champion.name} is the current pick in League Client session. Lock in this pick?`
-        : `League Client session currently shows ${current}. Locking in ${champion.name} will set your pick to this champion.`;
-      if (await confirmAction(`Lock in ${champion.name}?`, message, 'Lock in'))
+        ? 'This confirms your pick for this game.'
+        : `Current client hover: ${current}. Confirming selects ${champion.name}.`;
+      if (await confirmAction(`Lock in ${champion.name}?`, message, 'Lock in') && state?.canPick && state.actionId === actionId)
         await runAction('/api/pick', {championId: champion.id}, 'Champion locked in.');
     }
     async function banChampion(champion) {
-      if (await confirmAction(`Ban ${champion.name}?`, 'This will confirm your champion ban in League Client.', 'Ban champion', true))
+      const actionId = state?.actionId;
+      if (await confirmAction(`Ban ${champion.name}?`, 'This uses your ban for this draft.', 'Ban champion', true) && state?.canBan && state.actionId === actionId)
         await runAction('/api/ban', {championId: champion.id}, 'Champion banned.');
     }
     async function selectSpell(slot, spellId) {
@@ -880,17 +935,19 @@
     function selectRecommendedRunes(index) { return runAction('/api/recommended-rune-page', {index}, 'Recommended runes applied.'); }
     async function leaveLobby() {
       if (!state?.canLeave) return;
-      const label = ui.leave.textContent || 'Leave lobby';
+      const draftPhase = state.phase;
+      const label = state.isInChampSelect ? 'Dodge' : ui.roomLeave.textContent;
       const warning = state.phase === 'ChampSelect'
         ? 'You will leave champion select. League Client may apply a dodge penalty.'
         : state.phase === 'ReadyCheck' ? 'You will decline this ready check.' : 'You will leave the current lobby or queue.';
-      if (await confirmAction(`${label}?`, warning, label, true)) await runAction('/api/leave', {}, 'Leave request sent.');
+      if (await confirmAction(`${label}?`, warning, label, true) && state?.phase === draftPhase)
+        await runAction('/api/leave', {phase: draftPhase}, 'Leave request sent.');
     }
-    function setView(view) {
+    function setView(view, scroll = true) {
       ui.layout.dataset.view = view;
       document.body.dataset.view = view;
       for (const button of document.querySelectorAll('[data-view-button]')) button.setAttribute('aria-pressed', String(button.dataset.viewButton === view));
-      if (window.matchMedia('(max-width: 850px)').matches) return;
+      if (!scroll || getComputedStyle(ui.nav).display !== 'none') return;
       const target = view === 'loadout' ? ui.loadout : view === 'picks' ? $('allyPanel') : $('championView');
       target?.scrollIntoView({behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start'});
     }
@@ -908,14 +965,23 @@
     ui.clearSearch.onclick = clearSearch;
     ui.emptyClear.onclick = clearSearch;
     $('refreshButton').onclick = () => { loadState(); loadTimer(); };
-    $('mobileRefreshButton').onclick = $('refreshButton').onclick;
     ui.loadoutShortcut.onclick = () => setView('loadout');
     ui.loadout.addEventListener('error', event => { if (event.target instanceof HTMLImageElement) event.target.hidden = true; }, true);
     ui.leave.onclick = leaveLobby;
     ui.mobileLeave.onclick = leaveLobby;
-    ui.hover.onclick = () => { const champion = getSelectedChampion(); if (champion) hoverChampion(champion.id); };
-    ui.ban.onclick = () => { const champion = getSelectedChampion(); if (champion) banChampion(champion); };
-    ui.pick.onclick = () => { const champion = getSelectedChampion(); if (champion) pickChampion(champion); };
+    ui.roomLeave.onclick = leaveLobby;
+    ui.roomAction.onclick = () => {
+      if (state?.phase === 'ReadyCheck' && state.canAcceptMatch)
+        return runAction('/api/accept-match', {}, 'Match accepted.');
+      if (state?.phase === 'Lobby' && state.canStartLobby)
+        return runAction(state.isCustomLobby ? '/api/start-custom' : '/api/start-queue', {}, 'Lobby started.');
+    };
+    ui.commit.onclick = () => {
+      const champion = getSelectedChampion();
+      if (!champion || champion.isDisabled) return;
+      if (state.canBan) banChampion(champion);
+      else if (state.canPick) pickChampion(champion);
+    };
     $('closeSpellModal').onclick = closeSpellModal;
     $('cancelConfirm').onclick = () => resolveConfirm(false);
     ui.confirmAccept.onclick = () => resolveConfirm(true);
