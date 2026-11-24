@@ -24,7 +24,7 @@ try {
             $graphics = [Drawing.Graphics]::FromImage($bitmap)
             try {
                 $graphics.Clear([Drawing.Color]::FromArgb(20 + 20 * $i, 40, 90))
-                $graphics.FillEllipse([Drawing.Brushes.Teal], 600, 200, 1900, 1900)
+                $graphics.FillEllipse([Drawing.Brushes]::Teal, 600, 200, 1900, 1900)
                 $bitmap.Save($avatar, [Drawing.Imaging.ImageFormat]::Png)
             } finally {
                 $graphics.Dispose()
@@ -46,35 +46,35 @@ try {
         Write-Host 'Measuring with eight saved accounts and eight 3840 x 2160 PNG avatars.'
     }
     $measurements = @(for ($run = 1; $run -le $Runs; $run++) {
-    foreach ($path in $paths) {
-        $start = [Diagnostics.ProcessStartInfo]::new($path)
-        $start.UseShellExecute = $false
-        $start.WorkingDirectory = Split-Path $path
-        $timer = [Diagnostics.Stopwatch]::StartNew()
-        $process = [Diagnostics.Process]::Start($start)
-        try {
-            do {
-                $process.Refresh()
-                if ($process.HasExited) { throw "$path exited before its main window became available." }
-                if ($process.MainWindowTitle -eq 'Riot Auto Login' -and $process.WaitForInputIdle(50) -and $process.Responding) {
-                    break
+        foreach ($path in $paths) {
+            $start = [Diagnostics.ProcessStartInfo]::new($path)
+            $start.UseShellExecute = $false
+            $start.WorkingDirectory = Split-Path $path
+            $timer = [Diagnostics.Stopwatch]::StartNew()
+            $process = [Diagnostics.Process]::Start($start)
+            try {
+                do {
+                    $process.Refresh()
+                    if ($process.HasExited) { throw "$path exited before its main window became available." }
+                    if ($process.MainWindowTitle -eq 'Riot Auto Login' -and $process.WaitForInputIdle(50) -and $process.Responding) {
+                        break
+                    }
+                    if ($timer.Elapsed.TotalSeconds -ge 30) { throw "Timed out waiting for the main window of $path." }
+                    Start-Sleep -Milliseconds 20
+                } while ($true)
+                $timer.Stop()
+                Write-Host ("{0} | run {1} | responsive main window {2} ms" -f $path, $run, $timer.ElapsedMilliseconds)
+                [pscustomobject]@{ Executable = $path; Run = $run; Milliseconds = $timer.ElapsedMilliseconds }
+            } finally {
+                # The app normally stays in the tray on close. End only the test process we launched.
+                if (!$process.HasExited) {
+                    $process.Kill()
+                    $process.WaitForExit()
                 }
-                if ($timer.Elapsed.TotalSeconds -ge 30) { throw "Timed out waiting for the main window of $path." }
-                Start-Sleep -Milliseconds 20
-            } while ($true)
-            $timer.Stop()
-            Write-Host ("{0} | run {1} | responsive main window {2} ms" -f $path, $run, $timer.ElapsedMilliseconds)
-            [pscustomobject]@{ Executable = $path; Run = $run; Milliseconds = $timer.ElapsedMilliseconds }
-        } finally {
-            # The app normally stays in the tray on close. End only the test process we launched.
-            if (!$process.HasExited) {
-                $process.Kill()
-                $process.WaitForExit()
+                $process.Dispose()
             }
-            $process.Dispose()
         }
-    }
-    [array]::Reverse($paths)
+        [array]::Reverse($paths)
     })
     foreach ($group in ($measurements | Group-Object Executable)) {
         $values = @($group.Group.Milliseconds | Sort-Object)
