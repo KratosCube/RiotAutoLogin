@@ -209,6 +209,11 @@ namespace RiotAutoLogin
             {
                 try
                 {
+                    if (!_hotkeySettings.GameStartAlertEnabled && !_hotkeySettings.PickTurnAlertEnabled && !_hotkeySettings.FlashSlotWarningEnabled)
+                    {
+                        await Task.Delay(3000, cancellationToken);
+                        continue;
+                    }
                     if (!LCUService.CheckIfLeagueClientIsOpen())
                     {
                         _gameStartAlertShownForCurrentGame = false;

@@ -71,6 +71,7 @@ internal static class Program
             return;
         }
         ProcessSwitchChecks.RunAsync().GetAwaiter().GetResult();
+        RemoteServerChecks.RunAsync().GetAwaiter().GetResult();
         VelopackApp.Build().SetAutoApplyOnStartup(false).Run();
         var app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.InitializeComponent();

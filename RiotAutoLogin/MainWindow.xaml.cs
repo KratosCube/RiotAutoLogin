@@ -882,58 +882,64 @@ namespace RiotAutoLogin
 
         private async Task MonitorLeagueClientAsync(CancellationToken cancellationToken)
         {
+            (bool Open, bool Enabled, bool Declined, bool Active)? previousUi = null;
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
                     bool isLeagueOpen = LCUService.CheckIfLeagueClientIsOpen();
 
-                    // Update UI based on League client state
-                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                    var currentUi = (isLeagueOpen, _hotkeySettings.AutoAcceptEnabled, AutoAcceptDeclineGuardService.IsManualDeclineActive, LCUService.IsAutoAcceptActive);
+                    if (previousUi != currentUi)
                     {
-                        _suppressAutoAcceptEvents = true;
-                        try
+                        previousUi = currentUi;
+                        // Avoid repeating WPF property changes and allocations while idle in the tray.
+                        await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                         {
-                            tglAutoAccept.IsEnabled = isLeagueOpen;
-                            tglAutoAccept.IsChecked = _hotkeySettings.AutoAcceptEnabled;
-                            tglAutoAccept.Content = _hotkeySettings.AutoAcceptEnabled ? "ON" : "OFF";
-
-                            if (isLeagueOpen)
+                            _suppressAutoAcceptEvents = true;
+                            try
                             {
-                                if (_hotkeySettings.AutoAcceptEnabled &&
-                                    !AutoAcceptDeclineGuardService.IsManualDeclineActive)
+                                tglAutoAccept.IsEnabled = isLeagueOpen;
+                                tglAutoAccept.IsChecked = _hotkeySettings.AutoAcceptEnabled;
+                                tglAutoAccept.Content = _hotkeySettings.AutoAcceptEnabled ? "ON" : "OFF";
+
+                                if (isLeagueOpen)
                                 {
-                                    LCUService.StartAutoAccept();
-                                    autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
-                                    txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
-                                }
-                                else if (AutoAcceptDeclineGuardService.IsManualDeclineActive)
-                                {
-                                    LCUService.StopAutoAccept();
-                                    autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(244, 201, 93));
-                                    txtAutoAcceptStatus.Text = "This match was declined. Auto-accept will resume for the next ReadyCheck.";
+                                    if (_hotkeySettings.AutoAcceptEnabled &&
+                                        !AutoAcceptDeclineGuardService.IsManualDeclineActive)
+                                    {
+                                        LCUService.StartAutoAccept();
+                                        autoAcceptStatusIndicator.Fill = new SolidColorBrush(Colors.LimeGreen);
+                                        txtAutoAcceptStatus.Text = "Auto-accept is active - will accept game matches automatically";
+                                    }
+                                    else if (AutoAcceptDeclineGuardService.IsManualDeclineActive)
+                                    {
+                                        LCUService.StopAutoAccept();
+                                        autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(244, 201, 93));
+                                        txtAutoAcceptStatus.Text = "This match was declined. Auto-accept will resume for the next ReadyCheck.";
+                                    }
+                                    else
+                                    {
+                                        LCUService.StopAutoAccept();
+                                        autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
+                                        txtAutoAcceptStatus.Text = "Auto-accept is inactive. Enable to automatically accept game matches.";
+                                    }
                                 }
                                 else
                                 {
                                     LCUService.StopAutoAccept();
                                     autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
-                                    txtAutoAcceptStatus.Text = "Auto-accept is inactive. Enable to automatically accept game matches.";
+                                    txtAutoAcceptStatus.Text = _hotkeySettings.AutoAcceptEnabled
+                                        ? "Auto-accept is enabled and will activate when League Client starts."
+                                        : "League Client is not running. Start League of Legends to use auto-accept.";
                                 }
                             }
-                            else
+                            finally
                             {
-                                LCUService.StopAutoAccept();
-                                autoAcceptStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(112, 112, 112));
-                                txtAutoAcceptStatus.Text = _hotkeySettings.AutoAcceptEnabled
-                                    ? "Auto-accept is enabled and will activate when League Client starts."
-                                    : "League Client is not running. Start League of Legends to use auto-accept.";
+                                _suppressAutoAcceptEvents = false;
                             }
-                        }
-                        finally
-                        {
-                            _suppressAutoAcceptEvents = false;
-                        }
-                    });
+                        });
+                    }
                 }
                 catch (OperationCanceledException)
                 {

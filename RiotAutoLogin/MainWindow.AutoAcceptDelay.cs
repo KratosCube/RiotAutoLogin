@@ -25,6 +25,7 @@ namespace RiotAutoLogin
             try
             {
                 await _remotePickServerService.StartAsync();
+                if (!_remotePickServerService.IsRunning || tglRemotePick.IsChecked != true) return;
                 tglRemotePick.Content = "ON";
                 btnCopyRemotePickLink.IsEnabled = true;
 
@@ -68,11 +69,13 @@ namespace RiotAutoLogin
         private void UpdateRemotePickStatus(string status, string? url = null)
         {
             txtRemotePickStatus.Text = status;
-            txtRemotePickUrl.Text = url ?? string.Empty;
+            txtRemotePickUrl.Text = _remotePickServerService.IsRunning ? _remotePickServerService.LocalUrlDisplay : url ?? string.Empty;
         }
 
         private string GetPreferredRemotePickPhoneUrl()
         {
+            foreach (string url in _remotePickServerService.LocalUrls)
+                if (Uri.TryCreate(url, UriKind.Absolute, out var friendly) && friendly.Host.EndsWith(".local", StringComparison.OrdinalIgnoreCase)) return url;
             foreach (string url in _remotePickServerService.LocalUrls)
             {
                 if (RemotePickUrlHostStartsWith(url, "192.168."))

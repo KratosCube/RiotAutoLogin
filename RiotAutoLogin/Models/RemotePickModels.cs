@@ -20,11 +20,21 @@ namespace RiotAutoLogin.Models
         public bool IsTimerInfinite { get; set; }
         public bool IsInChampSelect { get; set; }
         public bool IsMyTurn { get; set; }
-        public bool CanPick => (IsMyTurn && ActionType == "pick") || (IsInChampSelect && IsRandomChampionMode);
+        public bool CanPick => (IsMyTurn && ActionType == "pick" && !IsRandomChampionMode) || (IsInChampSelect && CanSelectCard);
         public bool CanBan => IsMyTurn && ActionType == "ban";
         public bool CanLeave { get; set; }
         public bool CanStartLobby { get; set; }
         public bool IsCustomLobby { get; set; }
+        public bool CanChangeQueue { get; set; }
+        public List<RemoteLobbyMemberDto> LobbyMembers { get; set; } = new();
+        public List<RemoteQueueDto> Queues { get; set; } = new();
+        public string GameMode { get; set; } = "";
+        public bool BenchEnabled { get; set; }
+        public List<int> BenchChampionIds { get; set; } = new();
+        public List<int> CardChampionIds { get; set; } = new();
+        public bool CanSelectCard { get; set; }
+        public bool CanReroll { get; set; }
+        public int RerollsRemaining { get; set; }
         public int PartySize { get; set; }
         public string LobbyHint { get; set; } = string.Empty;
         public bool CanAcceptMatch { get; set; }
@@ -75,9 +85,34 @@ namespace RiotAutoLogin.Models
             set => _champions = value ?? new List<RemoteChampionDto>();
         }
         public List<RemoteSummonerSpellDto> SummonerSpells { get; set; } = new();
+        public bool LoadoutReady { get; set; }
         public List<RemoteRunePageDto> RunePages { get; set; } = new();
         public List<RemoteRecommendedRunePageDto> RecommendedRunePages { get; set; } = new();
         public RemoteRunePageDto? CurrentRunePage { get; set; }
+    }
+
+    public sealed class RemoteLobbyMemberDto
+    {
+        public string PlayerName { get; set; } = "";
+        public string TagLine { get; set; } = "";
+        public string ImageUrl { get; set; } = "";
+        public string ProfileUrl { get; set; } = "";
+        public bool IsLeader { get; set; }
+        public bool IsLocalPlayer { get; set; }
+        public bool IsSpectator { get; set; }
+        public string FirstPosition { get; set; } = "";
+        public string SecondPosition { get; set; } = "";
+        [JsonIgnore] public int IconId { get; set; }
+        [JsonIgnore] public string Puuid { get; set; } = "";
+        [JsonIgnore] public string SummonerId { get; set; } = "";
+    }
+    public sealed class RemoteQueueDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string GameMode { get; set; } = "";
+        public bool IsAvailable { get; set; }
+        public string UnavailableReason { get; set; } = "";
     }
 
     public class RemoteTeamSlotDto
@@ -109,7 +144,8 @@ namespace RiotAutoLogin.Models
         public bool IsIntent { get; set; }
         public bool IsAvailableInCurrentMode { get; set; } = true;
         public string TeamSide { get; set; } = string.Empty;
-        public bool IsDisabled => IsBanned || IsPicked || !IsAvailableInCurrentMode || !RiotAutoLogin.Services.RemoteChampionAvailabilityService.CanUseChampion(Id);
+        public bool IsOwnedOrFree { get; set; } = true;
+        public bool IsDisabled => IsBanned || IsPicked || !IsAvailableInCurrentMode || !IsOwnedOrFree;
     }
 
     public class RemoteSummonerSpellDto

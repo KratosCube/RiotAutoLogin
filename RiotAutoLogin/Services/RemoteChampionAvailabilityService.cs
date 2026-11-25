@@ -10,86 +10,22 @@ namespace RiotAutoLogin.Services
         private static readonly object _lock = new();
         private static DateTime _lastRefreshUtc = DateTime.MinValue;
         private static HashSet<int> _ownedOrFreeChampionIds = new();
-        private static bool _isBanPhase;
-
+        public static void Reset()
+        {
+            lock (_lock) { _lastRefreshUtc = DateTime.MinValue; _ownedOrFreeChampionIds = new(); }
+        }
         public static bool CanUseChampion(int championId)
         {
-            if (championId <= 0)
-                return false;
-
-            try
-            {
-                RefreshIfNeeded();
-                if (_isBanPhase)
-                    return true;
-
-                // Fail open if LCU does not provide ownership data.
-                return _ownedOrFreeChampionIds.Count == 0 || _ownedOrFreeChampionIds.Contains(championId);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Could not resolve champion availability: {ex.Message}");
-                return true;
-            }
+            lock (_lock) return championId > 0 && (_ownedOrFreeChampionIds.Count == 0 || _ownedOrFreeChampionIds.Contains(championId));
         }
-
-        private static void RefreshIfNeeded()
+        public static void Refresh()
         {
             lock (_lock)
             {
-                if ((DateTime.UtcNow - _lastRefreshUtc).TotalMilliseconds < 750)
-                    return;
-
+                if (DateTime.UtcNow - _lastRefreshUtc < TimeSpan.FromSeconds(30)) return;
                 _lastRefreshUtc = DateTime.UtcNow;
-                _isBanPhase = false;
-                _ownedOrFreeChampionIds = new HashSet<int>();
-
-                if (!LCUService.CheckIfLeagueClientIsOpen())
-                    return;
-
-                RefreshBanPhase();
-                RefreshOwnedOrFreeChampions();
-            }
-        }
-
-        private static void RefreshBanPhase()
-        {
-            string[] result = LCUService.ClientRequest("GET", "lol-champ-select/v1/session");
-            if (result[0] != "200")
-                return;
-
-            try
-            {
-                using JsonDocument doc = JsonDocument.Parse(result[1]);
-                JsonElement root = doc.RootElement;
-
-                // The LCU timer phase is often BAN_PICK for both ban and pick steps.
-                // Treat it as the real ban phase only when an active action is a ban.
-                if (!root.TryGetProperty("actions", out JsonElement actions) || actions.ValueKind != JsonValueKind.Array)
-                    return;
-
-                foreach (JsonElement group in actions.EnumerateArray())
-                {
-                    if (group.ValueKind != JsonValueKind.Array)
-                        continue;
-
-                    foreach (JsonElement action in group.EnumerateArray())
-                    {
-                        string type = GetStringProperty(action, "type") ?? string.Empty;
-                        if (!type.Equals("ban", StringComparison.OrdinalIgnoreCase))
-                            continue;
-
-                        if (GetBoolProperty(action, "isInProgress"))
-                        {
-                            _isBanPhase = true;
-                            return;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Could not parse ban phase for champion availability: {ex.Message}");
+                _ownedOrFreeChampionIds = new();
+                if (LCUService.CheckIfLeagueClientIsOpen()) RefreshOwnedOrFreeChampions();
             }
         }
 
