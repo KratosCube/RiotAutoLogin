@@ -34,6 +34,16 @@ internal static class AnnualCsChecks
             Require(!JsonSerializer.Serialize(account).Contains("EUN1_"), "Account startup JSON must not include the large match history.");
         }
         finally { File.Delete(historyPath); }
+        string legacyPath = historyPath + ".legacy";
+        try
+        {
+            string legacyJson = JsonSerializer.Serialize(new[] { new { GameName = "Farmer", TagLine = "TAG", Region = "eun1", AnnualCs = restored } });
+            Require(AnnualCsStore.PreserveLegacy(legacyJson, legacyPath), "Legacy history must be preserved before startup saves account metadata.");
+            var migrated = new AnnualCsStore(historyPath, legacyPath).Load();
+            Require(migrated.Values.Single().Matches.Count == 29 && File.Exists(historyPath) && !File.Exists(legacyPath),
+                "Existing account-file history must move to standalone storage without losing imported games.");
+        }
+        finally { File.Delete(historyPath); File.Delete(legacyPath); }
         account.UpdateRiotId("Different", "TAG", "eun1");
         Require(account.AnnualCs.Matches.Count == 0, "Changing Riot ID must clear the previous account's CS.");
         using var cancelled = new CancellationTokenSource(); cancelled.Cancel();

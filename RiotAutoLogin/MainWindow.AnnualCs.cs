@@ -11,7 +11,7 @@ namespace RiotAutoLogin;
 public partial class MainWindow
 {
     private CancellationTokenSource? _csRefresh;
-    private readonly AnnualCsStore _csStore = new(AnnualCsStore.DefaultPath);
+    private readonly AnnualCsStore _csStore = new(AnnualCsStore.DefaultPath, AnnualCsStore.DefaultLegacyPath);
     private System.Collections.Generic.Dictionary<string, AnnualCs> _csHistory = new();
     private Task? _csLoad;
     private bool _csLoadFailed;

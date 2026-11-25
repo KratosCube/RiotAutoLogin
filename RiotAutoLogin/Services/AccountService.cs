@@ -15,13 +15,16 @@ namespace RiotAutoLogin.Services
         private static readonly string ConfigFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), BuildChannel.DataDirectoryName, "accounts.json");
         private static readonly SemaphoreSlim RefreshGate = new(1, 1);
         private static readonly object SaveGate = new();
+        private static bool _csMigrationReady = true;
 
         public static List<Account> LoadAccounts()
         {
             try
             {
                 if (!File.Exists(ConfigFilePath)) return new();
-                var accounts = JsonSerializer.Deserialize(File.ReadAllText(ConfigFilePath), StartupJson.Default.ListAccount) ?? new();
+                string json = File.ReadAllText(ConfigFilePath);
+                _csMigrationReady = File.Exists(AnnualCsStore.DefaultPath) || AnnualCsStore.PreserveLegacy(json, AnnualCsStore.DefaultLegacyPath);
+                var accounts = JsonSerializer.Deserialize(json, StartupJson.Default.ListAccount) ?? new();
                 foreach (Account account in accounts) account.MigrateLegacyRank();
                 return accounts;
             }
@@ -34,6 +37,7 @@ namespace RiotAutoLogin.Services
 
         public static bool SaveAccounts(List<Account> accounts)
         {
+            if (!_csMigrationReady) return false; // Preserve the previous history if its migration snapshot could not be saved.
             lock (SaveGate)
             {
                 try
