@@ -16,6 +16,14 @@ namespace RiotAutoLogin.Services
 {
     public static class LCUService
     {
+        private static readonly ClientReadCache LiveReads = new();
+        internal static int ClientProcessId => _lcuPid;
+        private static int _readRevision;
+        public static void InvalidateCachedReads()
+        {
+            LiveReads.Clear(); Interlocked.Increment(ref _readRevision);
+            Interlocked.Exchange(ref _gameflowCheckedAt, long.MinValue);
+        }
         private static string[] _leagueAuth = Array.Empty<string>();
         private static int _lcuPid;
         private static bool _isLeagueOpen;
@@ -79,6 +87,7 @@ namespace RiotAutoLogin.Services
                         if (_lcuPid != client.Id || _leagueAuth.Length != 2)
                         {
                             _leagueAuth = GetLeagueAuth(client);
+                            InvalidateCachedReads();
                             _lcuPid = client.Id;
                             Debug.WriteLine($"League Client found. Process ID: {_lcuPid}");
                         }
@@ -112,7 +121,8 @@ namespace RiotAutoLogin.Services
                         continue;
                     }
 
-                    string[] gameSession = ClientRequest("GET", "lol-gameflow/v1/session");
+                    string? gameJson = await GetGameflowSessionAsync(cancellationToken);
+                    string[] gameSession = new[] { gameJson != null ? "200" : "999", gameJson ?? "" };
                     if (gameSession[0] == "200" && TryGetPhase(gameSession[1], out string phase))
                     {
                         if (phase == "ReadyCheck")
@@ -124,7 +134,8 @@ namespace RiotAutoLogin.Services
                                 if (!CheckIfLeagueClientIsOpen())
                                     continue;
 
-                                gameSession = ClientRequest("GET", "lol-gameflow/v1/session");
+                                gameJson = await GetGameflowSessionAsync(cancellationToken);
+                                gameSession = new[] { gameJson != null ? "200" : "999", gameJson ?? "" };
                                 if (gameSession[0] != "200" || !TryGetPhase(gameSession[1], out phase) || phase != "ReadyCheck")
                                 {
                                     Debug.WriteLine("ReadyCheck is no longer active after delay. Skipping auto-accept.");
@@ -183,6 +194,21 @@ namespace RiotAutoLogin.Services
             => ClientRequestAsync(method, url, body).GetAwaiter().GetResult();
 
         public static async Task<string[]> ClientRequestAsync(string method, string url, string? body = null, CancellationToken cancellationToken = default)
+        {
+            string path = url.TrimStart('/');
+            int ttl = path switch { "lol-champ-select/v1/session" => 150, "lol-lobby/v2/lobby" => 250,
+                "lol-matchmaking/v1/ready-check" => 100, "lol-lobby-team-builder/champ-select/v1/subset-champion-list" => 150, _ => 0 };
+            if (method == "GET" && ttl > 0)
+            {
+                object scope; lock (AuthLock) scope = _leagueAuth;
+                return await LiveReads.ReadAsync(scope, path, ttl, () => SendClientRequestAsync(method, path, body, CancellationToken.None), cancellationToken).ConfigureAwait(false);
+            }
+            if (method != "GET") InvalidateCachedReads();
+            try { return await SendClientRequestAsync(method, path, body, cancellationToken).ConfigureAwait(false); }
+            finally { if (method != "GET") InvalidateCachedReads(); }
+        }
+
+        private static async Task<string[]> SendClientRequestAsync(string method, string url, string? body, CancellationToken cancellationToken)
         {
             try
             {
@@ -354,9 +380,10 @@ namespace RiotAutoLogin.Services
                 long now = Environment.TickCount64;
                 if (_gameflowCheckedAt != long.MinValue && now - _gameflowCheckedAt < 200)
                     return _gameflowJson;
+                int revision = Volatile.Read(ref _readRevision);
                 string[] result = await ClientRequestAsync("GET", "lol-gameflow/v1/session", cancellationToken: cancellationToken).ConfigureAwait(false);
                 _gameflowJson = result[0] == "200" ? result[1] : null;
-                _gameflowCheckedAt = Environment.TickCount64;
+                _gameflowCheckedAt = revision == Volatile.Read(ref _readRevision) ? Environment.TickCount64 : long.MinValue;
                 return _gameflowJson;
             }
             finally { GameflowGate.Release(); }

@@ -52,6 +52,11 @@ namespace RiotAutoLogin.Services
             {
                 try
                 {
+                    if (!LCUService.IsAutoAcceptActive && !_manualDeclineActive)
+                    {
+                        await Task.Delay(2500, cancellationToken);
+                        continue;
+                    }
                     if (!LCUService.CheckIfLeagueClientIsOpen())
                     {
                         _manualDeclineActive = false;
@@ -63,7 +68,7 @@ namespace RiotAutoLogin.Services
                     if (!string.Equals(phase, "ReadyCheck", StringComparison.OrdinalIgnoreCase))
                     {
                         _manualDeclineActive = false;
-                        await Task.Delay(500, cancellationToken);
+                        await Task.Delay(phase == "Matchmaking" ? 500 : 2500, cancellationToken);
                         continue;
                     }
 

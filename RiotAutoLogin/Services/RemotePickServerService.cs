@@ -16,7 +16,7 @@ using System.Threading.Tasks;
 
 namespace RiotAutoLogin.Services
 {
-    public sealed class RemotePickServerService : IDisposable
+    public sealed partial class RemotePickServerService : IDisposable
     {
         public const int DefaultPort = 5055;
 
@@ -27,6 +27,7 @@ namespace RiotAutoLogin.Services
         };
 
         private TcpListener? _listener;
+        private RemotePickDiscovery? _discovery;
         private CancellationTokenSource? _cts;
         private Task? _serverTask;
         private List<ChampionModel>? _championCache;
@@ -40,6 +41,7 @@ namespace RiotAutoLogin.Services
         private readonly SemaphoreSlim _lobbyActionGate = new(1, 1);
         private sealed record RecommendedRuneCache(string Key, DateTime ExpiresUtc, List<RemoteRecommendedRunePageDto> Pages);
         private RecommendedRuneCache? _recommendedRuneCache;
+        private readonly ConcurrentDictionary<string, DateTime> _unsupportedRuneEndpoints = new();
         private sealed record RuneMetadata(string Name, string IconUrl);
         private sealed record RuneMetadataCache(DateTime ExpiresUtc, Dictionary<int, RuneMetadata> Values);
         private RuneMetadataCache? _runeMetadataCache;
@@ -55,23 +57,28 @@ namespace RiotAutoLogin.Services
 
         public bool IsRunning { get; private set; }
         public int Port { get; private set; } = DefaultPort;
-        public IReadOnlyList<string> LocalUrls => GetLocalUrls(Port);
+        public IReadOnlyList<string> LocalUrls => (_discovery is { IsRegistered: true } dns
+            ? new[] { $"http://{dns.HostName}:{Port}/" }.Concat(GetLocalUrls(Port)) : GetLocalUrls(Port)).ToArray();
         public string LocalUrl => LocalUrls.FirstOrDefault(url => !url.Contains("127.0.0.1")) ?? LocalUrls.FirstOrDefault() ?? $"http://127.0.0.1:{Port}/";
         public string LocalUrlDisplay => string.Join(Environment.NewLine, LocalUrls);
 
-        public Task StartAsync(int port = DefaultPort)
+        public async Task StartAsync(int port = DefaultPort)
         {
             if (IsRunning)
-                return Task.CompletedTask;
+                return;
 
             Port = port;
             _cts = new CancellationTokenSource();
-            _listener = new TcpListener(IPAddress.Any, Port);
+            _listener = new TcpListener(Socket.OSSupportsIPv6 ? IPAddress.IPv6Any : IPAddress.Any, Port);
+            if (Socket.OSSupportsIPv6) _listener.Server.DualMode = true;
             _listener.Start();
+            Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
             IsRunning = true;
-            _serverTask = Task.Run(() => AcceptLoopAsync(_cts.Token));
+            var serverToken = _cts.Token;
+            _serverTask = AcceptLoopAsync(serverToken);
             Debug.WriteLine($"Remote Pick server started at:{Environment.NewLine}{LocalUrlDisplay}");
-            return Task.CompletedTask;
+            _discovery = new RemotePickDiscovery();
+            await _discovery.StartAsync(Port);
         }
 
         public void Stop()
@@ -80,7 +87,8 @@ namespace RiotAutoLogin.Services
                 return;
 
             IsRunning = false;
-            CancelBanFallback();
+            _discovery?.Dispose(); _discovery = null;
+            CancelBanFallback(); InvalidateLoadout();
             try
             {
                 _cts?.Cancel();
@@ -108,8 +116,9 @@ namespace RiotAutoLogin.Services
                     if (_listener == null)
                         break;
 
-                    TcpClient client = await _listener.AcceptTcpClientAsync();
-                    _ = Task.Run(() => HandleClientAsync(client, cancellationToken), cancellationToken);
+                    TcpClient client = await _listener.AcceptTcpClientAsync(cancellationToken);
+                    // Some legacy LCU helpers still block; keep them off the accept loop.
+                    _ = Task.Run(() => HandleClientAsync(client, cancellationToken));
                 }
                 catch (ObjectDisposedException)
                 {
@@ -135,7 +144,7 @@ namespace RiotAutoLogin.Services
 
             try
             {
-                string? requestLine = await reader.ReadLineAsync();
+                string? requestLine = await reader.ReadLineAsync(cancellationToken);
                 if (string.IsNullOrWhiteSpace(requestLine))
                     return;
 
@@ -150,9 +159,10 @@ namespace RiotAutoLogin.Services
                 string path = requestParts[1];
                 int contentLength = 0;
                 bool isPageAction = false;
+                string requestHost = "";
 
                 string? headerLine;
-                while (!string.IsNullOrEmpty(headerLine = await reader.ReadLineAsync()))
+                while (!string.IsNullOrEmpty(headerLine = await reader.ReadLineAsync(cancellationToken)))
                 {
                     int separatorIndex = headerLine.IndexOf(':');
                     if (separatorIndex <= 0)
@@ -160,12 +170,19 @@ namespace RiotAutoLogin.Services
 
                     string name = headerLine[..separatorIndex].Trim();
                     string value = headerLine[(separatorIndex + 1)..].Trim();
+                    if (name.Equals("Host", StringComparison.OrdinalIgnoreCase)) requestHost = value;
                     if (name.Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
                         int.TryParse(value, out contentLength);
                     else if (name.Equals("X-Remote-Pick-Request", StringComparison.OrdinalIgnoreCase) && value == "1")
                         isPageAction = true;
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!IsAllowedHost(requestHost, (IPEndPoint)client.Client.LocalEndPoint!))
+                {
+                    await WriteTextResponseAsync(stream, 403, "Forbidden", "Open the local Remote Pick address.", cancellationToken);
+                    return;
+                }
                 // A cross-origin form can send a POST to the LAN server, but cannot add this
                 // header without a CORS preflight. This server never grants CORS access.
                 if (method == "POST" && !isPageAction)
@@ -179,7 +196,13 @@ namespace RiotAutoLogin.Services
                     return;
                 }
 
-                string body = await ReadBodyAsync(reader, contentLength);
+                string body = await ReadBodyAsync(reader, contentLength, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (method == "POST")
+                {
+                    LCUService.InvalidateCachedReads();
+                    if (path is "/api/rune-page" or "/api/recommended-rune-page") InvalidateLoadout(keepPages: true);
+                }
 
                 if (method == "GET" && (path == "/" || path.StartsWith("/?", StringComparison.Ordinal)))
                     await WriteHtmlResponseAsync(stream, RemotePickPageHtml.Get(), cancellationToken);
@@ -203,6 +226,12 @@ namespace RiotAutoLogin.Services
                     await WriteActionResponseAsync(stream, await SelectRecommendedRunePageAsync(body), cancellationToken);
                 else if (method == "POST" && path.StartsWith("/api/rune-page", StringComparison.OrdinalIgnoreCase))
                     await WriteActionResponseAsync(stream, await SelectRunePageAsync(body), cancellationToken);
+                else if (method == "POST" && path == "/api/change-queue")
+                    await WriteActionResponseAsync(stream, await ChangeQueueAsync(body), cancellationToken);
+                else if (method == "POST" && path == "/api/bench-swap")
+                    await WriteActionResponseAsync(stream, await SwapBenchAsync(body), cancellationToken);
+                else if (method == "POST" && path == "/api/reroll")
+                    await WriteActionResponseAsync(stream, await RerollAsync(), cancellationToken);
                 else if (method == "POST" && path == "/api/start-queue")
                     await WriteActionResponseAsync(stream, await StartLobbyAsync(custom: false), cancellationToken);
                 else if (method == "POST" && path == "/api/start-custom")
@@ -226,7 +255,18 @@ namespace RiotAutoLogin.Services
             }
         }
 
-        private static async Task<string> ReadBodyAsync(StreamReader reader, int contentLength)
+        private bool IsAllowedHost(string host, IPEndPoint local)
+        {
+            if (!Uri.TryCreate("http://" + host, UriKind.Absolute, out var uri) || uri.Port != Port) return false;
+            string name = uri.DnsSafeHost.Trim('[', ']').TrimEnd('.');
+            if (name.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals(Environment.MachineName, StringComparison.OrdinalIgnoreCase) ||
+                name.Equals(Environment.MachineName + ".local", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals(_discovery?.HostName, StringComparison.OrdinalIgnoreCase)) return true;
+            return IPAddress.TryParse(name, out var ip) && (IPAddress.IsLoopback(ip) || ip.MapToIPv4().Equals(local.Address.MapToIPv4()));
+        }
+
+        private static async Task<string> ReadBodyAsync(StreamReader reader, int contentLength, CancellationToken token)
         {
             if (contentLength <= 0)
                 return string.Empty;
@@ -235,7 +275,7 @@ namespace RiotAutoLogin.Services
             int totalRead = 0;
             while (totalRead < contentLength)
             {
-                int read = await reader.ReadAsync(buffer, totalRead, contentLength - totalRead);
+                int read = await reader.ReadAsync(buffer.AsMemory(totalRead, contentLength - totalRead), token);
                 if (read == 0)
                     break;
                 totalRead += read;
@@ -247,22 +287,11 @@ namespace RiotAutoLogin.Services
         public async Task<RemotePickState> GetStateAsync()
         {
             RemotePickState state = await GetTimerStateAsync();
-            var pickedChampionIds = new HashSet<int>();
-            var allyPickedChampionIds = new HashSet<int>();
-            var enemyPickedChampionIds = new HashSet<int>();
+            var pickedChampionIds = new HashSet<int>(state.PickedChampionIds);
+            var allyPickedChampionIds = new HashSet<int>(state.AllyPickedChampionIds);
+            var enemyPickedChampionIds = new HashSet<int>(state.EnemyPickedChampionIds);
 
-            if (state.IsInChampSelect && LCUService.CheckIfLeagueClientIsOpen())
-            {
-                string[] sessionResult = LCUService.ClientRequest("GET", "lol-champ-select/v1/session");
-                if (sessionResult[0] == "200")
-                {
-                    using JsonDocument doc = JsonDocument.Parse(sessionResult[1]);
-                    ParsePicks(doc.RootElement, pickedChampionIds, allyPickedChampionIds, enemyPickedChampionIds);
-                    state.PickedChampionIds = pickedChampionIds.OrderBy(id => id).ToList();
-                    state.AllyPickedChampionIds = allyPickedChampionIds.OrderBy(id => id).ToList();
-                    state.EnemyPickedChampionIds = enemyPickedChampionIds.OrderBy(id => id).ToList();
-                }
-            }
+            if (!state.IsInChampSelect) await AddLobbyDetailsAsync(state);
 
             if (state.IsInChampSelect)
             {
@@ -286,8 +315,11 @@ namespace RiotAutoLogin.Services
                 return state;
             }
 
+            RefreshClientContext();
+            if (DateTime.UtcNow >= _nextQueueCatalog) _ = EnsureQueueCatalogAsync();
             state.Phase = await LCUService.GetCurrentGamePhaseAsync();
             state.IsInChampSelect = state.Phase == "ChampSelect";
+            state.CanChangeQueue = state.Phase == "None";
             state.CanLeave = state.Phase == "Lobby" || state.Phase == "Matchmaking" || state.Phase == "ReadyCheck" || state.Phase == "ChampSelect";
             if (!state.IsInChampSelect) _phaseClock.Reset(state.LiveSampleTickMs);
             if (state.Phase == "Lobby")
@@ -301,11 +333,18 @@ namespace RiotAutoLogin.Services
                     state.IsCustomLobby = lobby.IsCustom;
                     state.PartySize = lobby.PartySize;
                     state.LobbyHint = lobby.StartHint;
+                    state.CanChangeQueue = RemoteLobbyData.CanChange(document!.RootElement);
+                    state.LobbyMembers = RemoteLobbyData.Members(document.RootElement);
                 }
             }
             else
             {
                 TryLoadQueueFromGameflowOrLobby(state);
+                if (state.Phase is "Matchmaking" or "ReadyCheck")
+                {
+                    using var party = await ReadClientObjectAsync("lol-lobby/v2/lobby");
+                    if (party != null) { state.LobbyMembers = RemoteLobbyData.Members(party.RootElement); state.PartySize = state.LobbyMembers.Count; }
+                }
                 if (state.Phase == "Matchmaking")
                 {
                     using var search = await ReadClientObjectAsync("lol-matchmaking/v1/search");
@@ -321,6 +360,7 @@ namespace RiotAutoLogin.Services
                 }
             }
 
+            ApplyKnownQueueMode(state);
             if (state.Phase == "GameStart" || state.Phase == "InProgress")
                 TryReadLiveGameState(state);
 
@@ -357,7 +397,7 @@ namespace RiotAutoLogin.Services
                 return state;
             }
 
-            string[] sessionResult = LCUService.ClientRequest("GET", "lol-champ-select/v1/session");
+            string[] sessionResult = await LCUService.ClientRequestAsync("GET", "lol-champ-select/v1/session");
             if (sessionResult[0] != "200")
             {
                 state.PhaseLabel = "Champ Select";
@@ -377,7 +417,26 @@ namespace RiotAutoLogin.Services
             EnrichTeamSlots(state);
             FillCachedPlayerProfiles(state);
             ParseQueueAndMode(root, state);
+            ApplyKnownQueueMode(state);
             ParseAvailableChampionIds(root, state);
+            if (state.IsRandomChampionMode)
+            {
+                var cards = new List<int>();
+                if (GetBoolProperty(root, "allowSubsetChampionPicks"))
+                {
+                    var subset = await LCUService.ClientRequestAsync("GET", "lol-lobby-team-builder/champ-select/v1/subset-champion-list");
+                    if (subset[0] == "200")
+                    {
+                        try { using var list = JsonDocument.Parse(subset[1]);
+                            if (list.RootElement.ValueKind == JsonValueKind.Array) cards = list.RootElement.EnumerateArray().Where(p => p.ValueKind == JsonValueKind.Number).Select(p => p.GetInt32()).Where(id => id > 0).ToList(); }
+                        catch (JsonException) { }
+                    }
+                }
+                RemoteRandomSelection.Read(root, state, cards);
+            }
+            var allPicks = new HashSet<int>(); var allies = new HashSet<int>(); var enemies = new HashSet<int>();
+            ParsePicks(root, allPicks, allies, enemies);
+            state.PickedChampionIds = allPicks.ToList(); state.AllyPickedChampionIds = allies.ToList(); state.EnemyPickedChampionIds = enemies.ToList();
             ParseAvailableSpellIds(root, state);
             state.BanFallbackArmed = IsBanFallbackArmed(state.ActionId, state.HoveredBanChampionId);
             if (state.HoveredChampionId <= 0 && state.SelectedChampionId > 0 &&
@@ -469,11 +528,11 @@ namespace RiotAutoLogin.Services
                 return Failure("It is not your pick turn.");
             if (state.BannedChampionIds.Contains(request.ChampionId))
                 return Failure("This champion is banned.");
-            if (state.IsRandomChampionMode && state.AvailableChampionIds.Count > 0 && !state.AvailableChampionIds.Contains(request.ChampionId))
-                return Failure("This champion is not available in the current ARAM/random selection.");
+            if (state.IsRandomChampionMode && (!state.CanSelectCard || !state.CardChampionIds.Contains(request.ChampionId)))
+                return Failure("This champion card is no longer available.");
 
-            bool success = LCUService.SelectChampion(request.ChampionId, state.ActionId, complete: true);
-            return new RemotePickActionResult { Success = success, Message = success ? "Champion locked in." : "League Client rejected the pick request." };
+            bool success = LCUService.SelectChampion(request.ChampionId, state.IsRandomChampionMode ? state.PickActionId : state.ActionId, complete: true);
+            return new RemotePickActionResult { Success = success, Message = success ? state.IsRandomChampionMode ? "Champion chosen." : "Champion locked in." : "League Client rejected the pick request." };
         }
 
         public async Task<RemotePickActionResult> BanChampionAsync(string body)
@@ -644,6 +703,7 @@ namespace RiotAutoLogin.Services
             if (state.IsRandomChampionMode && state.AvailableChampionIds.Count > 0 && !state.AvailableChampionIds.Contains(request.ChampionId))
                 return Failure("This champion is not available in the current ARAM/random selection.");
 
+            if (state.IsRandomChampionMode) return Failure("Choose a champion card or take a champion from the bench.");
             int confirmedId = state.HoveredChampionId;
             string confirmedSource = state.HoveredChampionSource;
             if (confirmedId == request.ChampionId)
@@ -890,19 +950,21 @@ namespace RiotAutoLogin.Services
             EnrichTeamSlots(state);
             await EnsureRemoteSpellCacheAsync();
 
+            RemoteChampionAvailabilityService.Refresh();
             var availableChampionIds = new HashSet<int>(state.AvailableChampionIds);
-            bool shouldFilterRandomChampions = state.IsRandomChampionMode && availableChampionIds.Count > 0;
+            bool shouldFilterRandomChampions = state.IsRandomChampionMode;
 
             state.Champions = (_remoteChampionCache ?? new List<RemoteChampionDto>())
-                .Where(champion => !shouldFilterRandomChampions || availableChampionIds.Contains(champion.Id) || state.SelectedChampionId == champion.Id || state.PickIntentChampionId == champion.Id || pickedChampionIds.Contains(champion.Id))
+                .Where(champion => !shouldFilterRandomChampions || availableChampionIds.Contains(champion.Id) || state.SelectedChampionId == champion.Id)
                 .Select(champion => new RemoteChampionDto
                 {
                     Id = champion.Id,
                     Name = champion.Name,
                     ImageUrl = champion.ImageUrl,
                     Positions = _championPositions.GetValueOrDefault(champion.Id) ?? Array.Empty<string>(),
+                    IsOwnedOrFree = state.CanBan || state.IsRandomChampionMode && availableChampionIds.Contains(champion.Id) || RemoteChampionAvailabilityService.CanUseChampion(champion.Id),
                     IsBanned = bannedChampionIds.Contains(champion.Id),
-                    IsPicked = pickedChampionIds.Contains(champion.Id),
+                    IsPicked = pickedChampionIds.Contains(champion.Id) && !(state.IsRandomChampionMode && state.SelectedChampionId == champion.Id && state.CanSelectCard),
                     IsSelected = state.SelectedChampionId == champion.Id,
                     IsIntent = state.PickIntentChampionId == champion.Id,
                     IsAvailableInCurrentMode = !shouldFilterRandomChampions || availableChampionIds.Contains(champion.Id) || state.SelectedChampionId == champion.Id || state.PickIntentChampionId == champion.Id,
@@ -923,8 +985,7 @@ namespace RiotAutoLogin.Services
                 })
                 .ToList();
 
-            AddRunePages(state);
-            AddRecommendedRunePages(state);
+            AddCachedLoadout(state);
         }
 
         private void AddRunePages(RemotePickState state)
@@ -1004,9 +1065,16 @@ namespace RiotAutoLogin.Services
 
             foreach (string endpoint in GetRecommendedRuneEndpoints(championId, position, mapId))
             {
+                if (!IsRunning) break;
+                if (candidates.Any(page => page.CanApply)) break;
+                if (_unsupportedRuneEndpoints.TryGetValue(endpoint, out var retry) && retry > DateTime.UtcNow) continue;
                 string[] result = LCUService.ClientRequest("GET", endpoint);
-                if (result[0] == "200")
-                    candidates.AddRange(ParseRecommendedRunePages(result[1]));
+                if (result[0] == "200") candidates.AddRange(ParseRecommendedRunePages(result[1]));
+                else if (result[0] is "404" or "405")
+                {
+                    if (_unsupportedRuneEndpoints.Count > 100) _unsupportedRuneEndpoints.Clear();
+                    _unsupportedRuneEndpoints[endpoint] = DateTime.UtcNow.AddMinutes(2);
+                }
             }
 
             List<RemoteRecommendedRunePageDto> pages = candidates
@@ -1019,7 +1087,7 @@ namespace RiotAutoLogin.Services
 
             EnrichRecommendedRunePageNames(pages);
             state.RecommendedRunePages = pages;
-            _recommendedRuneCache = new RecommendedRuneCache(cacheKey, DateTime.UtcNow.AddSeconds(20), pages);
+            _recommendedRuneCache = new RecommendedRuneCache(cacheKey, DateTime.UtcNow.AddMinutes(pages.Count > 0 ? 5 : 1), pages);
         }
 
         private static IEnumerable<string> GetRecommendedRuneEndpoints(int championId, string position, int mapId)
@@ -1637,8 +1705,7 @@ namespace RiotAutoLogin.Services
             if (TryGetPropertyInt(root, "mapId", out int mapId)) state.MapId = mapId;
             if (TryGetPropertyInt(root, "queueId", out int queueId)) state.QueueId = queueId;
 
-            bool randomSignals = GetBoolProperty(root, "benchEnabled") || GetBoolProperty(root, "allowRerolling") || GetBoolProperty(root, "allowSubsetChampionPicks");
-            state.IsRandomChampionMode = randomSignals || IsKnownRandomChampionQueue(state.QueueId);
+            state.IsRandomChampionMode = RemoteRandomSelection.IsRandom(root, state.QueueId, state.GameMode);
             UpdateModeLabels(state);
         }
 
@@ -1998,10 +2065,8 @@ namespace RiotAutoLogin.Services
             else state.ChampSelectMode = string.IsNullOrWhiteSpace(state.QueueName) ? string.Empty : state.QueueName;
         }
 
-        private static bool IsKnownRandomChampionQueue(int queueId)
-        {
-            return queueId == 450 || queueId == 720 || queueId == 900 || queueId == 1020 || queueId == 1300 || queueId == 1400 || queueId == 1700 || queueId == 1710 || queueId == 1900 || queueId == 3210 || queueId == 3270;
-        }
+        private static bool IsKnownRandomChampionQueue(int queueId) => queueId is 450 or 720;
+
 
         private static string GetQueueName(int queueId, bool randomMode)
         {

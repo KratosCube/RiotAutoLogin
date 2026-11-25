@@ -273,6 +273,31 @@
       body[data-screen="room"] .status-main { display: block; }
     }
     @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; } }
+
+    .party-panel { margin: 14px 0; padding: 14px; border: 1px solid var(--line); background: var(--panel); min-height: 0; }
+    .party-panel h2 { margin: 0 0 12px; color: var(--gold-light); font-size: 1rem; }
+    .party-members { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; overflow: auto; min-height: 0; }
+    .party-member { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; background: #112333; border: 1px solid var(--line); color: var(--text); text-decoration: none; }
+    a.party-member:hover { border-color: var(--cyan); }
+    .party-avatar { display: grid; place-items: center; width: 36px; height: 36px; flex: none; background: #1b3443; color: var(--gold-light); font-weight: 800; }
+    .party-name { min-width: 0; flex: 1; }
+    .party-name strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
+    .party-name small { display: block; margin-top: 4px; color: var(--muted); font-size: .72rem; }
+    .party-badges { display: flex; gap: 5px; color: var(--gold); font-size: .68rem; }
+    .room-controls { flex-wrap: wrap; }
+    .queue-controls { display: flex; align-items: center; gap: 8px; flex: 1 0 100%; min-width: 0; }
+    .queue-controls label { color: var(--gold-light); font-size: .85rem; }
+    .queue-controls select { flex: 1; min-width: 0; min-height: 44px; padding: 8px; color: var(--text); background: #112333; border: 1px solid var(--line); font: inherit; }
+    .queue-controls button { min-height: 44px; }
+    .random-note { margin: 0 0 8px; color: var(--muted); font-size: .8rem; }
+    @media (max-width: 850px), (max-height: 550px) and (max-width: 1180px) and (orientation: landscape) {
+      .party-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; margin: 8px 0; padding: 10px; }
+      .party-members { align-content: start; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+      .party-panel h2 { flex: none; margin-bottom: 8px; }
+      .queue-controls { flex: 1 0 100%; }
+      .queue-controls button { flex: none; }
+      .draft-controls > .reroll-command { flex: none; width: auto; padding: 7px; font-size: .75rem; }
+    }
   </style>
 </head>
 <body data-screen="room" data-view="champions">
@@ -296,6 +321,7 @@
       <div id="timerBox" class="timer-box" hidden><span id="timer" class="timer-value"></span><span id="timerLabel" class="timer-label"></span></div>
       <div class="draft-strip" aria-label="Team picks" hidden><div class="draft-team"><span class="draft-team-label">Ally</span><div id="allyStrip" class="draft-slots"></div></div><div class="draft-team"><span class="draft-team-label">Enemy</span><div id="enemyStrip" class="draft-slots"></div></div></div>
     </section>
+    <section id="partyPanel" class="party-panel" aria-label="Lobby members" hidden><h2>Your party</h2><div id="partyMembers" class="party-members" role="list"></div></section>
     <section id="layout" class="layout" data-view="champions" hidden>
       <aside id="allyPanel" class="panel"><h2>Ally picks</h2><div id="allyPickedList" class="rail-list"></div></aside>
       <main id="championView">
@@ -303,17 +329,20 @@
           <div class="search-controls"><select id="positionFilter" aria-label="Champion position" title="Recommended positions from League Client"><option value="">All roles</option><option value="top">Top</option><option value="jungle">Jungle</option><option value="mid">Mid</option><option value="bot">Bot</option><option value="support">Support</option><option value="unknown">Unlisted</option></select><input id="search" type="search" aria-label="Search champions" placeholder="Search champions" autocomplete="off" spellcheck="false"><button id="clearSearch" class="search-clear" type="button" hidden>Clear</button></div>
           <span id="count" class="count" role="status" aria-live="polite" hidden></span>
         </div>
+        <p id="randomNote" class="random-note" hidden></p>
         <div id="champions" class="champion-grid"></div>
         <div id="emptyState" class="empty-state" hidden><strong id="emptyTitle">Waiting for champion select</strong><p id="emptyMessage">Champions will appear here when the client starts champion select.</p><button id="emptyClear" class="subtle-button" type="button" hidden>Clear search</button></div>
       </main>
       <div class="right-rail"><aside id="enemyPanel" class="panel"><h2>Enemy picks</h2><div id="enemyPickedList" class="rail-list"></div></aside><aside id="desktopLoadout" class="panel loadout-panel" aria-label="Loadout"></aside></div>
     </section>
     <div id="roomControls" class="room-controls" hidden>
+      <div id="queueControls" class="queue-controls" hidden><label for="queueSelect">Queue</label><select id="queueSelect" aria-label="Game queue"></select><button id="changeQueue" type="button" class="secondary-command">Change</button></div>
       <button id="roomAction" type="button" class="main-command" hidden></button>
       <button id="roomLeave" type="button" class="secondary-command" hidden></button>
       <button id="refreshButton" type="button" class="secondary-command" hidden>Reconnect</button>
     </div>
     <footer id="draftControls" class="draft-controls" hidden>
+      <button id="rerollButton" type="button" class="secondary-command reroll-command" hidden>Reroll</button>
       <button id="commitChampion" type="button" class="main-command" hidden></button>
       <nav class="mobile-nav" aria-label="Remote Pick sections">
         <button type="button" data-view-button="champions" aria-controls="championView" aria-pressed="true">Champions</button>
@@ -329,6 +358,8 @@
   <script>
     const $ = id => document.getElementById(id);
     const ui = {
+      partyPanel: $('partyPanel'), partyMembers: $('partyMembers'), queueControls: $('queueControls'), queueSelect: $('queueSelect'), changeQueue: $('changeQueue'),
+      randomNote: $('randomNote'), reroll: $('rerollButton'),
       layout: $('layout'), champions: $('champions'), ally: $('allyPickedList'), enemy: $('enemyPickedList'),
       phase: $('phase'), message: $('message'), roomTitle: $('roomTitle'), roomDetail: $('roomDetail'),
       roomControls: $('roomControls'), roomAction: $('roomAction'), roomLeave: $('roomLeave'), refresh: $('refreshButton'),
@@ -356,7 +387,7 @@
     const liveFields = [
       'phase', 'champSelectPhase', 'phaseLabel', 'timeLeftInPhaseMs', 'totalTimeInPhaseMs', 'phaseElapsedSeconds', 'isTimerInfinite',
       'isInChampSelect', 'isMyTurn', 'canPick', 'canBan', 'canLeave', 'actionType', 'actionId', 'actionGroupIndex',
-      'canStartLobby', 'isCustomLobby', 'partySize', 'lobbyHint', 'canAcceptMatch', 'matchAccepted', 'queueName',
+      'canChangeQueue', 'isRandomChampionMode', 'benchEnabled', 'benchChampionIds', 'cardChampionIds', 'canSelectCard', 'canReroll', 'rerollsRemaining', 'canStartLobby', 'isCustomLobby', 'partySize', 'lobbyHint', 'canAcceptMatch', 'matchAccepted', 'queueName',
       'timerActionKey', 'isGameClientRunning', 'isGameLoaded', 'gameTimeSeconds', 'gameStatus', 'message',
       'selectedChampionId', 'pickIntentChampionId', 'hoveredChampionId', 'hoveredChampionSource',
       'hoveredBanChampionId', 'banFallbackArmed', 'allySlots', 'enemySlots', 'spell1Id', 'spell2Id'
@@ -452,7 +483,7 @@
       wasBan = !!state.canBan;
       document.body.dataset.screen = draft ? 'draft' : 'room';
       ui.layout.hidden = ui.draftControls.hidden = !draft;
-      ui.phase.textContent = state.canBan ? 'Your ban' : state.canPick ? 'Your pick'
+      ui.phase.textContent = draft && state.isRandomChampionMode ? (state.canSelectCard ? 'Choose your card' : 'Your champion') : state.canBan ? 'Your ban' : state.canPick ? 'Your pick'
         : state.phase === 'Matchmaking' ? 'Finding match' : state.matchAccepted ? 'Match accepted'
         : state.phaseLabel && state.phaseLabel !== 'Waiting' ? state.phaseLabel : 'League Client';
       const mode = !draft && ['Lobby', 'Matchmaking', 'ReadyCheck'].includes(state.phase) ? state.queueName : '';
@@ -474,7 +505,13 @@
       ui.roomLeave.hidden = draft || !state.canLeave || (state.phase === 'ReadyCheck' && !state.canAcceptMatch);
       ui.roomAction.hidden = !(state.phase === 'Lobby' && state.canStartLobby || state.phase === 'ReadyCheck' && state.canAcceptMatch);
       ui.roomAction.textContent = state.phase === 'ReadyCheck' ? 'Accept match' : state.isCustomLobby ? 'Start custom game' : 'Start queue';
-      ui.roomControls.hidden = draft || (ui.roomAction.hidden && ui.roomLeave.hidden && ui.refresh.hidden);
+      renderParty();
+      ui.roomControls.hidden = draft || (ui.roomAction.hidden && ui.roomLeave.hidden && ui.refresh.hidden && ui.queueControls.hidden);
+      ui.reroll.hidden = !draft || !state.canReroll;
+      ui.reroll.textContent = `Reroll (${state.rerollsRemaining || 0})`;
+      ui.reroll.disabled = !hasFullState || actionPending;
+      ui.randomNote.hidden = !draft || !state.isRandomChampionMode;
+      ui.randomNote.textContent = state.canSelectCard ? 'Choose one of your champion cards.' : state.benchEnabled && state.benchChampionIds?.length ? 'Take a champion from the bench, or adjust your loadout.' : 'Your champion is assigned by the client. You can adjust your loadout.';
       ui.roomAction.disabled = ui.roomLeave.disabled = ui.leave.disabled = ui.mobileLeave.disabled = !hasFullState || actionPending;
       ui.loadoutShortcut.hidden = !draft;
       renderHoverReadout();
@@ -489,11 +526,11 @@
     }
     function renderHoverReadout() {
       const banTurn = !!state?.canBan;
-      const id = banTurn ? state.hoveredBanChampionId : state?.hoveredChampionId || state?.selectedChampionId || 0;
+      const id = banTurn ? state.hoveredBanChampionId : state?.isRandomChampionMode ? state.selectedChampionId : state?.hoveredChampionId || state?.selectedChampionId || 0;
       ui.hoverReadout.hidden = !state?.isInChampSelect || !id;
       if (ui.hoverReadout.hidden) return;
       const champion = getChampionMeta(id);
-      ui.hoverLabel.textContent = banTurn ? 'Ban slot' : 'In client';
+      ui.hoverLabel.textContent = banTurn ? 'Ban slot' : state.isRandomChampionMode ? 'Your champion' : 'In client';
       ui.hoverName.textContent = champion.name;
       ui.hoverPortrait.hidden = !id || !champion.imageUrl;
       if (ui.hoverPortrait.hidden) ui.hoverPortrait.removeAttribute('src');
@@ -526,6 +563,38 @@
         target.replaceChildren(fragment);
       }
     }
+    let partyKey = '', queueKey = '';
+    function renderParty() {
+      const room = !state.isInChampSelect && ['Lobby', 'Matchmaking', 'ReadyCheck', 'None'].includes(state.phase);
+      const members = state.lobbyMembers || [];
+      ui.partyPanel.hidden = !room || !members.length;
+      const key = JSON.stringify(members);
+      if (key !== partyKey) {
+        partyKey = key;
+        ui.partyMembers.replaceChildren(...members.map(member => {
+          const link = /^https:\/\/www\.leagueofgraphs\.com\/summoner\//.test(member.profileUrl || '');
+          const row = document.createElement(link ? 'a' : 'div'); row.className = 'party-member'; row.setAttribute('role', 'listitem');
+          if (link) { row.href = member.profileUrl; row.target = '_blank'; row.rel = 'noopener noreferrer'; }
+          const positions = [member.firstPosition, member.secondPosition].filter(p => p && p !== 'UNSELECTED').join(' / ');
+          row.innerHTML = `<span class="party-avatar" aria-hidden="true">${escapeHtml((member.playerName || '?').slice(0, 1).toUpperCase())}</span><span class="party-name"><strong>${escapeHtml(member.playerName || 'Player')}${member.tagLine ? '#' + escapeHtml(member.tagLine) : ''}</strong><small>${escapeHtml(member.isSpectator ? 'Spectator' : positions)}</small></span><span class="party-badges">${member.isLocalPlayer ? '<span>You</span>' : ''}${member.isLeader ? '<span>Leader</span>' : ''}</span>`;
+          return row;
+        }));
+      }
+      const queues = state.queues || [];
+      ui.queueControls.hidden = !room || !['Lobby', 'None'].includes(state.phase) || !queues.length || state.isCustomLobby;
+      const next = JSON.stringify([state.queueId, queues]);
+      if (next !== queueKey) {
+        queueKey = next;
+        ui.queueSelect.replaceChildren(...queues.map(queue => {
+          const option = new Option(queue.name + (queue.isAvailable ? '' : ` · ${queue.unavailableReason || 'Unavailable'}`), String(queue.id));
+          option.disabled = !queue.isAvailable; option.selected = queue.id === state.queueId; return option;
+        }));
+      }
+      ui.queueSelect.disabled = ui.changeQueue.disabled = !hasFullState || actionPending || !state.canChangeQueue;
+      ui.changeQueue.textContent = state.phase === 'None' ? 'Create lobby' : 'Change';
+      ui.queueSelect.title = state.canChangeQueue ? '' : 'Only the party leader can change the queue.';
+    }
+
     function renderTeamRails() {
       if (!state?.isInChampSelect) { teamRailsKey = ''; return; }
       const key = JSON.stringify([state.allySlots, state.enemySlots]);
@@ -589,6 +658,7 @@
         updateStatus(); renderCommitAction(); renderDraftStrip();
         if (hasFullState) renderLoadoutShortcut();
         if (hasFullState) renderTeamRails();
+        if (state.isRandomChampionMode && hasFullState) renderChampionGrid();
         if (previousHover !== `${state.hoveredChampionId}|${state.hoveredBanChampionId}|${state.canBan}`) updateChampionDecorations();
         const nextAction = `${state.phase}|${state.actionType}|${state.canPick}|${state.canBan}`;
         if (hasFullState && previousAction !== nextAction) {
@@ -639,7 +709,7 @@
         ui.empty.hidden = true;
         return;
       }
-      const hasPositions = champions.some(champion => champion.positions?.length);
+      const hasPositions = !state.isRandomChampionMode && champions.some(champion => champion.positions?.length);
       $('positionFilter').disabled = !hasPositions;
       if (!hasPositions) { positionFilter = ''; $('positionFilter').value = ''; }
       const filtered = champions.filter(champion => (champion.name || '').toLocaleLowerCase().includes(query) &&
@@ -660,23 +730,27 @@
       ui.empty.hidden = true;
       const canPick = state.canPick || (state.isMyTurn && state.actionType === 'pick');
       const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
-      const nextKey = JSON.stringify([query, positionFilter, state.isInChampSelect, canPick, canBan,
+      const nextKey = JSON.stringify([query, positionFilter, state.isInChampSelect, canPick, canBan, state.isRandomChampionMode, state.canSelectCard, state.benchEnabled, state.cardChampionIds, state.benchChampionIds, state.selectedChampionId,
         filtered.map(champion => [champion.id, champion.name, champion.imageUrl, champion.isDisabled, champion.isBanned, champion.isPicked])]);
       if (nextKey === gridKey) { updateChampionDecorations(); return; }
       gridKey = nextKey;
       const focused = document.activeElement?.dataset?.selectId;
       const fragment = document.createDocumentFragment();
       for (const champion of filtered) {
-        const badge = champion.isBanned ? '<span class="badge banned">Banned</span>' :
+        const badge = state.isRandomChampionMode && state.canSelectCard && state.cardChampionIds?.includes(champion.id) ? '<span class="badge">Card</span>' :
+          state.isRandomChampionMode && state.benchChampionIds?.includes(champion.id) ? '<span class="badge">Bench</span>' :
+          champion.isBanned ? '<span class="badge banned">Banned</span>' :
           champion.isPicked ? '<span class="badge">Picked</span>' :
           '<span class="badge intent client-badge" hidden>In client</span>';
         const card = document.createElement('article');
         card.dataset.championId = String(champion.id);
         card.className = `champion${champion.isDisabled ? ' disabled' : ''}`;
-        const description = champion.isBanned ? 'Banned' : champion.isPicked ? 'Picked' : 'Unavailable';
-        const label = champion.isDisabled ? `${champion.name} · ${description}` : `${canBan ? 'Set ban' : 'Preview'} ${champion.name}`;
+        const description = state.isRandomChampionMode && champion.id === state.selectedChampionId ? 'Current champion' : champion.isBanned ? 'Banned' : champion.isPicked ? 'Picked' : 'Unavailable';
+        const randomAllowed = !state.isRandomChampionMode || state.canSelectCard && state.cardChampionIds?.includes(champion.id) || state.benchEnabled && state.benchChampionIds?.includes(champion.id);
+        const disabled = champion.isDisabled || !randomAllowed;
+        const label = disabled ? `${champion.name} · ${description}` : `${state.isRandomChampionMode ? state.cardChampionIds?.includes(champion.id) && state.canSelectCard ? 'Choose' : 'Take' : canBan ? 'Set ban' : 'Preview'} ${champion.name}`;
         card.innerHTML = `<button type="button" class="card-select" data-select-id="${champion.id}"
-          aria-pressed="${selectedChampionId === champion.id}" aria-label="${escapeAttr(label)}" ${champion.isDisabled ? 'disabled' : ''}>
+          aria-pressed="${selectedChampionId === champion.id}" aria-label="${escapeAttr(label)}" ${disabled ? 'disabled' : ''}>
           <span class="portrait">${badge}<img src="${escapeAttr(champion.imageUrl)}" alt="" loading="lazy"></span>
           <span class="champion-name">${escapeHtml(champion.name)}</span></button>`;
         card.querySelector('.card-select').onclick = () => selectChampion(champion.id);
@@ -688,6 +762,11 @@
       if (focused) ui.champions.querySelector(`[data-select-id="${focused}"]`)?.focus({preventScroll: true});
     }
     function selectChampion(id) {
+      if (state?.isRandomChampionMode) {
+        if (state.canSelectCard && state.cardChampionIds?.includes(id)) return runAction('/api/pick', {championId: id}, 'Champion chosen.');
+        if (state.benchEnabled && state.benchChampionIds?.includes(id)) return runAction('/api/bench-swap', {championId: id}, 'Champion taken.');
+        return;
+      }
       selectedChampionId = id;
       updateChampionDecorations(); renderCommitAction();
       ui.champions.querySelector(`[data-select-id="${id}"]`)?.focus({preventScroll: true});
@@ -703,7 +782,7 @@
     }
     function renderCommitAction() {
       const champion = getSelectedChampion();
-      ui.commit.hidden = !state?.isInChampSelect || (!state.canPick && !state.canBan) || !champion || champion.isDisabled;
+      ui.commit.hidden = state?.isRandomChampionMode || !state?.isInChampSelect || (!state.canPick && !state.canBan) || !champion || champion.isDisabled;
       if (ui.commit.hidden) return;
       ui.commit.classList.toggle('ban', !!state.canBan);
       ui.commit.textContent = `${state.canBan ? 'Ban' : 'Lock in'} ${champion.name}`;
@@ -781,7 +860,7 @@
       if (!state) return;
       renderLoadoutShortcut();
       const key = JSON.stringify([state.isInChampSelect, state.spell1Id, state.spell2Id,
-        state.summonerSpells, state.runePages, state.currentRunePage, state.recommendedRunePages]);
+        state.summonerSpells, state.runePages, state.currentRunePage, state.recommendedRunePages, state.loadoutReady]);
       if (key === loadoutKey) return;
       loadoutKey = key;
       const focused = document.activeElement?.dataset;
@@ -950,6 +1029,7 @@
         await runAction('/api/leave', {phase: draftPhase}, 'Leave request sent.');
     }
     function setView(view, scroll = true) {
+      if (view === 'loadout' && state?.loadoutReady === false) loadState();
       ui.layout.dataset.view = view;
       document.body.dataset.view = view;
       for (const button of document.querySelectorAll('[data-view-button]')) button.setAttribute('aria-pressed', String(button.dataset.viewButton === view));
@@ -977,6 +1057,17 @@
     ui.leave.onclick = leaveLobby;
     ui.mobileLeave.onclick = leaveLobby;
     ui.roomLeave.onclick = leaveLobby;
+    ui.changeQueue.onclick = async () => {
+      const id = Number(ui.queueSelect.value), queue = state?.queues?.find(q => q.id === id);
+      if (!queue?.isAvailable || !state.canChangeQueue || id === state.queueId) return;
+      const phase = state.phase;
+      if (state.partySize > 1 && !await confirmAction(`Switch party to ${queue.name}?`, 'The queue will change for your current party.', 'Change queue')) return;
+      if (state.phase === phase && state.canChangeQueue) await runAction('/api/change-queue', {queueId: id}, 'Queue changed.');
+    };
+    ui.reroll.onclick = async () => {
+      if (state?.canReroll && await confirmAction('Use one reroll?', 'This spends one available reroll.', 'Reroll') && state?.canReroll)
+        await runAction('/api/reroll', {}, 'Champion rerolled.');
+    };
     ui.roomAction.onclick = () => {
       if (state?.phase === 'ReadyCheck' && state.canAcceptMatch)
         return runAction('/api/accept-match', {}, 'Match accepted.');
@@ -1016,9 +1107,20 @@
       new ResizeObserver(() => document.documentElement.style.setProperty('--status-height', `${ui.status.getBoundingClientRect().height + 12}px`)).observe(ui.status);
     }
     loadState(); loadTimer();
-    setInterval(() => { if (document.visibilityState === 'visible') loadTimer(); }, 1000);
-    setInterval(() => { if (document.visibilityState === 'visible') loadState(); }, 4000);
-    setInterval(updateTimerDisplay, 250);
+    function pollDelay(full) {
+      if (!state || state.phase === 'Closed' || state.phase === 'None') return full ? 12000 : 5000;
+      if (state.phase === 'ChampSelect') return full ? 3500 : 750;
+      if (state.phase === 'ReadyCheck') return full ? 2500 : 500;
+      if (state.phase === 'Matchmaking') return full ? 7000 : 1000;
+      if (state.phase === 'Lobby') return full ? 5000 : 2000;
+      return full ? 15000 : 8000;
+    }
+    async function poll(full) {
+      if (document.visibilityState === 'visible') await (full ? loadState() : loadTimer());
+      setTimeout(() => poll(full), pollDelay(full));
+    }
+    setTimeout(() => poll(false), 750); setTimeout(() => poll(true), 3500);
+    setInterval(() => { if (document.visibilityState === 'visible') updateTimerDisplay(); }, 250);
   </script>
 </body>
 </html>

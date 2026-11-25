@@ -116,6 +116,7 @@ jobs:
             build/accounts-editor-preview.png
             build/update-dialog-preview.png
             build/settings-*-preview.png
+            build/remote-*-preview.png
           if-no-files-found: ignore
           retention-days: 7
 
