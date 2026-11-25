@@ -168,6 +168,8 @@ internal static class AccountGridChecks
     public static void Capture(Window window, string name)
     {
         if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true") return;
+        // Loaded handlers and deferred templates must finish before capturing a newly opened page.
+        window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         window.UpdateLayout();
         var image = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth), (int)Math.Ceiling(window.ActualHeight), 96, 96, PixelFormats.Pbgra32);
         image.Render(window);

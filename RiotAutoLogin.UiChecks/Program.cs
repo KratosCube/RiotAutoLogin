@@ -201,7 +201,21 @@ internal static class Program
             string[] settingsPages = ["settingsGeneral", "settingsGameplay", "settingsPhone", "settingsAlerts", "settingsData", "settingsUpdates"];
             for (int page = 0; page < settingsPages.Length; page++)
             {
-                settingsNav.SelectedIndex = page; window.UpdateLayout();
+                settingsNav.SelectedIndex = page;
+                window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                string[][] requiredControls = [
+                    ["tglRunOnStartup", "txtHotkeyKey", "btnSaveHotkey", "txtExecutablePath"],
+                    ["tglAutoAccept", "tglPersistentSettings", "txtLeagueConfigPath"],
+                    ["tglRemotePick", "btnCopyRemotePickLink"], [], ["txtApiKey", "btnSaveApiKey"],
+                    ["btnCheckUpdates", "tglUpdateNotifications"] ];
+                foreach (string name in requiredControls[page])
+                {
+                    var control = (FrameworkElement)window.FindName(name);
+                    var bounds = control.TransformToAncestor(window).TransformBounds(new Rect(control.RenderSize));
+                    if (!control.IsVisible || control.ActualWidth < 20 || control.ActualHeight < 20 || !new Rect(window.RenderSize).Contains(bounds))
+                        throw new Exception($"Settings control is missing or clipped: {name}, {bounds}, visible={control.IsVisible}.");
+                }
                 for (int other = 0; other < settingsPages.Length; other++)
                     if (((FrameworkElement)window.FindName(settingsPages[other])).IsVisible != (other == page))
                         throw new Exception("Settings categories overlap or hide the selected page.");
