@@ -27,7 +27,7 @@ public partial class MainWindow
         {
             await Task.Delay(4000, token);
             var player = game.Player;
-            var targets = await Dispatcher.InvokeAsync(() => _accounts.Where(a => a.MatchesRiotId(player.GameName, player.TagLine, player.Region)).ToArray());
+            var targets = await Dispatcher.InvokeAsync(() => _accounts.Where(a => player.Matches(a)).ToArray());
             if (targets.Length == 0) return;
             var generations = await Dispatcher.InvokeAsync(() =>
             {
@@ -43,11 +43,11 @@ public partial class MainWindow
                 timeout.Token.ThrowIfCancellationRequested();
                 bool completed = await Dispatcher.InvokeAsync<Task<bool>>(async () =>
                 {
-                    var account = targets.FirstOrDefault(a => _accounts.Contains(a) && a.MatchesRiotId(player.GameName, player.TagLine, player.Region));
+                    var account = targets.FirstOrDefault(a => _accounts.Contains(a) && player.Matches(a));
                     if (account == null) return true;
                     if (game.Queue is { } currentQueue && OpponentVersion(account, currentQueue) != generations[account]) return true;
                     bool ownUpdated = await AccountService.UpdateAccountRankAsync(account, account.Region);
-                    if (!_accounts.Contains(account) || !account.MatchesRiotId(player.GameName, player.TagLine, player.Region)) return false;
+                    if (!_accounts.Contains(account) || !player.Matches(account)) return false;
                     OpponentRankSummary? sample = null;
                     string status = "";
                     if (game.Queue is { } queue)
@@ -59,9 +59,9 @@ public partial class MainWindow
                     if (sample != null)
                         ownUpdated = await AccountService.UpdateAccountRankAsync(account, account.Region);
                     if (timeout.IsCancellationRequested) return true;
-                    if (!_accounts.Contains(account) || !account.MatchesRiotId(player.GameName, player.TagLine, player.Region)) return false;
+                    if (!_accounts.Contains(account) || !player.Matches(account)) return false;
                     if (game.Queue is { } completedQueue && OpponentVersion(account, completedQueue) != generations[account]) return true;
-                    foreach (var target in targets.Where(a => _accounts.Contains(a) && a.MatchesRiotId(player.GameName, player.TagLine, player.Region)))
+                    foreach (var target in targets.Where(a => _accounts.Contains(a) && player.Matches(a)))
                     {
                         if (!ReferenceEquals(target, account)) target.ApplyRanks(account.QueueRanks);
                         if (game.Queue is { } ladder)
@@ -96,7 +96,7 @@ public partial class MainWindow
         if (token.IsCancellationRequested || Dispatcher.HasShutdownStarted || game.Queue is not { } queue) return Task.CompletedTask;
         return Dispatcher.InvokeAsync(() =>
         {
-            foreach (var account in _accounts.Where(a => a.MatchesRiotId(game.Player.GameName, game.Player.TagLine, game.Player.Region)))
+            foreach (var account in _accounts.Where(a => game.Player.Matches(a)))
                 account.SetOpponentRankStatus(queue, message);
         }).Task;
     }

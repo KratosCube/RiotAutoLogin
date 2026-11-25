@@ -43,6 +43,13 @@ internal static class MatchRefreshChecks
 
         var player = new StatsPlayer("Player", "TAG", "EUW", "local-puuid");
         var other = new StatsPlayer("Different", "TAG", "EUNE", "other-local-puuid");
+        Require(player.Matches(new Account { GameName = "Player", TagLine = "TAG", Region = "euw1" }),
+            "Client EUW and saved euw1 must target the same account.");
+        Require(other.Matches(new Account { GameName = "Different", TagLine = "TAG", Region = "eun1" }),
+            "Client EUNE and saved eun1 must target the same account.");
+        Require(!player.Matches(new Account { GameName = "Player", TagLine = "TAG", Region = "eun1" }) &&
+            !player.Matches(new Account { GameName = "Player", TagLine = "OTHER", Region = "euw1" }),
+            "A different region or Riot tag must never receive post-game data.");
         var tracker = new PostGameRefreshTracker();
         tracker.Observe(new("ChampSelect", RankedQueue.SoloDuo, 0, false));
         tracker.Observe(new("GameStart", null, 1002, false), player);

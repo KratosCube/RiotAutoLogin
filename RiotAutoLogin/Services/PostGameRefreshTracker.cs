@@ -2,7 +2,12 @@ using RiotAutoLogin.Models;
 
 namespace RiotAutoLogin.Services;
 
-internal sealed record StatsPlayer(string GameName, string TagLine, string Region, string LocalPuuid);
+internal sealed record StatsPlayer(string GameName, string TagLine, string Region, string LocalPuuid)
+{
+    internal bool Matches(Account account) => account.MatchesRiotId(GameName, TagLine, account.Region) &&
+        RemotePlayerProfileLinks.RegionSlug(Region).Length > 0 &&
+        RemotePlayerProfileLinks.RegionSlug(Region) == RemotePlayerProfileLinks.RegionSlug(account.Region);
+}
 internal sealed record FinishedStatsGame(long GameId, RankedQueue? Queue, StatsPlayer Player);
 
 // Capture the player during the game: switching clients afterwards must never update the wrong card.
