@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace RiotAutoLogin.Services;
 
-internal sealed class AnnualCsService(Func<string, string, CancellationToken, Task<JsonElement?>> get)
+internal sealed class AnnualCsService(Func<string, string, CancellationToken, Task<JsonElement?>> get, TimeZoneInfo? timeZone = null)
 {
     // One bounded checkpoint. The fixed endTime prevents new games shifting pagination during an import.
     internal async Task<AnnualCs> StepAsync(string name, string tag, string region, string key, AnnualCs previous,
@@ -21,8 +21,17 @@ internal sealed class AnnualCsService(Func<string, string, CancellationToken, Ta
             throw new InvalidOperationException("Could not resolve this account's full Riot ID.");
         string puuid = Text(player, "puuid");
         var state = previous.Copy();
-        long cutoff = now.AddYears(-1).ToUnixTimeSeconds();
+        long cutoff = AnnualCs.StartOfYear(now, timeZone);
         foreach (string id in state.Matches.Where(m => m.Value.Started < cutoff).Select(m => m.Key).ToArray()) state.Matches.Remove(id);
+        if (state.YearStart != cutoff)
+        {
+            // Discard an old-year/rolling-window cursor. Cached games in the current year can still be reused.
+            state.YearStart = cutoff;
+            state.CompletedUntil = 0;
+            state.Scanning = false;
+            state.Pending.Clear();
+            state.Unavailable.Clear();
+        }
         if (!state.Scanning)
         {
             state.ScanFrom = Math.Max(cutoff, state.CompletedUntil - 86400);

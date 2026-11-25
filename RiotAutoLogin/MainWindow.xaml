@@ -630,7 +630,7 @@
                                             <Grid x:Name="farmStatsPage" Visibility="Collapsed">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="1.4*"/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
                                                 <Border Style="{StaticResource MetricCardStyle}" Padding="10"><StackPanel>
-                                                    <TextBlock Text="Total CS · last 12 months" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    <TextBlock x:Name="txtCsPeriod" Text="Total CS · this year" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
                                                     <TextBlock x:Name="txtCsTotal" Text="—" FontSize="22" FontWeight="SemiBold" Foreground="#49C6B3" Margin="0,3,0,0"/>
                                                 </StackPanel></Border>
                                                 <Border Grid.Column="1" Style="{StaticResource MetricCardStyle}" Padding="10"><StackPanel>

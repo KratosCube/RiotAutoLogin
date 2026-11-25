@@ -21,22 +21,32 @@ public sealed class AnnualCs
     public long CompletedUntil { get; set; }
     public int Offset { get; set; }
     public bool Scanning { get; set; }
+    public long YearStart { get; set; }
+
+    public static long StartOfYear(DateTimeOffset now, TimeZoneInfo? timeZone = null)
+    {
+        var zone = timeZone ?? TimeZoneInfo.Local;
+        int year = TimeZoneInfo.ConvertTime(now, zone).Year;
+        return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Unspecified), zone))
+            .ToUnixTimeSeconds();
+    }
 
     public AnnualCs Copy() => new()
     {
         Matches = new(Matches), Pending = new(Pending), Unavailable = new(Unavailable),
-        ScanFrom = ScanFrom, ScanUntil = ScanUntil, CompletedUntil = CompletedUntil, Offset = Offset, Scanning = Scanning
+        ScanFrom = ScanFrom, ScanUntil = ScanUntil, CompletedUntil = CompletedUntil, Offset = Offset, Scanning = Scanning, YearStart = YearStart
     };
 
-    public static (long Cs, int Games, double CsPerMinute, bool Partial) Totals(IEnumerable<Account> accounts, DateTimeOffset now)
+    public static (long Cs, int Games, double CsPerMinute, bool Partial) Totals(IEnumerable<Account> accounts, DateTimeOffset now, TimeZoneInfo? timeZone = null)
     {
-        long since = now.AddYears(-1).ToUnixTimeSeconds();
+        long since = StartOfYear(now, timeZone);
         var unique = accounts.GroupBy(a => $"{a.Region.Trim().ToUpperInvariant()}/{a.GameName.Trim().ToUpperInvariant()}#{a.TagLine.Trim().ToUpperInvariant()}").ToArray();
         var matches = unique.SelectMany(group => group.SelectMany(a => a.AnnualCs.Matches)
             .GroupBy(pair => pair.Key).Select(g => g.First().Value)).Where(m => m.Started >= since && m.Started <= now.ToUnixTimeSeconds()).ToArray();
         long cs = matches.Sum(m => (long)m.Cs), seconds = matches.Sum(m => (long)m.Seconds);
         return (cs, matches.Length, seconds > 0 ? cs * 60.0 / seconds : 0,
-            unique.Any(group => !group.Any(a => a.AnnualCs.CompletedUntil >= now.AddDays(-1).ToUnixTimeSeconds() &&
+            unique.Any(group => !group.Any(a => a.AnnualCs.YearStart == since &&
+                a.AnnualCs.CompletedUntil >= Math.Max(since, now.AddDays(-1).ToUnixTimeSeconds()) &&
                 !a.AnnualCs.Scanning && a.AnnualCs.Unavailable.Count == 0)));
     }
 }

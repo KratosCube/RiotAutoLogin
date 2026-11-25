@@ -59,6 +59,7 @@ internal static class AccountGridChecks
                 foreach (var account in eight)
                 {
                     account.AnnualCs.CompletedUntil = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    account.AnnualCs.YearStart = AnnualCs.StartOfYear(DateTimeOffset.UtcNow);
                     for (int game = 0; game < 120; game++)
                         account.AnnualCs.Matches["sample-" + game] = new CsMatch { Cs = 205, Seconds = 1740, Started = DateTimeOffset.UtcNow.AddDays(-game * 2).ToUnixTimeSeconds() };
                 }
@@ -66,6 +67,8 @@ internal static class AccountGridChecks
                 farm.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                 UIService.UpdateAnnualCsStats(window, eight);
                 if (((TextBlock)window.FindName("txtCsTotal")).Text == "—") throw new Exception("Annual CS preview did not bind.");
+                if (((TextBlock)window.FindName("txtCsPeriod")).Text != $"Total CS · {DateTime.Now.Year}")
+                    throw new Exception("Farming must identify the current calendar year.");
                 Capture(window, "farm-statistics-preview.png");
                 var results = (System.Windows.Controls.Primitives.ToggleButton)window.FindName("btnStatsResults");
                 results.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));

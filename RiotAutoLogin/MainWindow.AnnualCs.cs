@@ -40,7 +40,7 @@ public partial class MainWindow
             });
         }
     }
-    private string _csMessage = "Available history · all accounts · all queues · last 12 months";
+    private string _csMessage = $"Available history · all accounts · all queues · since Jan 1, {DateTime.Now.Year}";
     private void SetCsContext(string message)
     {
         _csMessage = message;
@@ -62,7 +62,7 @@ public partial class MainWindow
             await LoadAnnualCsAsync();
             if (_csLoadFailed) return;
             string key = await Task.Run(ApiKeyManager.GetApiKey, source.Token);
-            if (string.IsNullOrWhiteSpace(key)) { SetCsContext("Save a Riot API key in Settings to import the last 12 months."); return; }
+            if (string.IsNullOrWhiteSpace(key)) { SetCsContext("Save a Riot API key in Settings to import this calendar year."); return; }
             var service = new AnnualCsService(RiotApiClient.Shared.GetAsync);
             foreach (var account in _accounts.ToArray())
             {
@@ -86,7 +86,7 @@ public partial class MainWindow
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex) { farmStatsPage.ToolTip = $"Import paused for {name}: {ex.Message}. Saved progress can be resumed."; }
             }
-            SetCsContext("Available history · all accounts · all queues · last 12 months");
+            SetCsContext($"Available history · all accounts · all queues · since Jan 1, {DateTime.Now.Year}");
         }
         catch (OperationCanceledException) { SetCsContext("Sync paused · saved progress will resume next time"); }
         finally

@@ -33,12 +33,13 @@ namespace RiotAutoLogin.Services
         public static void UpdateAnnualCsStats(Window window, System.Collections.Generic.List<Models.Account> accounts)
         {
             var (cs, games, rate, partial) = Models.AnnualCs.Totals(accounts, DateTimeOffset.UtcNow);
+            if (window.FindName("txtCsPeriod") is TextBlock period) period.Text = $"Total CS · {DateTime.Now.Year}";
             bool known = accounts.Any(a => a.AnnualCs.CompletedUntil > 0 || a.AnnualCs.Matches.Count > 0);
             if (window.FindName("txtCsTotal") is TextBlock total) total.Text = !known ? "—" : $"{cs:N0}" + (partial ? "+" : "");
             if (window.FindName("txtCsGames") is TextBlock count) count.Text = games.ToString("N0");
             if (window.FindName("txtCsPerMinute") is TextBlock speed) speed.Text = games == 0 ? "—" : rate.ToString("0.0");
             if (window.FindName("txtCsTotal") is TextBlock label)
-                label.ToolTip = "Minions and jungle monsters combined. All saved accounts and queues, rolling last 12 months. " +
+                label.ToolTip = $"Minions and jungle monsters combined. All saved accounts and queues, since January 1, {DateTime.Now.Year}, in this PC's time zone. " +
                     "Based on available imported match history. + means the import is incomplete, has unavailable matches or needs refreshing. " +
                     "Historical availability depends on Riot; a finished import does not guarantee every game from the year is still available.";
         }

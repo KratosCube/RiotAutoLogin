@@ -57,6 +57,7 @@ internal static class AnnualCsChecks
         var parsed = RemoteChampionPositions.Parse(positions.RootElement);
         Require(parsed[103].SequenceEqual(["mid", "top"]) && parsed[1].SequenceEqual(["support"]) && !parsed.ContainsKey(2),
             "Champion positions must use client lane recommendations, with multiple positions and safe handling of unknown data.");
+        await CalendarYearChecks();
         Console.WriteLine("Annual CS import, checkpoint, coverage, identity and champion-position checks passed.");
 
         Task<JsonElement?> Get(string url, string key, CancellationToken token)
@@ -72,6 +73,45 @@ internal static class AnnualCsChecks
                 participants = new[] { new { puuid = "self", totalMinionsKilled = 100, neutralMinionsKilled = 10 } }
             } });
         }
+    }
+
+    private static async Task CalendarYearChecks()
+    {
+        var zone = TimeZoneInfo.CreateCustomTimeZone("Calendar test", TimeSpan.FromHours(1), "Calendar test", "Winter", "Summer",
+            [TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule(new DateTime(2020, 1, 1), new DateTime(2030, 12, 31), TimeSpan.FromHours(1),
+                TimeZoneInfo.TransitionTime.CreateFloatingDateRule(new DateTime(1, 1, 1, 2, 0, 0), 3, 5, DayOfWeek.Sunday),
+                TimeZoneInfo.TransitionTime.CreateFloatingDateRule(new DateTime(1, 1, 1, 3, 0, 0), 10, 5, DayOfWeek.Sunday))]);
+        long start = DateTimeOffset.Parse("2025-12-31T23:00:00Z").ToUnixTimeSeconds();
+        var summer = DateTimeOffset.Parse("2026-07-01T12:00:00Z");
+        Require(AnnualCs.StartOfYear(summer, zone) == start, "January's time-zone offset must be used even during daylight saving time.");
+        var account = new Account { GameName = "Calendar", TagLine = "TAG", Region = "eun1" };
+        account.AnnualCs.Matches["previous-year"] = new CsMatch { Started = start - 1, Cs = 900, Seconds = 1200 };
+        account.AnnualCs.Matches["new-year"] = new CsMatch { Started = start, Cs = 100, Seconds = 1200 };
+        account.AnnualCs.Matches["summer"] = new CsMatch { Started = summer.AddDays(-1).ToUnixTimeSeconds(), Cs = 200, Seconds = 1800 };
+        var (cs, games, _, partial) = AnnualCs.Totals([account], summer, zone);
+        Require(cs == 300 && games == 2 && partial, "Only matches since local January 1 must count; an old rolling import needs revalidation.");
+        var rollover = DateTimeOffset.Parse("2026-12-31T23:30:00Z");
+        Require(AnnualCs.Totals([account], rollover, zone).Cs == 0,
+            "The display must reset at the local New Year, even while UTC is still December 31.");
+        long nextStart = DateTimeOffset.Parse("2026-12-31T23:00:00Z").ToUnixTimeSeconds();
+        account.AnnualCs.Scanning = true;
+        account.AnnualCs.YearStart = start;
+        account.AnnualCs.ScanUntil = DateTimeOffset.Parse("2026-12-30T12:00:00Z").ToUnixTimeSeconds();
+        account.AnnualCs.Offset = 100;
+        account.AnnualCs.Pending.Add("old-pending");
+        account.AnnualCs.Unavailable.Add("old-missing");
+        account.AnnualCs.Matches["this-year"] = new CsMatch { Started = nextStart + 10, Cs = 25, Seconds = 120 };
+        var service = new AnnualCsService((url, key, token) =>
+        {
+            if (url.Contains("/accounts/")) return Json(new { gameName = "Calendar", tagLine = "TAG", puuid = "self" });
+            Require(url.Contains("/ids?start=0&") && url.Contains("startTime=" + nextStart),
+                "A previous-year cursor must restart from January 1, with no old pending match requests.");
+            return Json(Array.Empty<string>());
+        }, zone);
+        var next = await service.StepAsync("Calendar", "TAG", "eun1", "key", account.AnnualCs, rollover, default);
+        Require(next.YearStart == nextStart && !next.Scanning && next.Pending.Count == 0 && next.Unavailable.Count == 0 &&
+                next.Matches.Count == 1 && next.Matches.ContainsKey("this-year"),
+            "A new calendar year must discard old cursors and missing-match flags while reusing current-year games.");
     }
     private static Task<JsonElement?> Json(object value) => Task.FromResult<JsonElement?>(JsonSerializer.SerializeToElement(value));
     private static void Require(bool condition, string message) { if (!condition) throw new Exception(message); }
