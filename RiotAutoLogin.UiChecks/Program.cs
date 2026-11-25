@@ -205,8 +205,10 @@ internal static class Program
                 for (int other = 0; other < settingsPages.Length; other++)
                     if (((FrameworkElement)window.FindName(settingsPages[other])).IsVisible != (other == page))
                         throw new Exception("Settings categories overlap or hide the selected page.");
-                if (page == 0) AccountGridChecks.Capture(window, "settings-general-preview.png");
-                if (page == 1) AccountGridChecks.Capture(window, "settings-gameplay-preview.png");
+                if (page == 0 && ((ScrollViewer)window.FindName("settingsScroll")).ScrollableHeight > 1)
+                    throw new Exception("General settings should fit the minimum window size.");
+                string[] previewNames = ["general", "gameplay", "phone", "alerts", "data", "updates"];
+                AccountGridChecks.Capture(window, $"settings-{previewNames[page]}-preview.png");
             }
             if (alertsHost.Content is not ClientAlertsSettingsCard alerts)
                 throw new Exception("Settings did not create its alert controls on first use.");
