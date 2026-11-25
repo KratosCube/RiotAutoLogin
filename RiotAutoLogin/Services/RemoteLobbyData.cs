@@ -36,9 +36,9 @@ internal static class RemoteLobbyData
         {
             int id = Number(q, "id"); string mode = Text(q, "gameMode");
             bool arena = mode.Equals("CHERRY", StringComparison.OrdinalIgnoreCase);
-            bool aram = mode.Equals("ARAM", StringComparison.OrdinalIgnoreCase);
+            bool aram = IsAram(id, mode);
             if (!(id is 400 or 420 or 440 || arena || aram) || Flag(q, "isCustom")) continue;
-            string name = id switch { 400 => "Normal Draft", 420 => "Solo / Duo", 440 => "Ranked Flex", 450 => "ARAM", _ => Text(q, "name") };
+            string name = id switch { 400 => "Normal Draft", 420 => "Solo / Duo", 440 => "Ranked Flex", 450 => "ARAM", 2400 => "ARAM Mayhem", _ => Text(q, "name") };
             if (name.Length == 0) name = arena ? "Arena" : "ARAM";
             string availability = Text(q, "queueAvailability");
             bool available = availability == "Available" && (!q.TryGetProperty("isEnabled", out var enabled) || enabled.ValueKind == JsonValueKind.True);
@@ -48,8 +48,11 @@ internal static class RemoteLobbyData
             { available = false; reason = "Party size not supported"; }
             result.Add(new() { Id = id, Name = name, GameMode = mode, IsAvailable = available, UnavailableReason = reason });
         }
-        return result.GroupBy(q => q.Id).Select(g => g.First()).OrderBy(q => q.Id is 420 ? 0 : q.Id is 400 ? 1 : q.Id is 440 ? 2 : q.GameMode == "ARAM" ? 3 : 4).ThenBy(q => q.Id).ToList();
+        return result.GroupBy(q => q.Id).Select(g => g.First()).OrderBy(q => q.Id is 420 ? 0 : q.Id is 400 ? 1 : q.Id is 440 ? 2 : IsAram(q.Id, q.GameMode) ? 3 : 4).ThenBy(q => q.Id).ToList();
     }
+
+    internal static bool IsAram(int id, string mode) => id is 450 or 720 or 2400 ||
+        mode.Equals("ARAM", StringComparison.OrdinalIgnoreCase) || mode.Equals("KIWI", StringComparison.OrdinalIgnoreCase);
 
     internal static bool Flag(JsonElement value, string field) => value.ValueKind == JsonValueKind.Object && value.TryGetProperty(field, out var p) && p.ValueKind == JsonValueKind.True;
     internal static string Text(JsonElement value, string field) => RiotLocalProtocol.Text(value, field);

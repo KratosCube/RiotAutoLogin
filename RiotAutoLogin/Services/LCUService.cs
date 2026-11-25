@@ -197,7 +197,9 @@ namespace RiotAutoLogin.Services
         {
             string path = url.TrimStart('/');
             int ttl = path switch { "lol-champ-select/v1/session" => 150, "lol-lobby/v2/lobby" => 250,
-                "lol-matchmaking/v1/ready-check" => 100, "lol-lobby-team-builder/champ-select/v1/subset-champion-list" => 150, _ => 0 };
+                "lol-matchmaking/v1/ready-check" => 100,
+                "lol-champ-select/v1/session/pick-order-swaps" or "lol-champ-select/v1/session/position-swaps" => 1000,
+                "lol-champ-select/v1/skin-selector-info" or "lol-champ-select/v1/skin-carousel-skins" or "lol-champ-select/v1/pickable-skin-ids" => 150, "lol-lobby-team-builder/champ-select/v1/subset-champion-list" => 150, _ => 0 };
             if (method == "GET" && ttl > 0)
             {
                 object scope; lock (AuthLock) scope = _leagueAuth;
