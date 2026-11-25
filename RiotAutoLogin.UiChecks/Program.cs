@@ -107,7 +107,7 @@ internal static class Program
             AccountGridChecks.Capture(window, "accounts-editor-preview.png");
             using (var updates = new UpdateService("KratosCube", "RiotAutoLogin"))
             {
-                var dialog = new UpdateNotificationWindow(new UpdateInfo
+                var dialog = new UpdateNotificationWindow(new RiotAutoLogin.Models.UpdateInfo
                 {
                     CurrentVersion = new Version(1, 3, 16), LatestVersion = new Version(1, 3, 17), FileSize = 8_400_000,
                     Delivery = UpdateDelivery.Package, UsesDelta = true, FullDownloadSize = 85_000_000,

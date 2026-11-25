@@ -492,13 +492,13 @@
                                         <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="68"/></Grid.RowDefinitions>
                                         <DockPanel LastChildFill="True" Margin="0,0,0,5">
                                             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                                                <ToggleButton x:Name="btnStatsResults" Content="Results" Tag="results" IsChecked="True" Click="StatisticsPage_Click" Style="{StaticResource ModernToggleButton}" Padding="10,2" MinWidth="0" FontSize="11" Margin="0,0,4,0"/>
-                                                <ToggleButton x:Name="btnStatsFarm" Content="Farming" Tag="farm" Click="StatisticsPage_Click" Style="{StaticResource ModernToggleButton}" Padding="10,2" MinWidth="0" FontSize="11" Margin="0,0,4,0"/>
-                                                <ToggleButton x:Name="btnStatsTime" Content="Time" Tag="time" Click="StatisticsPage_Click" Style="{StaticResource ModernToggleButton}" Padding="10,2" MinWidth="0" FontSize="11"/>
+                                                <ToggleButton x:Name="btnStatsResults" Content="Results" Tag="results" IsChecked="True" Click="StatisticsPage_Click" Style="{StaticResource ModernToggleButton}" Padding="10,2" MinWidth="0" MinHeight="24" Height="24" FontSize="11" Margin="0,0,4,0"/>
+                                                <ToggleButton x:Name="btnStatsFarm" Content="Farming" Tag="farm" Click="StatisticsPage_Click" Style="{StaticResource ModernToggleButton}" Padding="10,2" MinWidth="0" MinHeight="24" Height="24" FontSize="11" Margin="0,0,4,0"/>
+                                                <ToggleButton x:Name="btnStatsTime" Content="Time" Tag="time" Click="StatisticsPage_Click" Style="{StaticResource ModernToggleButton}" Padding="10,2" MinWidth="0" MinHeight="24" Height="24" FontSize="11"/>
                                             </StackPanel>
-                                            <Button x:Name="btnRefreshQuickStats" DockPanel.Dock="Right" Content="↻" Click="btnRefreshQuickStats_Click" Style="{StaticResource GhostIconButton}" Width="30" Height="24" ToolTip="Refresh ranks"/>
-                                            <Button x:Name="btnSyncCs" DockPanel.Dock="Right" Content="Sync history" Visibility="Collapsed" Click="SyncCs_Click" Style="{StaticResource SecondaryButton}" Padding="9,2" Height="24" FontSize="10"/>
-                                            <Button x:Name="btnStatsScope" DockPanel.Dock="Right" Content="Today" Visibility="Collapsed" Click="StatisticsScope_Click" Style="{StaticResource SecondaryButton}" Padding="9,2" Height="24" FontSize="10"/>
+                                            <Button x:Name="btnRefreshQuickStats" DockPanel.Dock="Right" Content="↻" Click="btnRefreshQuickStats_Click" Style="{StaticResource GhostIconButton}" Width="30" MinHeight="24" Height="24" ToolTip="Refresh ranks"/>
+                                            <Button x:Name="btnSyncCs" DockPanel.Dock="Right" Content="Sync history" Visibility="Collapsed" Click="SyncCs_Click" Style="{StaticResource SecondaryButton}" Padding="9,2" MinHeight="24" Height="24" FontSize="10"/>
+                                            <Button x:Name="btnStatsScope" DockPanel.Dock="Right" Content="Today" Visibility="Collapsed" Click="StatisticsScope_Click" Style="{StaticResource SecondaryButton}" Padding="9,2" MinHeight="24" Height="24" FontSize="10"/>
                                             <TextBlock x:Name="txtStatsContext" Text="Selected ladder · all accounts" Margin="10,0" VerticalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis"/>
                                         </DockPanel>
                                         <Grid x:Name="statsViewport" Grid.Row="1" ClipToBounds="True">
@@ -512,7 +512,7 @@
                                         </Grid.ColumnDefinitions>
 
                                         <Border Grid.Column="0"
-                                                Style="{StaticResource MetricCardStyle}">
+                                                Style="{StaticResource MetricCardStyle}" Padding="10">
                                             <StackPanel>
                                                 <TextBlock Text="Games"
                            FontSize="11"
@@ -528,7 +528,7 @@
                                         </Border>
 
                                         <Border Grid.Column="1"
-                                                Style="{StaticResource MetricCardStyle}">
+                                                Style="{StaticResource MetricCardStyle}" Padding="10">
                                             <StackPanel>
                                                 <TextBlock Text="Wins"
                            FontSize="11"
@@ -544,7 +544,7 @@
                                         </Border>
 
                                         <Border Grid.Column="2"
-                                                Style="{StaticResource MetricCardStyle}">
+                                                Style="{StaticResource MetricCardStyle}" Padding="10">
                                             <StackPanel>
                                                 <TextBlock Text="Losses"
                            FontSize="11"
@@ -560,7 +560,7 @@
                                         </Border>
 
                                         <Border Grid.Column="3"
-                                                Style="{StaticResource MetricCardStyle}">
+                                                Style="{StaticResource MetricCardStyle}" Padding="10">
                                             <StackPanel>
                                                 <TextBlock Text="Win Rate"
                            FontSize="11"
@@ -576,7 +576,7 @@
                                         </Border>
 
                                         <Border Grid.Column="4"
-                                                Style="{StaticResource MetricCardStyle}">
+                                                Style="{StaticResource MetricCardStyle}" Padding="10">
                                             <StackPanel>
                                                 <TextBlock Text="Greyscreen"
                                                            FontSize="11"
@@ -595,31 +595,31 @@
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/>
                                                 </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Style="{StaticResource MetricCardStyle}">
+                                            <Border Grid.Column="0" Style="{StaticResource MetricCardStyle}" Padding="10">
                                                 <StackPanel>
                                                     <TextBlock Text="Queue" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
                                                     <TextBlock x:Name="txtQueueTimeValue" Text="0s" Margin="0,4,0,0" FontSize="18" FontWeight="SemiBold" Foreground="#F4C95D"/>
                                                 </StackPanel>
                                             </Border>
-                                            <Border Grid.Column="1" Style="{StaticResource MetricCardStyle}">
+                                            <Border Grid.Column="1" Style="{StaticResource MetricCardStyle}" Padding="10">
                                                 <StackPanel>
                                                     <TextBlock Text="Champ select" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
                                                     <TextBlock x:Name="txtChampSelectTimeValue" Text="0s" Margin="0,4,0,0" FontSize="18" FontWeight="SemiBold" Foreground="#22BABB"/>
                                                 </StackPanel>
                                             </Border>
-                                            <Border Grid.Column="2" Style="{StaticResource MetricCardStyle}">
+                                            <Border Grid.Column="2" Style="{StaticResource MetricCardStyle}" Padding="10">
                                                 <StackPanel>
                                                     <TextBlock Text="Loading" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
                                                     <TextBlock x:Name="txtLoadingTimeValue" Text="0s" Margin="0,4,0,0" FontSize="18" FontWeight="SemiBold" Foreground="#B88AFF"/>
                                                 </StackPanel>
                                             </Border>
-                                            <Border Grid.Column="3" Style="{StaticResource MetricCardStyle}">
+                                            <Border Grid.Column="3" Style="{StaticResource MetricCardStyle}" Padding="10">
                                                 <StackPanel>
                                                     <TextBlock Text="Total waiting" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
                                                     <TextBlock x:Name="txtWaitingTimeValue" Text="0s" Margin="0,4,0,0" FontSize="18" FontWeight="SemiBold" Foreground="#F5F7FA"/>
                                                 </StackPanel>
                                             </Border>
-                                            <Border Grid.Column="4" Style="{StaticResource MetricCardStyle}">
+                                            <Border Grid.Column="4" Style="{StaticResource MetricCardStyle}" Padding="10">
                                                 <StackPanel>
                                                     <TextBlock Text="In game" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
                                                     <TextBlock x:Name="txtInGameTimeValue" Text="0s" Margin="0,4,0,0" FontSize="18" FontWeight="SemiBold" Foreground="#3DDC97"/>
@@ -629,15 +629,15 @@
 
                                             <Grid x:Name="farmStatsPage" Visibility="Collapsed">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="1.4*"/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                                                <Border Style="{StaticResource MetricCardStyle}"><StackPanel>
+                                                <Border Style="{StaticResource MetricCardStyle}" Padding="10"><StackPanel>
                                                     <TextBlock Text="Total CS · last 12 months" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
                                                     <TextBlock x:Name="txtCsTotal" Text="—" FontSize="22" FontWeight="SemiBold" Foreground="#49C6B3" Margin="0,3,0,0"/>
                                                 </StackPanel></Border>
-                                                <Border Grid.Column="1" Style="{StaticResource MetricCardStyle}"><StackPanel>
+                                                <Border Grid.Column="1" Style="{StaticResource MetricCardStyle}" Padding="10"><StackPanel>
                                                     <TextBlock Text="Games imported" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
                                                     <TextBlock x:Name="txtCsGames" Text="—" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,3,0,0"/>
                                                 </StackPanel></Border>
-                                                <Border Grid.Column="2" Style="{StaticResource MetricCardStyle}"><StackPanel>
+                                                <Border Grid.Column="2" Style="{StaticResource MetricCardStyle}" Padding="10"><StackPanel>
                                                     <TextBlock Text="CS / min" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
                                                     <TextBlock x:Name="txtCsPerMinute" Text="—" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,3,0,0"/>
                                                 </StackPanel></Border>
