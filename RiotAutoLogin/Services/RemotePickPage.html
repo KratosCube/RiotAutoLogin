@@ -483,7 +483,7 @@
       wasBan = !!state.canBan;
       document.body.dataset.screen = draft ? 'draft' : 'room';
       ui.layout.hidden = ui.draftControls.hidden = !draft;
-      ui.phase.textContent = state.isRandomChampionMode ? (state.canSelectCard ? 'Choose your card' : 'Your champion') : state.canBan ? 'Your ban' : state.canPick ? 'Your pick'
+      ui.phase.textContent = draft && state.isRandomChampionMode ? (state.canSelectCard ? 'Choose your card' : 'Your champion') : state.canBan ? 'Your ban' : state.canPick ? 'Your pick'
         : state.phase === 'Matchmaking' ? 'Finding match' : state.matchAccepted ? 'Match accepted'
         : state.phaseLabel && state.phaseLabel !== 'Waiting' ? state.phaseLabel : 'League Client';
       const mode = !draft && ['Lobby', 'Matchmaking', 'ReadyCheck'].includes(state.phase) ? state.queueName : '';

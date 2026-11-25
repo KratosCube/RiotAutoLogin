@@ -74,7 +74,8 @@ namespace RiotAutoLogin.Services
             _listener.Start();
             Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
             IsRunning = true;
-            _serverTask = Task.Run(() => AcceptLoopAsync(_cts.Token));
+            var serverToken = _cts.Token;
+            _serverTask = AcceptLoopAsync(serverToken);
             Debug.WriteLine($"Remote Pick server started at:{Environment.NewLine}{LocalUrlDisplay}");
             _discovery = new RemotePickDiscovery();
             await _discovery.StartAsync(Port);

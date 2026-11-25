@@ -54,6 +54,18 @@ internal static class RemoteLobbyChecks
         var cancelled = new CancellationToken(true);
         try { await cache.ReadAsync(scope, "cancelled", 150, Load, cancelled); throw new Exception("Cancellation ignored."); }
         catch (OperationCanceledException) { }
+        var oldReply = new TaskCompletionSource<string[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldRead = cache.ReadAsync(scope, "pending", 150, () => oldReply.Task, default);
+        cache.Clear();
+        await cache.ReadAsync(scope, "pending", 150, () => Task.FromResult(new[] { "200", "after mutation" }), default);
+        oldReply.SetResult(["200", "before mutation"]); await oldRead;
+        var latest = await cache.ReadAsync(scope, "pending", 150, () => throw new Exception("Fresh result was lost."), default);
+        Require(latest[1] == "after mutation", "An old pending request must never refill the cache after mutation.");
+        int failures = 0;
+        Task<string[]> FailingRead() { failures++; return Task.FromResult(new[] { "503", "unavailable" }); }
+        await cache.ReadAsync(scope, "failed", 150, FailingRead, default);
+        await cache.ReadAsync(scope, "failed", 150, FailingRead, default);
+        Require(failures == 2, "Transient client failures must not be cached.");
         Console.WriteLine("Remote lobby members, authoritative queues, ARAM cards/bench and coalesced live-read checks passed.");
     }
     private static void Require(bool condition, string message) { if (!condition) throw new Exception(message); }
