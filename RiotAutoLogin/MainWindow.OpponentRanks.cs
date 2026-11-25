@@ -42,7 +42,7 @@ public partial class MainWindow
                     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(source.Token);
                     timeout.CancelAfter(TimeSpan.FromSeconds(45));
                     Models.OpponentRankSummary? summary;
-                    try { summary = await _opponentRanks.ReadAsync(name, tag, region, queue, timeout.Token); }
+                    try { summary = await _opponentRanks.TryReadAsync(name, tag, region, queue, timeout.Token); }
                     catch (OperationCanceledException) when (!source.IsCancellationRequested) { continue; }
                     if (summary == null || source.IsCancellationRequested || !_accounts.Contains(account) ||
                         !account.MatchesRiotId(name, tag, region)) continue;
