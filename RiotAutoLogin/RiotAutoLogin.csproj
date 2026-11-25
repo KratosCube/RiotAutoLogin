@@ -4,6 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
+    <DefineConstants Condition="'$(DeveloperBuild)' == 'true'">$(DefineConstants);DEVELOPMENT</DefineConstants>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <StartupObject>RiotAutoLogin.App</StartupObject>

@@ -48,7 +48,7 @@ namespace RiotAutoLogin.Services
 
         private static readonly string _cacheFolderPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "RiotClientAutoLogin", "ImageCache");
+            BuildChannel.DataDirectoryName, "ImageCache");
 
         private static string _currentVersion = "14.1.1"; // Default fallback version
 

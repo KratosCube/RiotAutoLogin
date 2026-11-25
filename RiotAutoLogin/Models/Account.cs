@@ -26,6 +26,7 @@ namespace RiotAutoLogin.Models
         public Dictionary<RankedQueue, GreyscreenData> QueueGreyscreens { get; set; } = new();
         public Dictionary<RankedQueue, OpponentRankSummary> QueueOpponentRanks { get; set; } = new();
         public DateTime? RanksUpdatedUtc { get; set; }
+        public AnnualCs AnnualCs { get; set; } = new();
 
         [JsonIgnore] public RankedQueue SelectedQueue { get; set; }
         [JsonIgnore] public RankData? DisplayRank => QueueRanks.GetValueOrDefault(SelectedQueue);
@@ -81,6 +82,7 @@ namespace RiotAutoLogin.Models
             QueueRanks ??= new();
             QueueGreyscreens ??= new();
             QueueOpponentRanks ??= new();
+            AnnualCs ??= new();
             // Older releases persisted this empty record when League-V4 omitted Ranked 5s.
             if (QueueRanks.GetValueOrDefault(RankedQueue.RankedFives) is
                 { Tier: "", Rank: "", LegacyLabel: null, LeaguePoints: 0, Wins: 0, Losses: 0 })
@@ -122,6 +124,7 @@ namespace RiotAutoLogin.Models
 
             QueueRanks = new();
             QueueOpponentRanks = new();
+            AnnualCs = new();
             _opponentRankStatuses.Clear();
             RanksUpdatedUtc = null;
             RankInfo = string.Empty;

@@ -9,7 +9,7 @@ namespace RiotAutoLogin.Services
     public static class StartupManager
     {
         private const string RegistryKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-        private static readonly string AppName = Assembly.GetEntryAssembly()?.GetName().Name ?? "RiotAutoLogin";
+        private static readonly string AppName = (Assembly.GetEntryAssembly()?.GetName().Name ?? "RiotAutoLogin") + BuildChannel.StartupSuffix;
         private static readonly string AppPath = Environment.ProcessPath ?? string.Empty;
 
         public static bool IsRegisteredForStartup()

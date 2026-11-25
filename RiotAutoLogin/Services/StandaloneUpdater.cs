@@ -12,7 +12,7 @@ public static class StandaloneUpdater
 {
     public static string UpdatesDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RiotClientAutoLogin", "Updates");
+        BuildChannel.DataDirectoryName, "Updates");
 
     private static string FailurePath => Path.Combine(UpdatesDirectory, "last-update-failure.txt");
 

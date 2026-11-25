@@ -24,6 +24,7 @@ namespace RiotAutoLogin
         public UpdateNotificationWindow(UpdateInfo updateInfo, UpdateService updateService)
         {
             InitializeComponent();
+            Height = Math.Min(Height, Math.Max(300, SystemParameters.WorkArea.Height - 32));
             _updateInfo = updateInfo;
             _updateService = updateService;
             bool migration = updateInfo.Delivery == UpdateDelivery.Installer;
@@ -115,6 +116,10 @@ namespace RiotAutoLogin
         }
 
         private void btnLater_Click(object sender, RoutedEventArgs e) => Close();
+        private void Header_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (e.ButtonState == System.Windows.Input.MouseButtonState.Pressed) DragMove();
+        }
         private void btnClose_Click(object sender, RoutedEventArgs e) => Close();
 
         private void chkFutureUpdateNotifications_Click(object sender, RoutedEventArgs e)

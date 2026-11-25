@@ -12,7 +12,7 @@ namespace RiotAutoLogin.Services
 {
     public static class AccountService
     {
-        private static readonly string ConfigFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RiotClientAutoLogin", "accounts.json");
+        private static readonly string ConfigFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), BuildChannel.DataDirectoryName, "accounts.json");
         private static readonly SemaphoreSlim RefreshGate = new(1, 1);
         private static readonly object SaveGate = new();
 

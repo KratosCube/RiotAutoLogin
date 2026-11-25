@@ -1,0 +1,54 @@
+name: Build developer preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Branch or commit to test (no merge required)
+        required: true
+        default: master
+      notes:
+        description: Features to test
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  preview:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Behavioral checks
+        run: dotnet run --project RiotAutoLogin.Tests/RiotAutoLogin.Tests.csproj -c Release
+      - name: Build isolated developer app
+        shell: pwsh
+        run: |
+          dotnet publish RiotAutoLogin/RiotAutoLogin.csproj -c Release -r win-x64 --self-contained true -o build/dev /p:DeveloperBuild=true /p:PublishSingleFile=false /p:PublishReadyToRun=true
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $p = Start-Process build/dev/RiotAutoLogin.exe -ArgumentList '--describe-build' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Developer build check failed.' }
+          $channel = Get-Content build-channel.json -Raw | ConvertFrom-Json
+          if (!$channel.development -or $channel.dataDirectory -ne 'RiotClientAutoLogin-Dev' -or $channel.startupSuffix -ne '-Dev') { throw 'Developer isolation is missing.' }
+      - name: Publish test prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TEST_NOTES: ${{ inputs.notes }}
+          DEV_TAG: dev-${{ github.run_number }}-${{ github.run_attempt }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $commit = git rev-parse HEAD
+          "Source commit: $commit" | Set-Content build/dev/BUILD.txt
+          @('Developer preview. Extract the ZIP and run RiotAutoLogin.exe.', '',
+            "Source commit: $commit", '', $env:TEST_NOTES, '',
+            'Uses separate RiotClientAutoLogin-Dev settings. Public updaters ignore this prerelease.',
+            'Exit the stable app before testing client automation or global shortcuts.') | Set-Content build/dev-notes.md
+          Compress-Archive build/dev/* build/RiotAutoLogin-Developer.zip
+          gh release create $env:DEV_TAG build/RiotAutoLogin-Developer.zip --repo $env:GITHUB_REPOSITORY --target $commit --title "Developer preview $env:DEV_TAG" --notes-file build/dev-notes.md --prerelease --latest=false

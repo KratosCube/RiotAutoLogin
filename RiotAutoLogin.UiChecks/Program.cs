@@ -100,6 +100,29 @@ internal static class Program
                 throw new Exception("The Accounts tab did not display the saved account.");
             Console.WriteLine("Accounts tab rendered with a saved account.");
             AccountGridChecks.Run(window, tabs);
+            tabs.SelectedItem = accountsTab;
+            window.Width = window.MinWidth; window.Height = window.MinHeight; window.UpdateLayout();
+            var form = (ScrollViewer)window.FindName("accountFormScroll");
+            if (form.ScrollableHeight > 1 || form.ScrollableWidth > 1) throw new Exception("The account form must fit the minimum window size.");
+            AccountGridChecks.Capture(window, "accounts-editor-preview.png");
+            using (var updates = new UpdateService("KratosCube", "RiotAutoLogin"))
+            {
+                var dialog = new UpdateNotificationWindow(new UpdateInfo
+                {
+                    CurrentVersion = new Version(1, 3, 16), LatestVersion = new Version(1, 3, 17), FileSize = 8_400_000,
+                    Delivery = UpdateDelivery.Package, UsesDelta = true, FullDownloadSize = 85_000_000,
+                    Changelog = "A clearer overview\\n\\n• Annual CS across your accounts\\n• Direct Results, Farming and Time controls\\n• Client position filters for Remote Pick\\n• Developer previews from feature branches".Replace("\\n", "\n")
+                }, updates) { Owner = window };
+                dialog.Show(); dialog.UpdateLayout();
+                foreach (string name in new[] { "btnDownload", "btnLater", "btnClose", "chkFutureUpdateNotifications" })
+                {
+                    var element = (FrameworkElement)dialog.FindName(name);
+                    var rect = element.TransformToAncestor(dialog).TransformBounds(new Rect(element.RenderSize));
+                    if (!new Rect(dialog.RenderSize).Contains(rect)) throw new Exception("Update dialog control clipped: " + name);
+                }
+                AccountGridChecks.Capture(dialog, "update-dialog-preview.png");
+                dialog.Close();
+            }
 
             var popupAccounts = new List<Account>
             {

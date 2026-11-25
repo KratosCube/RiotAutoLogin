@@ -36,7 +36,7 @@ namespace RiotAutoLogin.Services
             long identityCheckedAt = 0, lastIdentityConfirmedAt = long.MinValue, savedAt = 0;
             try
             {
-                _ledger = new WaitingTimeLedger(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RiotClientAutoLogin", "waiting-times.json"));
+                _ledger = new WaitingTimeLedger(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), BuildChannel.DataDirectoryName, "waiting-times.json"));
                 while (!token.IsCancellationRequested)
                 {
                     int delay = 1000;

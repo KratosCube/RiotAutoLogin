@@ -12,7 +12,7 @@ namespace RiotAutoLogin.Services
         public const int MaxDelaySeconds = 7;
         private static readonly string SettingsFilePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "RiotClientAutoLogin", "autoaccept_settings.json");
+            BuildChannel.DataDirectoryName, "autoaccept_settings.json");
 
         static AutoAcceptSettingsService()
         {

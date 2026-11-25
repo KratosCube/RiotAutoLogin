@@ -14,7 +14,6 @@ namespace RiotAutoLogin
         private WaitingTimeMonitor? _waitingTimeMonitor;
         private DispatcherTimer? _waitingStatsTimer;
         private bool _showWaitingStats;
-        private bool _statisticsAnimating;
         private bool _todayOnly = true;
 
         public RankedQueue SelectedStatsQueue
@@ -63,40 +62,23 @@ namespace RiotAutoLogin
             else _waitingStatsTimer?.Stop();
         }
 
-        private void PreviousStatistics_Click(object sender, RoutedEventArgs e) => SlideStatistics(-1);
-        private void NextStatistics_Click(object sender, RoutedEventArgs e) => SlideStatistics(1);
-
-        private void SlideStatistics(int direction)
+        private void StatisticsPage_Click(object sender, RoutedEventArgs e)
         {
-            if (_statisticsAnimating || statsViewport.ActualWidth <= 0) return;
-            _statisticsAnimating = true;
-            FrameworkElement outgoing = _showWaitingStats ? waitingStatsPage : rankStatsPage;
-            FrameworkElement incoming = _showWaitingStats ? rankStatsPage : waitingStatsPage;
-            double width = statsViewport.ActualWidth;
-            _showWaitingStats = !_showWaitingStats;
-            incoming.Visibility = Visibility.Visible;
-            txtStatsPage.Text = _showWaitingStats ? "○ ●" : "● ○";
-            btnRefreshQuickStats.Visibility = _showWaitingStats ? Visibility.Collapsed : Visibility.Visible;
-            btnStatsScope.Visibility = _showWaitingStats ? Visibility.Visible : Visibility.Collapsed;
+            string page = ((System.Windows.Controls.Primitives.ToggleButton)sender).Tag?.ToString() ?? "results";
+            _showWaitingStats = page == "time";
+            rankStatsPage.Visibility = page == "results" ? Visibility.Visible : Visibility.Collapsed;
+            waitingStatsPage.Visibility = page == "time" ? Visibility.Visible : Visibility.Collapsed;
+            farmStatsPage.Visibility = page == "farm" ? Visibility.Visible : Visibility.Collapsed;
+            btnStatsResults.IsChecked = page == "results";
+            btnStatsFarm.IsChecked = page == "farm";
+            btnStatsTime.IsChecked = page == "time";
+            btnStatsScope.Visibility = page == "time" ? Visibility.Visible : Visibility.Collapsed;
+            btnRefreshQuickStats.Visibility = page == "results" ? Visibility.Visible : Visibility.Collapsed;
+            btnSyncCs.Visibility = page == "farm" ? Visibility.Visible : Visibility.Collapsed;
+            txtStatsContext.Text = page == "farm" ? "Available history · all accounts · all queues · last 12 months" :
+                page == "time" ? "Tracked on this PC · selected ladder" : "Selected ladder · all accounts";
+            if (page == "farm") UIService.UpdateAnnualCsStats(this, _accounts);
             UpdateWaitingStatsTimer();
-
-            var from = new TranslateTransform();
-            var to = new TranslateTransform(direction * width, 0);
-            outgoing.RenderTransform = from;
-            incoming.RenderTransform = to;
-            var duration = TimeSpan.FromMilliseconds(220);
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-            from.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, -direction * width, duration) { EasingFunction = ease });
-            var enter = new DoubleAnimation(direction * width, 0, duration) { EasingFunction = ease };
-            enter.Completed += (_, _) =>
-            {
-                outgoing.Visibility = Visibility.Collapsed;
-                from.BeginAnimation(TranslateTransform.XProperty, null);
-                to.BeginAnimation(TranslateTransform.XProperty, null);
-                to.X = 0;
-                _statisticsAnimating = false;
-            };
-            to.BeginAnimation(TranslateTransform.XProperty, enter);
         }
 
         private void StatisticsScope_Click(object sender, RoutedEventArgs e)

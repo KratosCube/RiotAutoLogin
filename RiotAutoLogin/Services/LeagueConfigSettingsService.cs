@@ -28,7 +28,7 @@ public sealed class LeagueConfigSettingsService
     {
         _settingsPath = settingsPath ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "RiotClientAutoLogin", "league_config_settings.json");
+            BuildChannel.DataDirectoryName, "league_config_settings.json");
         try
         {
             _preference = File.Exists(_settingsPath)

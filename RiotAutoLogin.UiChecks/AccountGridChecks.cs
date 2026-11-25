@@ -56,6 +56,19 @@ internal static class AccountGridChecks
                 UIService.UpdateTotalGameStats(window, eight, RankedQueue.SoloDuo);
                 window.UpdateLayout();
                 Capture(window, "account-grid-preview.png");
+                foreach (var account in eight)
+                {
+                    account.AnnualCs.CompletedUntil = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    for (int game = 0; game < 120; game++)
+                        account.AnnualCs.Matches["sample-" + game] = new CsMatch { Cs = 205, Seconds = 1740, Started = DateTimeOffset.UtcNow.AddDays(-game * 2).ToUnixTimeSeconds() };
+                }
+                var farm = (System.Windows.Controls.Primitives.ToggleButton)window.FindName("btnStatsFarm");
+                farm.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                UIService.UpdateAnnualCsStats(window, eight);
+                if (((TextBlock)window.FindName("txtCsTotal")).Text == "—") throw new Exception("Annual CS preview did not bind.");
+                Capture(window, "farm-statistics-preview.png");
+                var results = (System.Windows.Controls.Primitives.ToggleButton)window.FindName("btnStatsResults");
+                results.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
             }
 
             var twoRowHeight = Element<Border>(0, "AccountCard").ActualHeight;
