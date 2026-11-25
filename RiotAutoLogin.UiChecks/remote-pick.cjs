@@ -141,6 +141,8 @@ async function run() {
     state = {...draft, isRandomChampionMode: true, canSelectCard: true, cardChampionIds: [1,3], benchEnabled: true, benchChampionIds: [4], canReroll: false, champions: champions.slice(0,4).map(c => ({...c,isDisabled: c.id === 2}))};
     await paint();
     assert.equal(await byId('positionFilter').isDisabled(), true);
+    assert.equal(await byId('champions').getByText('Card',{exact:true}).count(), 2);
+    assert.equal(await byId('champions').getByText('Bench',{exact:true}).count(), 1);
     assert.equal(await byId('commitChampion').isVisible(), false);
     assert.equal(await byId('rerollButton').isVisible(), false);
     assert.equal(await page.getByRole('button', {name:'Preview Annie'}).count(), 0);

@@ -954,7 +954,7 @@ namespace RiotAutoLogin.Services
             bool shouldFilterRandomChampions = state.IsRandomChampionMode;
 
             state.Champions = (_remoteChampionCache ?? new List<RemoteChampionDto>())
-                .Where(champion => !shouldFilterRandomChampions || availableChampionIds.Contains(champion.Id) || state.SelectedChampionId == champion.Id || state.PickIntentChampionId == champion.Id || pickedChampionIds.Contains(champion.Id))
+                .Where(champion => !shouldFilterRandomChampions || availableChampionIds.Contains(champion.Id) || state.SelectedChampionId == champion.Id)
                 .Select(champion => new RemoteChampionDto
                 {
                     Id = champion.Id,

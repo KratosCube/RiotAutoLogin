@@ -737,7 +737,9 @@
       const focused = document.activeElement?.dataset?.selectId;
       const fragment = document.createDocumentFragment();
       for (const champion of filtered) {
-        const badge = champion.isBanned ? '<span class="badge banned">Banned</span>' :
+        const badge = state.isRandomChampionMode && state.canSelectCard && state.cardChampionIds?.includes(champion.id) ? '<span class="badge">Card</span>' :
+          state.isRandomChampionMode && state.benchChampionIds?.includes(champion.id) ? '<span class="badge">Bench</span>' :
+          champion.isBanned ? '<span class="badge banned">Banned</span>' :
           champion.isPicked ? '<span class="badge">Picked</span>' :
           '<span class="badge intent client-badge" hidden>In client</span>';
         const card = document.createElement('article');
