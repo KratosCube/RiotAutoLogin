@@ -846,7 +846,7 @@
           <div class="sub">${slot.profileUrl && slot.playerName
             ? `<a class="player-link" href="${escapeAttr(slot.profileUrl)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeAttr('Open ' + slot.playerName + ' on League of Graphs')}">${escapeHtml(slot.playerName)} ↗</a>`
             : slot.isLocalPlayer ? 'You' : id && !slot.championId ? 'Intent' : ''}</div></div>`;
-        if (slot.assignedPosition) { const position = document.createElement('span'); position.className = 'assigned-position'; position.textContent = slot.assignedPosition; row.lastElementChild.append(position); }
+        if (slot.assignedPosition || slot.pickTurn >= 0) { const position = document.createElement('span'); position.className = 'assigned-position'; position.textContent = `#${index + 1}${slot.assignedPosition ? ' · ' + slot.assignedPosition : ''}`; row.lastElementChild.append(position); }
         if (team === 'Ally') addSwapButtons(row, slot);
         fragment.appendChild(row);
       }

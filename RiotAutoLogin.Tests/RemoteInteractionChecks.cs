@@ -39,6 +39,13 @@ internal static class RemoteInteractionChecks
         probes = 0; posts.Clear();
         Task<DraftExitProbe> Unknown() => Task.FromResult(++probes == 1 ? new DraftExitProbe("ChampSelect", "match", true, true) : new("None", "", false, null));
         Require(!(await RemoteDraftExit.RunAsync("match", Unknown, Post, Delay, false)).Success, "A failed server read cannot prove that the server draft ended.");
+        probes = 0; posts.Clear();
+        Task<DraftExitProbe> FallbackProbe() => Task.FromResult(++probes <= 2 ? new DraftExitProbe("ChampSelect", "match", true, true) : new("Lobby", "", false, false));
+        Task<string[]> Unsupported(string path) { posts.Add(path); return Task.FromResult(new[] { posts.Count == 1 ? "404" : "204", "" }); }
+        Require((await RemoteDraftExit.RunAsync("match", FallbackProbe, Unsupported, Delay, false)).Success && posts.Count == 2 && posts[1].EndsWith("/session/quit"), "An unsupported RPC may use the server-backed quit only after rechecking the same draft.");
+        probes = 0; posts.Clear();
+        Task<string[]> Rejected(string path) { posts.Add(path); return Task.FromResult(new[] { "403", "rejected" }); }
+        Require(!(await RemoteDraftExit.RunAsync("match", () => Task.FromResult(new DraftExitProbe("ChampSelect", "match", true, true)), Rejected, Delay, false)).Success && posts.Count == 1, "A rejected quit must not fall back to a local gameflow notification.");
         Console.WriteLine("Remote skin ownership/assets, role/order swap contracts and server-confirmed dodge checks passed.");
     }
     private static void Require(bool condition, string message) { if (!condition) throw new Exception(message); }

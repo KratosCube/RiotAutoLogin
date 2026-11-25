@@ -147,6 +147,7 @@ namespace RiotAutoLogin.Models
     {
         public int CellId { get; set; }
         public string AssignedPosition { get; set; } = "";
+        public int PickTurn { get; set; } = -1;
         public int ChampionId { get; set; }
         public int IntentChampionId { get; set; }
         public bool IsLocalPlayer { get; set; }

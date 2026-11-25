@@ -1562,6 +1562,7 @@ namespace RiotAutoLogin.Services
                 {
                     CellId = cellId,
                     AssignedPosition = GetStringProperty(player, "assignedPosition", "position") ?? "",
+                    PickTurn = TryGetPropertyInt(player, "pickTurn", out int pickTurn) ? pickTurn : -1,
                     ChampionId = GetIntProperty(player, "championId"),
                     IntentChampionId = GetIntProperty(player, "championPickIntent"),
                     IsLocalPlayer = localCellId >= 0 && cellId == localCellId,
@@ -1572,7 +1573,8 @@ namespace RiotAutoLogin.Services
                     RiotTagLine = visible ? tagLine : string.Empty
                 });
             }
-            return slots;
+            // Swapping pick order changes pickTurn; myTeam array order need not change.
+            return slots.Count > 0 && slots.All(s => s.PickTurn >= 0) ? slots.OrderBy(s => s.PickTurn).ToList() : slots;
         }
 
         private string GetProfileRegion()

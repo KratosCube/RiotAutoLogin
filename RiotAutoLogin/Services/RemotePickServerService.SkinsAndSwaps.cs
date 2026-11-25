@@ -25,7 +25,8 @@ public sealed partial class RemotePickServerService
         using var pickable = await ReadClientJsonAsync("lol-champ-select/v1/pickable-skin-ids", JsonValueKind.Array);
         if (carousel == null || pickable == null) return gallery;
         gallery.Skins = RemoteSkinData.Read(carousel.RootElement, pickable.RootElement, gallery.ChampionId, gallery.SelectedSkinId);
-        gallery.CanSelect = RemoteLobbyData.Flag(session.RootElement, "allowSkinSelection") && RemoteLobbyData.Flag(info.RootElement, "showSkinSelector") &&
+        var local = new RemotePickState(); ParseLocalPlayerSelection(session.RootElement, local);
+        gallery.CanSelect = local.SelectedChampionId == gallery.ChampionId && RemoteLobbyData.Flag(session.RootElement, "allowSkinSelection") && RemoteLobbyData.Flag(info.RootElement, "showSkinSelector") &&
             !RemoteLobbyData.Flag(info.RootElement, "skinSelectionDisabled") && gallery.DraftId.Length > 0;
         return gallery;
     }

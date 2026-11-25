@@ -44,7 +44,11 @@ async function run() {
             const body = route.request().postDataJSON(); assert.equal(body.draftId,state.draftId);
             const swap = state.swaps.find(s => s.kind === body.kind && s.id === body.id && s.cellId === body.cellId);
             assert.ok(swap, 'A real contract must be sent');
-            if (body.action === 'request') swap.state = 'SENT'; else state.swaps = state.swaps.filter(s => s !== swap);
+            if (body.action === 'request') swap.state = 'SENT'; else {
+              if (body.action === 'accept' && body.kind === 'pick-order') state.allySlots = [...state.allySlots].reverse();
+              if (body.action === 'accept' && body.kind === 'position') { state.allySlots[0].assignedPosition = 'TOP'; state.allySlots[1].assignedPosition = 'MIDDLE'; }
+              state.swaps = state.swaps.filter(s => s !== swap);
+            }
             break;
           }
           case '/api/leave': assert.equal(route.request().postDataJSON().draftId,state.draftId); result = {success:false,message:'Dodge could not be confirmed.'}; break;
@@ -188,6 +192,11 @@ async function run() {
     await byId('swapAlerts').getByRole('button',{name:'Cancel · pick order · Friend',exact:true}).waitFor();
     await byId('swapAlerts').getByRole('button',{name:'Cancel · pick order · Friend',exact:true}).click();
     await page.waitForFunction(() => state.swaps.length === 0);
+    assert.equal(await byId('allyPickedList').locator('.assigned-position').first().textContent(),'#1 · TOP');
+    state.swaps = [{id:'53',kind:'pick-order',cellId:1,state:'RECEIVED'}]; await paint();
+    await byId('swapAlerts').getByRole('button',{name:'Accept · pick order · Friend',exact:true}).click();
+    await page.waitForFunction(() => state.allySlots[0].cellId === 1);
+    assert.equal(await byId('allyPickedList').locator('.assigned-position').first().textContent(),'#1 · MIDDLE');
     await page.getByRole('button',{name:'Loadout',exact:true}).click();
     await page.getByRole('button',{name:'Choose skin',exact:true}).click();
     await page.getByRole('button',{name:'Preview Gothic Annie',exact:true}).click();
@@ -226,7 +235,7 @@ async function run() {
     state = {...lobby}; await paint();
     await byId('queueSelect').selectOption('2400'); await byId('changeQueue').click(); await byId('acceptConfirm').click();
     await page.waitForFunction(() => state.queueId === 2400);
-    assert.deepEqual(posts.slice(-7),['/api/swap','/api/swap','/api/swap','/api/skin','/api/skin','/api/leave','/api/change-queue']);
+    assert.deepEqual(posts.slice(-8),['/api/swap','/api/swap','/api/swap','/api/swap','/api/skin','/api/skin','/api/leave','/api/change-queue']);
     assert.deepEqual(errors, []);
     console.log('Remote Pick: party roster, queue authority, ARAM cards and bench, lobby to draft, portrait and landscape, delayed clocks, skins with confirmed selection, role/order swaps and failed/stale dodge confirmed.');
   } finally { await browser.close(); }
