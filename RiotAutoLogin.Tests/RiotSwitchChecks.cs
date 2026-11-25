@@ -40,7 +40,7 @@ internal static class RiotSwitchChecks
         }
         var game = await Switch(signedIn with { GameRunning = true });
         Require(!game.Result.CanLogin && game.Logouts == 0, "A running game must block switching even if the lobby snapshot is stale.");
-        var unknown = await Switch(new(RiotAuthState.Unknown, LeagueOpen: true));
+        var unknown = await Switch(new(RiotAuthState.Unknown, Phase: "Lobby", LeagueOpen: true));
         Require(unknown.Result.CanLogin && unknown.Logouts == 1 && unknown.Restarts == 1, "An unsupported Riot auth API must try LCU logout before restarting the existing clients.");
         var unknownForm = await Switch(new(RiotAuthState.Unknown));
         Require(unknownForm.Result.CanLogin && unknownForm.Restarts == 1 && !unknownForm.Result.UnverifiedSession, "Unknown standalone sessions must be closed before a fresh sign-in.");
