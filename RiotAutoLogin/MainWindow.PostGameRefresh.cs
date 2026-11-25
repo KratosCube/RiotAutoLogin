@@ -58,7 +58,7 @@ public partial class MainWindow
                     }
                     if (sample != null)
                         ownUpdated = await AccountService.UpdateAccountRankAsync(account, account.Region);
-                    if (timeout.IsCancellationRequested) return true;
+                    timeout.Token.ThrowIfCancellationRequested();
                     if (!_accounts.Contains(account) || !player.Matches(account)) return false;
                     if (game.Queue is { } completedQueue && OpponentVersion(account, completedQueue) != generations[account]) return true;
                     foreach (var target in targets.Where(a => _accounts.Contains(a) && player.Matches(a)))
