@@ -4,6 +4,7 @@ using RiotAutoLogin.Models;
 using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -81,7 +82,8 @@ namespace RiotAutoLogin.Services
             string username,
             string password,
             IProgress<RiotLoginProgress>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            string targetRegion = "", string targetGameName = "", string targetTagLine = "")
         {
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
                 return RiotLoginResult.Failed("The selected account does not contain valid login credentials.");
@@ -93,8 +95,26 @@ namespace RiotAutoLogin.Services
             {
                 progress?.Report(new RiotLoginProgress(RiotLoginStage.Preparing, "Preparing Riot Client…"));
 
+                var session = new RiotLocalSession();
+                var switching = new RiotAccountSwitching(session.ReadAsync, session.LogoutAsync, session.StopClientsAsync);
+                RiotSwitchResult preparation;
+                using (var prepareTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                {
+                    prepareTimeout.CancelAfter(TimeSpan.FromSeconds(30));
+                    try
+                    {
+                        preparation = await switching.PrepareAsync(targetRegion, targetGameName, targetTagLine,
+                            message => progress?.Report(new RiotLoginProgress(RiotLoginStage.Preparing, message)), prepareTimeout.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                    { return RiotLoginResult.Failed(RiotAccountSwitching.ManualLogout); }
+                }
+                if (preparation.AlreadySignedIn) return new RiotLoginResult(true, preparation.Message, true);
+                if (!preparation.CanLogin) return RiotLoginResult.Failed(preparation.Message);
+                bool existingClient = await Task.Run(RiotLocalSession.AnyClientOpen, cancellationToken).ConfigureAwait(false);
+
                 bool restoredExistingWindow = TryRestoreExistingRiotClientWindow();
-                if (!restoredExistingWindow)
+                if (!restoredExistingWindow && !(existingClient && preparation.UnverifiedSession))
                 {
                     string riotClientPath = FindRiotClientPath();
                     if (string.IsNullOrEmpty(riotClientPath))
@@ -120,6 +140,7 @@ namespace RiotAutoLogin.Services
                 Stopwatch timer = Stopwatch.StartNew();
                 string lastDetail = "Riot Client is still starting.";
                 int nextProgressUpdateSecond = 5;
+                int nextSessionCheckSecond = 3;
 
                 while (timer.Elapsed < LoginFormTimeout)
                 {
@@ -135,6 +156,17 @@ namespace RiotAutoLogin.Services
                         await Task.Delay(500, cancellationToken).ConfigureAwait(false);
                         progress?.Report(new RiotLoginProgress(RiotLoginStage.Completed, "Login sent to Riot Client."));
                         return RiotLoginResult.Succeeded("Riot Client is signing in. Complete any verification prompt in the client.");
+                    }
+
+                    if (attempt.Stop) return RiotLoginResult.Failed(attempt.Detail);
+                    if (existingClient && preparation.UnverifiedSession && timer.Elapsed.TotalSeconds >= 8)
+                        return RiotLoginResult.Failed(RiotAccountSwitching.ManualLogout);
+                    if (timer.Elapsed.TotalSeconds >= nextSessionCheckSecond)
+                    {
+                        var current = await session.ReadAsync(cancellationToken).ConfigureAwait(false);
+                        if (current.Auth is RiotAuthState.SignedIn or RiotAuthState.Verification)
+                            return RiotLoginResult.Failed("Riot Client already has a sign-in in progress or an active account. Sign out or finish verification before trying again.");
+                        nextSessionCheckSecond = (int)timer.Elapsed.TotalSeconds + 3;
                     }
 
                     lastDetail = attempt.Detail;
@@ -188,10 +220,8 @@ namespace RiotAutoLogin.Services
                             continue;
 
                         windowFound = true;
-                        RestoreWindow(riotWindowHandle);
                         using var automation = new UIA3Automation();
-                        using var app = Application.Attach(process);
-                        var mainWindow = app.GetMainWindow(automation);
+                        var mainWindow = automation.FromHandle(riotWindowHandle);
                         if (mainWindow == null)
                             continue;
 
@@ -204,22 +234,33 @@ namespace RiotAutoLogin.Services
                         var passwordEdit = parentElement.FindFirstDescendant(
                             cf => cf.ByAutomationId("password").And(cf.ByControlType(ControlType.Edit)));
 
-                        if (usernameEdit == null || passwordEdit == null)
+                        if (usernameEdit == null || passwordEdit == null || !usernameEdit.IsEnabled || !passwordEdit.IsEnabled)
                             continue;
 
-                        mainWindow.Focus();
-                        usernameEdit.Focus();
-                        usernameEdit.Patterns.Value.Pattern.SetValue(string.Empty);
-                        usernameEdit.Patterns.Value.Pattern.SetValue(username);
+                        try
+                        {
+                            // Only a confirmed login form may receive focus, and only one submission is attempted.
+                            RestoreWindow(riotWindowHandle);
+                            mainWindow.Focus();
+                            usernameEdit.Focus();
+                            usernameEdit.Patterns.Value.Pattern.SetValue(string.Empty);
+                            usernameEdit.Patterns.Value.Pattern.SetValue(username);
 
-                        passwordEdit.Focus();
-                        passwordEdit.Patterns.Value.Pattern.SetValue(string.Empty);
-                        passwordEdit.Patterns.Value.Pattern.SetValue(password);
-                        passwordEdit.Focus();
+                            passwordEdit.Focus();
+                            passwordEdit.Patterns.Value.Pattern.SetValue(string.Empty);
+                            passwordEdit.Patterns.Value.Pattern.SetValue(password);
+                            passwordEdit.Focus();
+                            if (!passwordEdit.Properties.HasKeyboardFocus.ValueOrDefault)
+                                return new LoginAttempt(false, true, "Riot Client did not focus its login form. Sign in manually or try again when the form is ready.", true);
 
-                        FlaUI.Core.Input.Keyboard.Press(FlaUI.Core.WindowsAPI.VirtualKeyShort.ENTER);
-                        Debug.WriteLine($"Login credentials submitted through {process.ProcessName} ({process.Id}).");
-                        return new LoginAttempt(true, true, "Credentials were submitted.");
+                            FlaUI.Core.Input.Keyboard.Press(FlaUI.Core.WindowsAPI.VirtualKeyShort.ENTER);
+                            Debug.WriteLine($"Login credentials submitted through {process.ProcessName} ({process.Id}).");
+                            return new LoginAttempt(true, true, "Credentials were submitted.");
+                        }
+                        catch (Exception)
+                        {
+                            return new LoginAttempt(false, true, "The Riot login form could not be filled. Sign in manually or choose the account again when the form is ready.", true);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -271,6 +312,11 @@ namespace RiotAutoLogin.Services
                         if (windowHandle == IntPtr.Zero)
                             continue;
 
+                        using var automation = new UIA3Automation();
+                        var window = automation.FromHandle(windowHandle);
+                        if (window?.FindFirstDescendant(cf => cf.ByAutomationId("username").And(cf.ByControlType(ControlType.Edit))) == null ||
+                            window.FindFirstDescendant(cf => cf.ByAutomationId("password").And(cf.ByControlType(ControlType.Edit))) == null)
+                            continue;
                         RestoreWindow(windowHandle);
                         Debug.WriteLine($"Restored Riot Client window for {process.ProcessName} ({process.Id}).");
                         return true;
@@ -294,6 +340,7 @@ namespace RiotAutoLogin.Services
         {
             IntPtr bestHandle = IntPtr.Zero;
             int bestScore = int.MinValue;
+            var candidates = new List<(IntPtr Handle, int Score)>();
 
             try
             {
@@ -331,6 +378,9 @@ namespace RiotAutoLogin.Services
                         return true;
 
                     int score = 0;
+                    // Hidden Electron helper windows must not outrank a real visible client window.
+                    if (!IsWindowVisible(windowHandle) && !IsIconic(windowHandle))
+                        return true;
                     if (windowHandle == mainWindowHandle)
                         score += 1000;
                     if (title.Contains("Riot Client", StringComparison.OrdinalIgnoreCase))
@@ -340,6 +390,7 @@ namespace RiotAutoLogin.Services
                     if (IsWindowVisible(windowHandle))
                         score += 100;
                     score += Math.Min((width * height) / 10000, 100);
+                    candidates.Add((windowHandle, score));
 
                     if (score > bestScore)
                     {
@@ -349,6 +400,23 @@ namespace RiotAutoLogin.Services
 
                     return true;
                 }, IntPtr.Zero);
+
+                // The process's MainWindowHandle can be an empty Electron host. Prefer a real login form.
+                if (candidates.Count > 0)
+                {
+                    using var automation = new UIA3Automation();
+                    foreach (var candidate in candidates.OrderByDescending(c => c.Score))
+                    {
+                        try
+                        {
+                            var window = automation.FromHandle(candidate.Handle);
+                            if (window.FindFirstDescendant(cf => cf.ByAutomationId("username").And(cf.ByControlType(ControlType.Edit))) != null &&
+                                window.FindFirstDescendant(cf => cf.ByAutomationId("password").And(cf.ByControlType(ControlType.Edit))) != null)
+                                return candidate.Handle;
+                        }
+                        catch (Exception) { }
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -399,7 +467,7 @@ namespace RiotAutoLogin.Services
             return result;
         }
 
-        private sealed record LoginAttempt(bool Submitted, bool WindowFound, string Detail);
+        private sealed record LoginAttempt(bool Submitted, bool WindowFound, string Detail, bool Stop = false);
 
         public static async Task<Dictionary<RankedQueue, RankData>> GetRanksAsync(string gameName, string tagLine, string region)
         {

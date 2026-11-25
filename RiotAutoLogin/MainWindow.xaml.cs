@@ -57,6 +57,7 @@ namespace RiotAutoLogin
         public MainWindow()
         {
             InitializeComponent();
+            UpdateSettingsCategory();
             if (BuildChannel.IsDevelopment)
             {
                 Title = "Riot Auto Login · DEV";
@@ -640,11 +641,12 @@ namespace RiotAutoLogin
                     account.AccountName,
                     password,
                     progress,
-                    _loginCts.Token);
+                    _loginCts.Token,
+                    account.Region, account.GameName, account.TagLine);
 
                 if (result.Success)
                 {
-                    SetLoginStatus("Sign-in submitted", Color.FromRgb(61, 220, 151), Color.FromRgb(25, 55, 46));
+                    SetLoginStatus(result.AlreadySignedIn ? "Already signed in" : "Sign-in submitted", Color.FromRgb(61, 220, 151), Color.FromRgb(25, 55, 46));
                 }
                 else
                 {
@@ -740,8 +742,7 @@ namespace RiotAutoLogin
             UpdateHotkeyDisplay();
             UpdateRunOnStartupToggleUI();
             InitializeSettingsExtras();
-            EnsureClientAlertSettingsCard();
-            UpdateClientAlertSettingsUi();
+            UpdateSettingsCategory();
             EnsureUpdateService();
 
             string apiKey = ApiKeyManager.GetApiKey();

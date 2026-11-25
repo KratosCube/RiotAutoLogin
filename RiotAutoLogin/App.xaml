@@ -19,13 +19,15 @@
         <SolidColorBrush x:Key="WarningBrush" Color="#F4C95D"/>
 
         <Style x:Key="DarkScrollBarStyle" TargetType="{x:Type ScrollBar}">
-            <Setter Property="Background" Value="#11151B"/>
-            <Setter Property="Width" Value="6"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width" Value="8"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type ScrollBar}">
                         <Grid Background="{TemplateBinding Background}">
-                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True" Orientation="{TemplateBinding Orientation}">
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0"/>
                                 </Track.DecreaseRepeatButton>
@@ -36,7 +38,11 @@
                                     <Thumb>
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="{x:Type Thumb}">
-                                                <Border Background="{StaticResource AccentBrush}" CornerRadius="3"/>
+                                                <Border x:Name="thumb" Background="{StaticResource BorderHoverBrush}" CornerRadius="3" Margin="1"/>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="thumb" Property="Background" Value="{StaticResource MutedTextBrush}"/></Trigger>
+                                                    <Trigger Property="IsDragging" Value="True"><Setter TargetName="thumb" Property="Background" Value="{StaticResource MutedTextBrush}"/></Trigger>
+                                                </ControlTemplate.Triggers>
                                             </ControlTemplate>
                                         </Thumb.Template>
                                     </Thumb>
@@ -46,6 +52,11 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Width" Value="Auto"/><Setter Property="Height" Value="8"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="DarkScrollViewerStyle" TargetType="{x:Type ScrollViewer}">

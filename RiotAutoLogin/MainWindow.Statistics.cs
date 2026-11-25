@@ -15,6 +15,7 @@ namespace RiotAutoLogin
         private DispatcherTimer? _waitingStatsTimer;
         private bool _showWaitingStats;
         private bool _todayOnly = true;
+        private int _displayedCsYear = DateTime.Now.Year;
 
         public RankedQueue SelectedStatsQueue
         {
@@ -47,16 +48,25 @@ namespace RiotAutoLogin
             _waitingTimeMonitor = new WaitingTimeMonitor();
             _waitingTimeMonitor.Start();
             _waitingStatsTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
-            _waitingStatsTimer.Tick += (_, _) => RefreshWaitingStats();
+            _waitingStatsTimer.Tick += (_, _) =>
+            {
+                if (_showWaitingStats) RefreshWaitingStats();
+                if (farmStatsPage.IsVisible && _displayedCsYear != DateTime.Now.Year)
+                {
+                    _displayedCsYear = DateTime.Now.Year;
+                    SetCsContext($"Available history · all accounts · all queues · since Jan 1, {_displayedCsYear}");
+                    UIService.UpdateAnnualCsStats(this, _accounts);
+                }
+            };
             IsVisibleChanged += (_, _) => UpdateWaitingStatsTimer();
             UpdateWaitingStatsTimer();
         }
 
         private void UpdateWaitingStatsTimer()
         {
-            if (_showWaitingStats && IsVisible)
+            if ((_showWaitingStats || farmStatsPage.IsVisible) && IsVisible)
             {
-                RefreshWaitingStats();
+                if (_showWaitingStats) RefreshWaitingStats();
                 _waitingStatsTimer?.Start();
             }
             else _waitingStatsTimer?.Stop();
@@ -79,6 +89,11 @@ namespace RiotAutoLogin
                 page == "time" ? "Tracked on this PC · selected ladder" : "Selected ladder · all accounts";
             if (page == "farm")
             {
+                if (_displayedCsYear != DateTime.Now.Year)
+                {
+                    _displayedCsYear = DateTime.Now.Year;
+                    SetCsContext($"Available history · all accounts · all queues · since Jan 1, {_displayedCsYear}");
+                }
                 UIService.UpdateAnnualCsStats(this, _accounts);
                 _ = LoadAnnualCsAsync();
             }

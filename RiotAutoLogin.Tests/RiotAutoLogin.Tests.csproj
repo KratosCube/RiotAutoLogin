@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../RiotAutoLogin/Services/RiotAccountSwitching.cs" Link="RiotAccountSwitching.cs" />
+    <Compile Include="../RiotAutoLogin/Services/RiotLocalProtocol.cs" Link="RiotLocalProtocol.cs" />
     <Compile Include="../RiotAutoLogin/Services/BuildChannel.cs" Link="BuildChannel.cs" />
     <Compile Include="../RiotAutoLogin/Services/AnnualCsService.cs" Link="AnnualCsService.cs" />
     <Compile Include="../RiotAutoLogin/Services/AnnualCsStore.cs" Link="AnnualCsStore.cs" />
