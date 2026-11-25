@@ -886,7 +886,7 @@ namespace RiotAutoLogin.Services
         private async Task AddChampionSpellAndRuneListsAsync(RemotePickState state, HashSet<int> bannedChampionIds, HashSet<int> pickedChampionIds, HashSet<int> allyPickedChampionIds, HashSet<int> enemyPickedChampionIds)
         {
             await EnsureRemoteChampionCacheAsync();
-            await EnsureChampionPositionsAsync();
+            _ = EnsureChampionPositionsAsync(); // Optional metadata must not delay the live draft state.
             EnrichTeamSlots(state);
             await EnsureRemoteSpellCacheAsync();
 

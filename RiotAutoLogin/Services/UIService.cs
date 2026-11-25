@@ -33,7 +33,8 @@ namespace RiotAutoLogin.Services
         public static void UpdateAnnualCsStats(Window window, System.Collections.Generic.List<Models.Account> accounts)
         {
             var (cs, games, rate, partial) = Models.AnnualCs.Totals(accounts, DateTimeOffset.UtcNow);
-            if (window.FindName("txtCsTotal") is TextBlock total) total.Text = games == 0 ? "—" : $"{cs:N0}" + (partial ? "+" : "");
+            bool known = accounts.Any(a => a.AnnualCs.CompletedUntil > 0 || a.AnnualCs.Matches.Count > 0);
+            if (window.FindName("txtCsTotal") is TextBlock total) total.Text = !known ? "—" : $"{cs:N0}" + (partial ? "+" : "");
             if (window.FindName("txtCsGames") is TextBlock count) count.Text = games.ToString("N0");
             if (window.FindName("txtCsPerMinute") is TextBlock speed) speed.Text = games == 0 ? "—" : rate.ToString("0.0");
             if (window.FindName("txtCsTotal") is TextBlock label)

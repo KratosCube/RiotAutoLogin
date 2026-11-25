@@ -26,7 +26,7 @@ namespace RiotAutoLogin.Models
         public Dictionary<RankedQueue, GreyscreenData> QueueGreyscreens { get; set; } = new();
         public Dictionary<RankedQueue, OpponentRankSummary> QueueOpponentRanks { get; set; } = new();
         public DateTime? RanksUpdatedUtc { get; set; }
-        public AnnualCs AnnualCs { get; set; } = new();
+        [JsonIgnore] public AnnualCs AnnualCs { get; set; } = new();
 
         [JsonIgnore] public RankedQueue SelectedQueue { get; set; }
         [JsonIgnore] public RankData? DisplayRank => QueueRanks.GetValueOrDefault(SelectedQueue);

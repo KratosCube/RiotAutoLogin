@@ -66,6 +66,11 @@ jobs:
           ./scripts/Build-Release.ps1 -Version 1.5.0 -AssetDir build/assets-base -SkipCompatibilityExe
           ./scripts/Build-Release.ps1 -Version 1.5.1 -AssetDir build/assets-new
           dotnet run --project RiotAutoLogin.Tests/RiotAutoLogin.Tests.csproj -c Release -- --packages build/packages
+          $stable = Start-Process build/publish-1.5.1/RiotAutoLogin.exe -ArgumentList '--describe-build' -Wait -PassThru
+          if ($stable.ExitCode -ne 0) { throw 'Stable build check failed.' }
+          $channel = Get-Content build-channel.json -Raw | ConvertFrom-Json
+          if ($channel.development -or $channel.dataDirectory -ne 'RiotClientAutoLogin') { throw 'Stable package has developer settings.' }
+
 
       - name: Measure launch to a responsive window for both Windows distributions
         shell: pwsh
