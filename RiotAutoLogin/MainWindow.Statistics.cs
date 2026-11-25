@@ -62,7 +62,7 @@ namespace RiotAutoLogin
             else _waitingStatsTimer?.Stop();
         }
 
-        private async void StatisticsPage_Click(object sender, RoutedEventArgs e)
+        private void StatisticsPage_Click(object sender, RoutedEventArgs e)
         {
             string page = ((System.Windows.Controls.Primitives.ToggleButton)sender).Tag?.ToString() ?? "results";
             _showWaitingStats = page == "time";
@@ -80,7 +80,7 @@ namespace RiotAutoLogin
             if (page == "farm")
             {
                 UIService.UpdateAnnualCsStats(this, _accounts);
-                await LoadAnnualCsAsync();
+                _ = LoadAnnualCsAsync();
             }
             UpdateWaitingStatsTimer();
         }

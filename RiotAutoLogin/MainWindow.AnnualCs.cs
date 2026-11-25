@@ -21,16 +21,24 @@ public partial class MainWindow
     {
         try
         {
-            _csHistory = await Task.Run(_csStore.Load, _lifetimeCts.Token);
-            foreach (var account in _accounts)
-                if (_csHistory.TryGetValue(AnnualCsStore.Identity(account), out var saved)) account.AnnualCs = saved.Copy();
+            var history = await Task.Run(_csStore.Load, _lifetimeCts.Token).ConfigureAwait(false);
+            await Dispatcher.InvokeAsync(() =>
+            {
+                _csHistory = history;
+                foreach (var account in _accounts)
+                    if (_csHistory.TryGetValue(AnnualCsStore.Identity(account), out var saved)) account.AnnualCs = saved.Copy();
+                if (farmStatsPage.IsVisible) UIService.UpdateAnnualCsStats(this, _accounts);
+            });
         }
+        catch (OperationCanceledException) when (_lifetimeCts.IsCancellationRequested) { }
         catch (Exception ex)
         {
-            _csLoadFailed = true;
-            SetCsContext($"Saved history could not be loaded: {ex.Message}");
+            await Dispatcher.InvokeAsync(() =>
+            {
+                _csLoadFailed = true;
+                SetCsContext($"Saved history could not be loaded: {ex.Message}");
+            });
         }
-        if (farmStatsPage.IsVisible) UIService.UpdateAnnualCsStats(this, _accounts);
     }
     private string _csMessage = "Available history · all accounts · all queues · last 12 months";
     private void SetCsContext(string message)
