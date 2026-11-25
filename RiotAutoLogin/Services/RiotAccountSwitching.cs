@@ -9,7 +9,7 @@ internal sealed record RiotSessionSnapshot(RiotAuthState Auth, string Region = "
     string Phase = "", bool GameRunning = false, bool LeagueOpen = false)
 {
     internal bool CanRestart => !GameRunning && (CanLeave || Phase.Length == 0);
-    internal bool CanLeave => !GameRunning && (!LeagueOpen || Phase is "None" or "Lobby" or "EndOfGame");
+    internal bool CanLeave => !GameRunning && (!LeagueOpen || Phase is "None" or "Lobby" or "EndOfGame" or "PreEndOfGame" or "WaitingForStats");
 }
 internal sealed record RiotSwitchResult(bool CanLogin, bool AlreadySignedIn, string Message, bool UnverifiedSession = false);
 
@@ -37,7 +37,8 @@ internal sealed class RiotAccountSwitching(
         bool changeServer = region.Length > 0 && target.Length > 0 && region != target;
         bool unknownServer = current.Auth == RiotAuthState.SignedIn && (region.Length == 0 || target.Length == 0);
         bool needsRestart = !current.CanLeave || current.Auth is RiotAuthState.Unknown or RiotAuthState.Verification;
-        if (current.Auth == RiotAuthState.SignedIn && current.CanLeave)
+        if (current.CanLeave && current.Auth != RiotAuthState.SignedOut &&
+            (current.Auth != RiotAuthState.Unknown || current.LeagueOpen))
         {
             progress?.Invoke("Signing out of the current Riot account…");
             bool signedOut = false;

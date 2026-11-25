@@ -82,7 +82,7 @@ internal sealed class RiotLocalSession
     {
         var current = await ReadAsync(token).ConfigureAwait(false);
         if (!current.CanLeave) return false;
-        if (current.LeagueOpen && await ReadField("lol-gameflow/v1/session", "phase", token).ConfigureAwait(false) is not ("None" or "Lobby" or "EndOfGame"))
+        if (current.LeagueOpen && await ReadField("lol-gameflow/v1/session", "phase", token).ConfigureAwait(false) is not ("None" or "Lobby" or "EndOfGame" or "PreEndOfGame" or "WaitingForStats"))
             return false;
         var response = await Request("DELETE", "rso-auth/v1/session", token).ConfigureAwait(false);
         if (response[0].StartsWith("2", StringComparison.Ordinal)) return true;
