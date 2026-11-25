@@ -307,6 +307,9 @@
     .skin-summary strong { font: 500 1.25rem Georgia, serif; }
     .skin-summary em { font-style: normal; font-size: .75rem; color: var(--muted); }
     .skin-modal { display: flex; flex-direction: column; width: min(100%, 850px); height: min(85dvh, 720px); max-height: calc(100dvh - 24px); overflow: hidden; }
+    body.modal-open .toast:not(.error) { display: none; }
+    .toast { pointer-events: none; }
+    .skin-modal .modal-head button { min-height: 44px; }
     .skin-modal .modal-head h2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .skin-modal .modal-head { flex: none; padding: 10px 14px; }
     .skin-stage { position: relative; flex: 1; min-height: 60px; overflow: hidden; background: radial-gradient(ellipse at center, #1b3443, #08121c); }
@@ -319,7 +322,7 @@
     .skin-option span { display: block; padding: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: .7rem; }
     .skin-option[aria-pressed="true"] { border-color: var(--gold-light); box-shadow: inset 0 -2px var(--gold-light); }
     .skin-option.client-selected::after { content: '✓'; position: absolute; right: 3px; top: 3px; border-radius: 50%; background: #0a3431; color: var(--cyan); padding: 2px 5px; }
-    .skin-arrow { flex: none; min-width: 36px; min-height: 44px; padding: 3px; font-size: 1.8rem; color: var(--gold-light); border: 1px solid var(--line); background: #112333; }
+    .skin-arrow { flex: none; min-width: 44px; min-height: 44px; padding: 3px; font-size: 1.8rem; color: var(--gold-light); border: 1px solid var(--line); background: #112333; }
     .skin-footer { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--line); }
     .skin-footer p { margin: 0; color: var(--muted); font-size: .76rem; }
     .skin-footer button { flex: none; min-height: 44px; }
@@ -1199,6 +1202,7 @@
       $('previousSkin').disabled = $('nextSkin').disabled = skins.length < 2;
       const key = JSON.stringify([skins, skinPreviewId, skinGallery?.selectedSkinId]);
       if (skinOptions.dataset.key !== key) {
+        const focusedSkin = document.activeElement?.dataset?.skinId;
         skinOptions.dataset.key = key;
         skinOptions.replaceChildren(...skins.map(skin => {
           const button = document.createElement('button'); button.type = 'button'; button.className = 'skin-option';
@@ -1208,6 +1212,7 @@
           const name = document.createElement('span'); name.textContent = skin.name; button.append(image, name);
           button.onclick = () => { skinPreviewId = skin.id; renderSkinGallery(); }; return button;
         }));
+        if (focusedSkin) skinOptions.querySelector(`[data-skin-id="${focusedSkin}"]`)?.focus({preventScroll:true});
       }
       const imageKey = `${valid ? skinGallery.championId : 0}:${preview?.id || 0}`;
       if (skinStage.dataset.key === imageKey) return;
@@ -1235,7 +1240,10 @@
     function moveSkin(direction) {
       const skins = skinContextValid() ? skinGallery.skins || [] : []; if (!skins.length) return;
       const index = skins.findIndex(s => s.id === skinPreviewId); skinPreviewId = skins[(index + direction + skins.length) % skins.length].id;
-      renderSkinGallery(); skinOptions.querySelector(`[data-skin-id="${skinPreviewId}"]`)?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});
+      renderSkinGallery();
+      const option = skinOptions.querySelector(`[data-skin-id="${skinPreviewId}"]`);
+      option?.focus({preventScroll:true});
+      option?.scrollIntoView({block:'nearest',inline:'nearest',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
     }
     $('closeSkinModal').onclick = closeSkins;
     $('previousSkin').onclick = () => moveSkin(-1); $('nextSkin').onclick = () => moveSkin(1);

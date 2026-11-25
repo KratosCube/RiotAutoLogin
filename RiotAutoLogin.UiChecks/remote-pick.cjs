@@ -201,6 +201,8 @@ async function run() {
     await page.getByRole('button',{name:'Choose skin',exact:true}).click();
     await page.getByRole('button',{name:'Preview Gothic Annie',exact:true}).click();
     assert.equal(await byId('skinCaption').textContent(),'Gothic Annie');
+    assert.equal(await byId('toast').isVisible(),false,'Success notifications must not cover the skin gallery');
+    assert.equal(await byId('toast').evaluate(el => getComputedStyle(el).pointerEvents),'none');
     assert.equal(await byId('skinSummary').locator('strong').textContent(),'Annie','Preview is not the actual client selection');
     for (const [width,height] of [[390,844],[932,430],[667,375]]) {
       await page.setViewportSize({width,height});
