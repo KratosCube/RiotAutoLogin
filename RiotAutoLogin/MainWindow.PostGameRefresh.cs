@@ -49,11 +49,12 @@ public partial class MainWindow
                     bool ownUpdated = await AccountService.UpdateAccountRankAsync(account, account.Region);
                     if (!_accounts.Contains(account) || !account.MatchesRiotId(player.GameName, player.TagLine, player.Region)) return false;
                     OpponentRankSummary? sample = null;
+                    string status = "";
                     if (game.Queue is { } queue)
                     {
                         account.SetOpponentRankStatus(queue, "Updating this account after the game…");
                         bool clientOpen = await Task.Run(LCUService.CheckIfLeagueClientIsOpen, timeout.Token);
-                        (sample, _) = await ReadOpponentSampleAsync(account, queue, clientOpen, key, timeout.Token, expectedGameId: game.GameId);
+                        (sample, status) = await ReadOpponentSampleAsync(account, queue, clientOpen, key, timeout.Token, expectedGameId: game.GameId);
                     }
                     if (sample != null)
                         ownUpdated = await AccountService.UpdateAccountRankAsync(account, account.Region);
@@ -66,7 +67,8 @@ public partial class MainWindow
                         if (game.Queue is { } ladder)
                         {
                             if (sample != null) target.ApplyOpponentRanks(ladder, sample);
-                            target.SetOpponentRankStatus(ladder, sample != null ? "" : "Waiting for the completed match to appear in history. Saved statistics are retained.");
+                            target.SetOpponentRankStatus(ladder, sample != null ? "" :
+                                (attempt < 3 ? "Waiting for the completed match to appear. " : "Post-game data is not yet available; saved statistics are shown. ") + status);
                         }
                     }
                     if (sample != null && game.Queue is { } refreshed)
@@ -78,7 +80,24 @@ public partial class MainWindow
                 if (attempt < 3) await Task.Delay(TimeSpan.FromSeconds(8 * (attempt + 1)), timeout.Token);
             }
         }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Post-game account refresh paused: {ex.Message}"); }
+        catch (OperationCanceledException)
+        {
+            await SetPostGameFailureAsync(game, "Post-game refresh timed out. Saved statistics are shown; use Refresh to try again.", token);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Post-game account refresh paused: {ex.Message}");
+            await SetPostGameFailureAsync(game, "Post-game refresh is unavailable. Saved statistics are shown; use Refresh to try again.", token);
+        }
+    }
+
+    private Task SetPostGameFailureAsync(FinishedStatsGame game, string message, CancellationToken token)
+    {
+        if (token.IsCancellationRequested || Dispatcher.HasShutdownStarted || game.Queue is not { } queue) return Task.CompletedTask;
+        return Dispatcher.InvokeAsync(() =>
+        {
+            foreach (var account in _accounts.Where(a => a.MatchesRiotId(game.Player.GameName, game.Player.TagLine, game.Player.Region)))
+                account.SetOpponentRankStatus(queue, message);
+        }).Task;
     }
 }
