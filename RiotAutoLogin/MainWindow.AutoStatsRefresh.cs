@@ -9,7 +9,7 @@ namespace RiotAutoLogin
     {
         private CancellationTokenSource? _autoStatsRefreshCts;
         private int _autoStatsRefreshRunning;
-        private bool _hasSeenActiveGameForStatsRefresh;
+        private readonly PostGameRefreshTracker _postGameRefresh = new();
         private DateTime _lastAutomaticStatsRefreshUtc = DateTime.MinValue;
 
         private void StartAutomaticAccountInfoRefresh()
@@ -68,7 +68,7 @@ namespace RiotAutoLogin
                 {
                     if (!LCUService.CheckIfLeagueClientIsOpen())
                     {
-                        _hasSeenActiveGameForStatsRefresh = false;
+                        _postGameRefresh.Disconnect();
                         refreshOnConnect = true;
                         await Task.Delay(5000, cancellationToken);
                         continue;
@@ -87,18 +87,12 @@ namespace RiotAutoLogin
                         await Task.Delay(5000, cancellationToken);
                         continue;
                     }
-                    string phase = Models.GameflowSnapshot.Parse(json).Phase;
-
-                    if (phase is "GameStart" or "InProgress")
-                    {
-                        _hasSeenActiveGameForStatsRefresh = true;
-                    }
-                    else if (_hasSeenActiveGameForStatsRefresh && IsPostGameStatsRefreshPhase(phase))
-                    {
-                        _hasSeenActiveGameForStatsRefresh = false;
-                        await Task.Delay(4000, cancellationToken);
-                        await RefreshAccountInfoAutomaticallyAsync($"post-game phase {phase}");
-                    }
+                    var snapshot = Models.GameflowSnapshot.Parse(json);
+                    StatsPlayer? player = null;
+                    if (snapshot.Phase is "GameStart" or "InProgress" or "Reconnect" && _postGameRefresh.NeedsIdentity(snapshot.GameId))
+                        player = await ReadStatsPlayerAsync(cancellationToken);
+                    if (_postGameRefresh.Observe(snapshot, player) is { } finished)
+                        _ = RefreshFinishedAccountAsync(finished, cancellationToken);
 
                     await Task.Delay(5000, cancellationToken);
                 }
@@ -112,11 +106,6 @@ namespace RiotAutoLogin
                     await Task.Delay(10000, cancellationToken);
                 }
             }
-        }
-
-        private static bool IsPostGameStatsRefreshPhase(string phase)
-        {
-            return phase is "EndOfGame" or "Lobby" or "None";
         }
 
         private async Task<bool> RefreshAccountInfoAutomaticallyAsync(string reason, bool onlyStale = false)

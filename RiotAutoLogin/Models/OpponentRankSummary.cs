@@ -14,6 +14,18 @@ public sealed class OpponentRankSummary
     public int RankedOpponents { get; set; }
     public int TotalOpponents { get; set; }
     public DateTime UpdatedUtc { get; set; }
+    public string LatestMatchId { get; set; } = "";
+    public DateTime CheckedUtc { get; set; }
+    [JsonIgnore] public DateTime LastCheckedUtc => CheckedUtc > UpdatedUtc ? CheckedUtc : UpdatedUtc;
+
+    internal OpponentRankSummary CheckedNow() => new()
+    {
+        MeanRankPosition = MeanRankPosition, Games = Games, RankedOpponents = RankedOpponents,
+        TotalOpponents = TotalOpponents, UpdatedUtc = UpdatedUtc, Source = Source,
+        LatestMatchId = LatestMatchId, CheckedUtc = DateTime.UtcNow
+    };
+    internal static string MatchKey(string region, long gameId) => gameId > 0 ? $"{Services.RemotePlayerProfileLinks.RegionSlug(region)}:{gameId}" : "";
+
     public string Source { get; set; } = "";
 
     [JsonIgnore]
@@ -36,8 +48,8 @@ public sealed class OpponentRankSummary
         $"Up to {SampleLimit} recent completed games from " +
         (Source == "Riot API" ? "the API's latest 100 entries in this queue. " : "the client's latest 100 history entries. ") +
         "Remakes, unavailable and unranked opponents are excluded from the average. " +
-        "Ranks reflect the latest lookup, cached for up to 15 minutes. Each division spans 100 LP and Master+ uses a shared LP ladder. " +
-        $"Updated {UpdatedUtc.ToLocalTime():g}." + (Source.Length > 0 ? $" Source: {Source}." : "");
+        "Ranks reflect the last calculation. The saved sample is reused while the latest match is unchanged; manual refresh recalculates it. Each division spans 100 LP and Master+ uses a shared LP ladder. " +
+        $"Calculated {UpdatedUtc.ToLocalTime():g}. History checked {LastCheckedUtc.ToLocalTime():g}." + (Source.Length > 0 ? $" Source: {Source}." : "");
 
     internal static double? Position(RankData rank)
     {

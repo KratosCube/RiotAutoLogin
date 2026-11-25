@@ -22,7 +22,7 @@ internal sealed class RiotLocalSession
     private RiotLocalConnection? _connection;
     private bool _discovered;
     private DateTime _nextDiscovery;
-    private static readonly string[] ClientNames = ["RiotClientServices", "RiotClientUx", "RiotClientUxRender", "Riot Client", "RiotClientCrashHandler", "LeagueClient", "LeagueClientUx", "LeagueClientUxRender"];
+    private static readonly string[] ClientNames = ["RiotClientUxRender", "RiotClientUx", "Riot Client", "RiotClientCrashHandler", "LeagueClientUxRender", "LeagueClientUx", "LeagueClient", "RiotClientServices"];
 
     internal static bool AnyClientOpen() => ClientNames.Any(Running);
     private static bool Running(string name)
@@ -39,9 +39,13 @@ internal sealed class RiotLocalSession
         string phase = "", region = "", name = "", tag = "";
         if (league)
         {
-            phase = await ReadField("lol-gameflow/v1/session", "phase", token).ConfigureAwait(false);
-            region = await ReadField("riotclient/region-locale", "region", token).ConfigureAwait(false);
-            var summoner = await LCUService.ClientRequestAsync("GET", "lol-summoner/v1/current-summoner", cancellationToken: token).ConfigureAwait(false);
+            var phaseRead = ReadField("lol-gameflow/v1/session", "phase", token);
+            var regionRead = ReadField("riotclient/region-locale", "region", token);
+            var summonerRead = LCUService.ClientRequestAsync("GET", "lol-summoner/v1/current-summoner", cancellationToken: token);
+            await Task.WhenAll(phaseRead, regionRead, summonerRead).ConfigureAwait(false);
+            phase = await phaseRead.ConfigureAwait(false);
+            region = await regionRead.ConfigureAwait(false);
+            var summoner = await summonerRead.ConfigureAwait(false);
             if (summoner[0] == "200")
             {
                 try
@@ -76,52 +80,69 @@ internal sealed class RiotLocalSession
 
     internal async Task<bool> LogoutAsync(CancellationToken token)
     {
-        if (_connection == null) return false;
         var current = await ReadAsync(token).ConfigureAwait(false);
         if (!current.CanLeave) return false;
-        if (current.LeagueOpen && await ReadField("lol-gameflow/v1/session", "phase", token).ConfigureAwait(false) is not ("None" or "Lobby" or "EndOfGame"))
+        if (current.LeagueOpen && await ReadField("lol-gameflow/v1/session", "phase", token).ConfigureAwait(false) is not ("None" or "Lobby" or "EndOfGame" or "PreEndOfGame" or "WaitingForStats"))
             return false;
         var response = await Request("DELETE", "rso-auth/v1/session", token).ConfigureAwait(false);
-        return response[0].StartsWith("2", StringComparison.Ordinal);
+        if (response[0].StartsWith("2", StringComparison.Ordinal)) return true;
+        if (current.LeagueOpen)
+        {
+            var local = await LCUService.ClientRequestAsync("DELETE", "lol-login/v1/session", cancellationToken: token).ConfigureAwait(false);
+            return local[0].StartsWith("2", StringComparison.Ordinal);
+        }
+        return false;
     }
 
     internal async Task<bool> StopClientsAsync(CancellationToken token)
     {
-        var state = await ReadAsync(token).ConfigureAwait(false);
-        for (int i = 0; i < 3 && state.Auth == RiotAuthState.SignedOut && !state.GameRunning && state.LeagueOpen && state.Phase == ""; i++)
+        // Restart must also work when the auth endpoint is unsupported. Check the game and phase independently.
+        bool league = Running("LeagueClientUx") || Running("LeagueClient");
+        var state = new RiotSessionSnapshot(RiotAuthState.Unknown,
+            Phase: league ? await ReadField("lol-gameflow/v1/session", "phase", token).ConfigureAwait(false) : "",
+            GameRunning: Running("League of Legends") || Running("VALORANT-Win64-Shipping"), LeagueOpen: league);
+        if (!state.CanRestart) return false;
+        List<(int Id, long Started)> CaptureClients()
         {
-            await Task.Delay(350, token).ConfigureAwait(false);
-            state = await ReadAsync(token).ConfigureAwait(false);
-        }
-        if (state.Auth != RiotAuthState.SignedOut || !state.CanLeave) return false;
-        var captured = new List<(int Id, long Started)>();
-        foreach (string name in ClientNames)
-        foreach (var process in Process.GetProcessesByName(name))
-        {
-            using (process)
+            var identities = new List<(int Id, long Started)>();
+            foreach (string name in ClientNames)
+            foreach (var process in Process.GetProcessesByName(name))
             {
-                try { captured.Add((process.Id, process.StartTime.ToUniversalTime().Ticks)); }
-                catch (InvalidOperationException) { }
-                catch (System.ComponentModel.Win32Exception) { }
+                using (process)
+                {
+                    try { identities.Add((process.Id, process.StartTime.ToUniversalTime().Ticks)); }
+                    catch (InvalidOperationException) { }
+                    catch (System.ComponentModel.Win32Exception) { }
+                }
             }
+            return identities;
         }
+        var captured = CaptureClients();
         if (state.LeagueOpen) await LCUService.ClientRequestAsync("POST", "process-control/v1/process/quit", cancellationToken: token).ConfigureAwait(false);
         await Request("POST", "process-control/v1/process/quit", token).ConfigureAwait(false);
-        for (int i = 0; i < 16 && captured.Any(Alive); i++) await Task.Delay(250, token).ConfigureAwait(false);
+        for (int i = 0; i < 8 && captured.Any(Alive); i++) await Task.Delay(250, token).ConfigureAwait(false);
         if (Running("League of Legends") || Running("VALORANT-Win64-Shipping")) return false;
-        foreach (var identity in captured.Where(Alive))
+        for (int pass = 0; pass < 3; pass++)
         {
-            token.ThrowIfCancellationRequested();
-            try
+            // Services can briefly respawn a renderer during shutdown. Re-capture only known client names.
+            if (pass > 0) captured = CaptureClients();
+            foreach (var identity in captured.Where(Alive))
             {
-                using var process = Process.GetProcessById(identity.Id);
-                if (process.StartTime.ToUniversalTime().Ticks == identity.Started) process.Kill();
+                token.ThrowIfCancellationRequested();
+                if (Running("League of Legends") || Running("VALORANT-Win64-Shipping")) return false;
+                try
+                {
+                    using var process = Process.GetProcessById(identity.Id);
+                    if (process.StartTime.ToUniversalTime().Ticks == identity.Started) process.Kill();
+                }
+                catch (ArgumentException) { }
+                catch (InvalidOperationException) { }
+                catch (System.ComponentModel.Win32Exception) { return false; }
             }
-            catch (ArgumentException) { }
-            catch (InvalidOperationException) { }
-            catch (System.ComponentModel.Win32Exception) { return false; }
+            for (int i = 0; i < 6 && captured.Any(Alive); i++) await Task.Delay(250, token).ConfigureAwait(false);
+            if (!AnyClientOpen()) break;
+            await Task.Delay(250, token).ConfigureAwait(false);
         }
-        for (int i = 0; i < 12 && captured.Any(Alive); i++) await Task.Delay(250, token).ConfigureAwait(false);
         _connection = null; _discovered = false;
         return !captured.Any(Alive) && !AnyClientOpen();
     }
@@ -161,6 +182,7 @@ internal sealed class RiotLocalSession
                     try
                     {
                         using var searcher = new ManagementObjectSearcher("SELECT CommandLine FROM Win32_Process WHERE ProcessId = " + process.Id);
+                        searcher.Options.Timeout = TimeSpan.FromSeconds(2);
                         using var rows = searcher.Get();
                         foreach (ManagementObject row in rows)
                         {

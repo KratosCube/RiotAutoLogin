@@ -27,25 +27,36 @@ internal static class RiotSwitchChecks
         var already = await Switch(signedIn, name: "Current");
         Require(already.Result.AlreadySignedIn && already.Logouts == 0 && already.Restarts == 0, "Selecting the signed-in Riot ID must leave its session alone.");
         var rejected = await Switch(signedIn, logoutWorks: false);
-        Require(!rejected.Result.CanLogin && rejected.Logouts == 1 && rejected.Restarts == 0 && rejected.Result.Message.Contains("Sign out"),
-            "A failed logout must stop before any restart or credentials.");
+        Require(rejected.Result.CanLogin && rejected.Logouts == 1 && rejected.Restarts == 1,
+            "A failed logout must restart both clients before credentials.");
         var unverified = await Switch(signedIn, "eun1", verifies: false);
-        Require(!unverified.Result.CanLogin && unverified.Restarts == 0, "A success HTTP status alone must not count as confirmed logout.");
+        Require(unverified.Result.CanLogin && unverified.Restarts == 1, "Unconfirmed logout must fall back to a complete restart.");
         var failedRestart = await Switch(signedIn, "eun1", restartWorks: false);
         Require(!failedRestart.Result.CanLogin, "An unconfirmed server restart must stop the sign-in.");
-        foreach (string phase in new[] { "ChampSelect", "Matchmaking", "ReadyCheck", "InProgress", "Reconnect", "" })
+        foreach (string phase in new[] { "ChampSelect", "Matchmaking", "ReadyCheck", "InProgress", "Reconnect" })
         {
             var blocked = await Switch(signedIn with { Phase = phase });
             Require(!blocked.Result.CanLogin && blocked.Logouts == 0 && blocked.Restarts == 0, "Active or unknown League phases must not be interrupted.");
         }
         var game = await Switch(signedIn with { GameRunning = true });
         Require(!game.Result.CanLogin && game.Logouts == 0, "A running game must block switching even if the lobby snapshot is stale.");
-        var unknown = await Switch(new(RiotAuthState.Unknown, LeagueOpen: true));
-        Require(!unknown.Result.CanLogin && unknown.Logouts == 0, "An unsupported session API with an open League client needs manual sign-out.");
+        var unknown = await Switch(new(RiotAuthState.Unknown, Phase: "Lobby", LeagueOpen: true));
+        Require(unknown.Result.CanLogin && unknown.Logouts == 1 && unknown.Restarts == 1, "An unsupported Riot auth API must try LCU logout before restarting the existing clients.");
         var unknownForm = await Switch(new(RiotAuthState.Unknown));
-        Require(unknownForm.Result.CanLogin && unknownForm.Result.UnverifiedSession, "Unknown standalone clients must require a confirmed login form and bounded waiting.");
+        Require(unknownForm.Result.CanLogin && unknownForm.Restarts == 1 && !unknownForm.Result.UnverifiedSession, "Unknown standalone sessions must be closed before a fresh sign-in.");
         var verification = await Switch(new(RiotAuthState.Verification));
-        Require(!verification.Result.CanLogin && verification.Logouts == 0, "Verification must remain in the user's control.");
+        Require(verification.Result.CanLogin && verification.Restarts == 1, "Selecting another account during verification must restart that sign-in session.");
+        var restartDenied = await Switch(signedIn, logoutWorks: false, restartWorks: false);
+        Require(!restartDenied.Result.CanLogin, "Failed process shutdown must block credential entry.");
+        foreach (string phase in new[] { "PreEndOfGame", "WaitingForStats" })
+        {
+            var postGame = await Switch(signedIn with { Phase = phase });
+            Require(postGame.Result.CanLogin, "A stuck post-game client may be switched after the game process has exited.");
+            var stillRunning = await Switch(signedIn with { Phase = phase, GameRunning = true });
+            Require(!stillRunning.Result.CanLogin && stillRunning.Restarts == 0, "A post-game phase alone must not override the running-game guard.");
+        }
+        var noPhase = await Switch(signedIn with { Phase = "" });
+        Require(noPhase.Result.CanLogin && noPhase.Restarts == 1, "An unavailable phase API may restart a client while no game process is running.");
         var signedOut = await Switch(new(RiotAuthState.SignedOut));
         Require(signedOut.Result.CanLogin && signedOut.Logouts == 0 && signedOut.Restarts == 0, "Fresh sign-ins must keep the normal launch path.");
         using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
@@ -55,6 +66,8 @@ internal static class RiotSwitchChecks
         catch (OperationCanceledException) { }
 
         var auth = RiotLocalProtocol.Connection("LeagueClientUx.exe --app-port=5000 --remoting-auth-token=lcu-only --riotclient-app-port=6000 --riotclient-auth-token=riot-token", true);
+        Require(RiotLocalProtocol.Connection("\"--riotclient-app-port=6000\" \"--riotclient-auth-token=riot-token\"", true) is { Port: 6000, Token: "riot-token" },
+            "Whole quoted command-line arguments must discover the Riot API.");
         Require(auth is { Port: 6000, Token: "riot-token" }, "LCU ports and credentials must never be mistaken for the Riot Client API.");
         Require(RiotLocalProtocol.Connection("--app-port=5000 --remoting-auth-token=lcu-only", true) == null, "LCU-only process credentials are insufficient.");
         Require(RiotLocalProtocol.Connection("--app-port=\"12345\" --remoting-auth-token=\"quoted-token\"", false)?.Port == 12345, "Quoted Riot flags must parse.");
