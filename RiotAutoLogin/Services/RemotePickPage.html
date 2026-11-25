@@ -307,6 +307,7 @@
     .skin-summary strong { font: 500 1.25rem Georgia, serif; }
     .skin-summary em { font-style: normal; font-size: .75rem; color: var(--muted); }
     .skin-modal { display: flex; flex-direction: column; width: min(100%, 850px); height: min(85dvh, 720px); max-height: calc(100dvh - 24px); overflow: hidden; }
+    .skin-modal .modal-head h2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .skin-modal .modal-head { flex: none; padding: 10px 14px; }
     .skin-stage { position: relative; flex: 1; min-height: 60px; overflow: hidden; background: radial-gradient(ellipse at center, #1b3443, #08121c); }
     .skin-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transform: scale(1.025); transition: opacity 280ms ease, transform 320ms ease; }
@@ -321,7 +322,7 @@
     .skin-arrow { flex: none; min-width: 36px; min-height: 44px; padding: 3px; font-size: 1.8rem; color: var(--gold-light); border: 1px solid var(--line); background: #112333; }
     .skin-footer { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--line); }
     .skin-footer p { margin: 0; color: var(--muted); font-size: .76rem; }
-    .skin-footer button { flex: none; }
+    .skin-footer button { flex: none; min-height: 44px; }
     .swap-alerts { grid-column: 1 / -1; max-height: 128px; overflow-y: auto; border-top: 1px solid var(--cyan); }
     .swap-offer { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: #12303b; }
     .swap-offer > span { flex: 1; min-width: 0; font-size: .75rem; overflow-wrap: anywhere; }

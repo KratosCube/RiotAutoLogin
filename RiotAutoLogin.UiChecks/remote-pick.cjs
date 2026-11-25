@@ -197,6 +197,7 @@ async function run() {
       await page.setViewportSize({width,height});
       const box = await page.evaluate(() => { const dialog = document.querySelector('.skin-modal').getBoundingClientRect(), apply = document.querySelector('#applySkin').getBoundingClientRect();
         return {top:dialog.top,bottom:dialog.bottom,applyBottom:apply.bottom,applyHeight:apply.height,x:document.documentElement.scrollWidth-innerWidth}; });
+      await page.screenshot({path:`build/remote-skins-${width}-preview.png`});
       assert.ok(box.top >= 0 && box.bottom <= height + 1 && box.applyBottom <= height && box.applyHeight >= 44 && box.x <= 1, 'Skin gallery fits '+JSON.stringify(box));
     }
     failSkin = true; await byId('applySkin').click();

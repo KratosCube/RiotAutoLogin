@@ -330,7 +330,7 @@ namespace RiotAutoLogin.Services
             if (!state.IsInChampSelect) _phaseClock.Reset(state.LiveSampleTickMs);
             if (state.Phase == "Lobby")
             {
-                using var document = await ReadClientObjectAsync("lol-lobby/v2/lobby");
+                using var document = await ReadClientJsonAsync("lol-lobby/v2/lobby");
                 if (document != null && RemoteLobby.Read(document.RootElement) is { } lobby)
                 {
                     state.QueueId = lobby.QueueId;
@@ -348,18 +348,18 @@ namespace RiotAutoLogin.Services
                 TryLoadQueueFromGameflowOrLobby(state);
                 if (state.Phase is "Matchmaking" or "ReadyCheck")
                 {
-                    using var party = await ReadClientObjectAsync("lol-lobby/v2/lobby");
+                    using var party = await ReadClientJsonAsync("lol-lobby/v2/lobby");
                     if (party != null) { state.LobbyMembers = RemoteLobbyData.Members(party.RootElement); state.PartySize = state.LobbyMembers.Count; }
                 }
                 if (state.Phase == "Matchmaking")
                 {
-                    using var search = await ReadClientObjectAsync("lol-matchmaking/v1/search");
+                    using var search = await ReadClientJsonAsync("lol-matchmaking/v1/search");
                     state.TimerMeasuredTickMs = Environment.TickCount64;
                     if (search != null) state.PhaseElapsedSeconds = RemoteLobby.QueueSeconds(search.RootElement);
                 }
                 else if (state.Phase == "ReadyCheck")
                 {
-                    using var ready = await ReadClientObjectAsync("lol-matchmaking/v1/ready-check");
+                    using var ready = await ReadClientJsonAsync("lol-matchmaking/v1/ready-check");
                     string? response = ready == null ? null : GetStringProperty(ready.RootElement, "playerResponse");
                     state.CanAcceptMatch = response == "None";
                     state.MatchAccepted = response == "Accepted";
@@ -874,14 +874,14 @@ namespace RiotAutoLogin.Services
             };
         }
 
-        private static async Task<JsonDocument?> ReadClientObjectAsync(string endpoint)
+        private static async Task<JsonDocument?> ReadClientJsonAsync(string endpoint, JsonValueKind expectedKind = JsonValueKind.Object)
         {
             string[] result = await LCUService.ClientRequestAsync("GET", endpoint);
             if (result[0] != "200") return null;
             try
             {
                 var document = JsonDocument.Parse(result[1]);
-                if (document.RootElement.ValueKind == JsonValueKind.Object) return document;
+                if (document.RootElement.ValueKind == expectedKind) return document;
                 document.Dispose();
             }
             catch (JsonException) { }
@@ -894,7 +894,7 @@ namespace RiotAutoLogin.Services
             try
             {
                 if (await LCUService.GetCurrentGamePhaseAsync() != "Lobby") return Failure("The lobby has changed.");
-                using var doc = await ReadClientObjectAsync("lol-lobby/v2/lobby");
+                using var doc = await ReadClientJsonAsync("lol-lobby/v2/lobby");
                 var lobby = doc == null ? null : RemoteLobby.Read(doc.RootElement);
                 if (lobby == null || lobby.IsCustom != custom) return Failure("The lobby has changed.");
                 if (!lobby.CanStart) return Failure(lobby.StartHint);
@@ -910,7 +910,7 @@ namespace RiotAutoLogin.Services
         private async Task<RemotePickActionResult> AcceptMatchAsync()
         {
             if (await LCUService.GetCurrentGamePhaseAsync() != "ReadyCheck") return Failure("The ready check has ended.");
-            using var ready = await ReadClientObjectAsync("lol-matchmaking/v1/ready-check");
+            using var ready = await ReadClientJsonAsync("lol-matchmaking/v1/ready-check");
             string? response = ready == null ? null : GetStringProperty(ready.RootElement, "playerResponse");
             if (response == "Accepted") return new RemotePickActionResult { Success = true, Message = "Match accepted." };
             if (response != "None") return Failure("The match is no longer awaiting your response.");
@@ -946,7 +946,7 @@ namespace RiotAutoLogin.Services
                 if (!await _lobbyActionGate.WaitAsync(0)) return Failure("Another lobby action is in progress.");
                 try
                 {
-                    using var draft = await ReadClientObjectAsync("lol-champ-select/v1/session");
+                    using var draft = await ReadClientJsonAsync("lol-champ-select/v1/session");
                     if (draft == null) return Failure("Cannot confirm the current draft. Check League Client.");
                     string identity = RemoteDraftInteractions.DraftId(draft.RootElement);
                     if (!string.IsNullOrWhiteSpace(body))
@@ -1827,7 +1827,7 @@ namespace RiotAutoLogin.Services
                 TryGetPropertyLong(timer, "internalNowInEpochMs", out epoch);
             if (!state.IsTimerInfinite && (epoch <= 0 || state.TimeLeftInPhaseMs < 0))
             {
-                using var live = await ReadClientObjectAsync("lol-champ-select/v1/session/timer");
+                using var live = await ReadClientJsonAsync("lol-champ-select/v1/session/timer");
                 if (live != null && (state.ChampSelectPhase.Length == 0 || GetStringProperty(live.RootElement, "phase") == state.ChampSelectPhase))
                 {
                     ReadTimerFields(live.RootElement, state);

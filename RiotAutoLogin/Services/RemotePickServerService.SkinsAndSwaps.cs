@@ -14,15 +14,15 @@ public sealed partial class RemotePickServerService
     {
         var gallery = new RemoteSkinGalleryDto();
         if (await LCUService.GetCurrentGamePhaseAsync() != "ChampSelect") return gallery;
-        using var session = await ReadClientObjectAsync("lol-champ-select/v1/session");
-        using var info = await ReadClientObjectAsync("lol-champ-select/v1/skin-selector-info");
+        using var session = await ReadClientJsonAsync("lol-champ-select/v1/session");
+        using var info = await ReadClientJsonAsync("lol-champ-select/v1/skin-selector-info");
         if (session == null || info == null) return gallery;
         gallery.DraftId = RemoteDraftInteractions.DraftId(session.RootElement);
         gallery.ChampionId = RemoteLobbyData.Number(info.RootElement, "selectedChampionId");
         gallery.SelectedSkinId = RemoteLobbyData.Number(info.RootElement, "selectedSkinId");
         if (gallery.ChampionId <= 0) return gallery;
-        using var carousel = await ReadClientObjectAsync("lol-champ-select/v1/skin-carousel-skins");
-        using var pickable = await ReadClientObjectAsync("lol-champ-select/v1/pickable-skin-ids");
+        using var carousel = await ReadClientJsonAsync("lol-champ-select/v1/skin-carousel-skins", JsonValueKind.Array);
+        using var pickable = await ReadClientJsonAsync("lol-champ-select/v1/pickable-skin-ids", JsonValueKind.Array);
         if (carousel == null || pickable == null) return gallery;
         gallery.Skins = RemoteSkinData.Read(carousel.RootElement, pickable.RootElement, gallery.ChampionId, gallery.SelectedSkinId);
         gallery.CanSelect = RemoteLobbyData.Flag(session.RootElement, "allowSkinSelection") && RemoteLobbyData.Flag(info.RootElement, "showSkinSelector") &&
@@ -43,9 +43,9 @@ public sealed partial class RemotePickServerService
             if (!response[0].StartsWith("2", StringComparison.Ordinal)) return Failure("League Client rejected the skin selection.");
             for (int attempt = 0; attempt < 5; attempt++)
             {
-                using var info = await ReadClientObjectAsync("lol-champ-select/v1/skin-selector-info");
+                using var info = await ReadClientJsonAsync("lol-champ-select/v1/skin-selector-info");
                 LCUService.InvalidateCachedReads();
-                using var draft = await ReadClientObjectAsync("lol-champ-select/v1/session");
+                using var draft = await ReadClientJsonAsync("lol-champ-select/v1/session");
                 if (draft == null || RemoteDraftInteractions.DraftId(draft.RootElement) != gallery.DraftId) break;
                 if (info != null && RemoteLobbyData.Number(info.RootElement, "selectedChampionId") == champion && RemoteLobbyData.Number(info.RootElement, "selectedSkinId") == id)
                     return new() { Success = true, Message = "Skin selected." };
@@ -60,7 +60,7 @@ public sealed partial class RemotePickServerService
     {
         if (state.IsRandomChampionMode) return;
         async Task<JsonDocument?> Fallback(string field, string kind) => session.TryGetProperty(field, out var list) && list.ValueKind == JsonValueKind.Array
-            ? null : await ReadClientObjectAsync($"lol-champ-select/v1/session/{kind}-swaps");
+            ? null : await ReadClientJsonAsync($"lol-champ-select/v1/session/{kind}-swaps", JsonValueKind.Array);
         var orderTask = Fallback("pickOrderSwaps", "pick-order"); var positionTask = Fallback("positionSwaps", "position");
         await Task.WhenAll(orderTask, positionTask);
         using var order = await orderTask; using var position = await positionTask;

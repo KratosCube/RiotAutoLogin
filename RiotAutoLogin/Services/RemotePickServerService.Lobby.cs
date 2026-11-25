@@ -94,7 +94,7 @@ public sealed partial class RemotePickServerService
             string phase = await LCUService.GetCurrentGamePhaseAsync();
             if (phase is not ("None" or "Lobby")) return Failure("Cancel matchmaking before changing queues.");
             int partySize = 1;
-            using var lobby = await ReadClientObjectAsync("lol-lobby/v2/lobby");
+            using var lobby = await ReadClientJsonAsync("lol-lobby/v2/lobby");
             if (phase == "Lobby")
             {
                 if (lobby == null || !RemoteLobbyData.CanChange(lobby.RootElement)) return Failure("The party leader can change queues in a normal lobby.");
