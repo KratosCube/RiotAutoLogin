@@ -19,9 +19,9 @@ internal sealed class LcuOpponentRankService(Func<string, CancellationToken, Tas
     // A failed account must not abort the remaining accounts in the UI's refresh batch.
     // Cancellation still propagates so changing queues or closing the app stops the batch.
     internal async Task<OpponentRankSummary?> TryReadAsync(string gameName, string tagLine, string region,
-        RankedQueue queue, CancellationToken token)
+        RankedQueue queue, CancellationToken token, OpponentRankSummary? previous = null, bool force = false, long expectedGameId = 0)
     {
-        try { return await ReadAsync(gameName, tagLine, region, queue, token).ConfigureAwait(false); }
+        try { return await ReadAsync(gameName, tagLine, region, queue, token, previous, force, expectedGameId).ConfigureAwait(false); }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
@@ -31,7 +31,7 @@ internal sealed class LcuOpponentRankService(Func<string, CancellationToken, Tas
     }
 
     internal async Task<OpponentRankSummary?> ReadAsync(string gameName, string tagLine, string region,
-        RankedQueue queue, CancellationToken token)
+        RankedQueue queue, CancellationToken token, OpponentRankSummary? previous = null, bool force = false, long expectedGameId = 0)
     {
         await _gate.WaitAsync(token).ConfigureAwait(false);
         try
@@ -59,6 +59,17 @@ internal sealed class LcuOpponentRankService(Func<string, CancellationToken, Tas
             }
             if (games.ValueKind != JsonValueKind.Array) return null;
 
+            if (expectedGameId > 0 && !games.EnumerateArray().Any(game => Number(game, "gameId") == expectedGameId && Number(game, "gameDuration") > 0)) return null;
+            long newest = games.EnumerateArray().Where(game => Number(game, "queueId") == RankedQueues.Id(queue) && Number(game, "gameDuration") > 0)
+                .OrderByDescending(game => Number(game, "gameCreation")).ThenByDescending(game => Number(game, "gameId"))
+                .Select(game => Number(game, "gameId")).FirstOrDefault();
+            string latestKey = OpponentRankSummary.MatchKey(region, newest);
+            if (!force && latestKey.Length > 0 && previous?.LatestMatchId == latestKey)
+            {
+                var checkedLocale = await LcuRankLookup.ReadObjectAsync("riotclient/region-locale", Request).ConfigureAwait(false);
+                return checkedLocale != null && RemotePlayerProfileLinks.RegionSlug(Text(checkedLocale.Value, "region")) == platform ? previous.CheckedNow() : null;
+            }
+            bool complete = true;
             var recent = games.EnumerateArray()
                 .OrderByDescending(game => Number(game, "gameCreation"))
                 .ThenByDescending(game => Number(game, "gameId"))
@@ -80,10 +91,10 @@ internal sealed class LcuOpponentRankService(Func<string, CancellationToken, Tas
                     // History summaries can contain only the selected player.
                     var detail = await LcuRankLookup.ReadObjectAsync($"lol-match-history/v1/games/{gameId}", Request).ConfigureAwait(false);
                     if (detail == null || Number(detail.Value, "gameId") != gameId || !CompletedInQueue(detail.Value, queue))
-                        continue;
+                    { complete = false; continue; }
                     opponents = Opponents(detail.Value, puuid, platform);
                 }
-                if (opponents == null) continue;
+                if (opponents == null) { complete = false; continue; }
                 result.Games++;
                 result.TotalOpponents += 5;
                 foreach (string opponent in opponents)
@@ -94,7 +105,7 @@ internal sealed class LcuOpponentRankService(Func<string, CancellationToken, Tas
                     {
                         var ranks = await LcuRankLookup.ReadObjectAsync(
                             $"lol-ranked/v1/ranked-stats/{Uri.EscapeDataString(opponent)}", Request).ConfigureAwait(false);
-                        if (ranks == null) continue;
+                        if (ranks == null) { complete = false; continue; }
                         cached = new(DateTime.UtcNow, RankedQueues.ParseClientRanks(ranks.Value));
                         if (_rankCache.Count >= 1000) _rankCache.Clear();
                         _rankCache[key] = cached;
@@ -114,7 +125,8 @@ internal sealed class LcuOpponentRankService(Func<string, CancellationToken, Tas
             if (locale == null || RemotePlayerProfileLinks.RegionSlug(Text(locale.Value, "region")) != platform)
                 return null;
             result.MeanRankPosition = result.RankedOpponents > 0 ? totalPosition / result.RankedOpponents : null;
-            result.UpdatedUtc = DateTime.UtcNow;
+            result.LatestMatchId = complete ? latestKey : "";
+            result.CheckedUtc = result.UpdatedUtc = DateTime.UtcNow;
             return result;
         }
         finally { _gate.Release(); }

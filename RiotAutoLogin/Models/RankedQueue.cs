@@ -17,6 +17,8 @@ namespace RiotAutoLogin.Models
             new QueueOption(RankedQueue.Flex, "Flex")
         };
 
+        public static int Id(RankedQueue queue) => queue switch { RankedQueue.RankedFives => 710, RankedQueue.Flex => 440, _ => 420 };
+
         public static string ApiKey(RankedQueue queue) => queue switch
         {
             RankedQueue.RankedFives => "RANKED_PREMADE_5x5",

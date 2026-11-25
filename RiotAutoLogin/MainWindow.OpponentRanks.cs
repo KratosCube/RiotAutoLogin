@@ -1,5 +1,6 @@
 using RiotAutoLogin.Services;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
@@ -9,6 +10,10 @@ namespace RiotAutoLogin;
 
 public partial class MainWindow
 {
+    private readonly Dictionary<(Models.Account Account, Models.RankedQueue Queue), long> _opponentVersions = new();
+    private long OpponentVersion(Models.Account account, Models.RankedQueue queue) => _opponentVersions.GetValueOrDefault((account, queue));
+    private void AdvanceOpponentVersion(Models.Account account, Models.RankedQueue queue) => _opponentVersions[(account, queue)] = OpponentVersion(account, queue) + 1;
+
     private readonly LcuOpponentRankService _opponentRanks = new(
         (path, token) => LCUService.ClientRequestAsync("GET", path, cancellationToken: token));
     private readonly PublicOpponentRankService _publicOpponentRanks = new(RiotApiClient.Shared.GetAsync);
@@ -33,15 +38,15 @@ public partial class MainWindow
             try
             {
                 await Task.Delay(1000, source.Token);
-                var lookup = new OpponentRankSources(_opponentRanks.TryReadAsync, _publicOpponentRanks.ReadAsync);
                 string key = await Task.Run(ApiKeyManager.GetApiKey, source.Token);
                 foreach (var account in _accounts.ToArray())
                 {
                     source.Token.ThrowIfCancellationRequested();
                     if (!force && account.QueueOpponentRanks.TryGetValue(queue, out var saved) &&
-                        DateTime.UtcNow - saved.UpdatedUtc < TimeSpan.FromMinutes(15))
+                        DateTime.UtcNow - saved.LastCheckedUtc < TimeSpan.FromMinutes(15))
                         continue;
                     string name = account.GameName, tag = account.TagLine, region = account.Region;
+                    long version = OpponentVersion(account, queue);
                     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(source.Token);
                     timeout.CancelAfter(TimeSpan.FromMinutes(4));
                     Models.OpponentRankSummary? summary;
@@ -50,7 +55,7 @@ public partial class MainWindow
                     try
                     {
                         bool clientOpen = await Task.Run(LCUService.CheckIfLeagueClientIsOpen, timeout.Token);
-                        (summary, status) = await lookup.ReadAsync(name, tag, region, queue, clientOpen, key, timeout.Token);
+                        (summary, status) = await ReadOpponentSampleAsync(account, queue, clientOpen, key, timeout.Token, force);
                     }
                     catch (OperationCanceledException) when (!source.IsCancellationRequested)
                     {
@@ -64,6 +69,7 @@ public partial class MainWindow
                             _accounts.Contains(account) && account.MatchesRiotId(name, tag, region))
                             account.SetOpponentRankStatus(queue, "");
                     }
+                    if (version != OpponentVersion(account, queue)) continue;
                     if (!source.IsCancellationRequested && _accounts.Contains(account) && account.MatchesRiotId(name, tag, region))
                         account.SetOpponentRankStatus(queue, status);
                     if (summary == null || source.IsCancellationRequested || !_accounts.Contains(account) ||
@@ -84,4 +90,14 @@ public partial class MainWindow
             }
         }
     }
+    private Task<(Models.OpponentRankSummary? Summary, string Status)> ReadOpponentSampleAsync(Models.Account account,
+        Models.RankedQueue queue, bool clientOpen, string key, CancellationToken token, bool force = false, long expectedGameId = 0)
+    {
+        account.QueueOpponentRanks.TryGetValue(queue, out var previous);
+        var lookup = new OpponentRankSources(
+            (name, tag, region, ladder, ct) => _opponentRanks.TryReadAsync(name, tag, region, ladder, ct, previous, force, expectedGameId),
+            (name, tag, region, ladder, apiKey, ct) => _publicOpponentRanks.ReadAsync(name, tag, region, ladder, apiKey, ct, previous, force, expectedGameId));
+        return lookup.ReadAsync(account.GameName, account.TagLine, account.Region, queue, clientOpen, key, token);
+    }
+
 }

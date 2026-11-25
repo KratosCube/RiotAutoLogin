@@ -100,7 +100,7 @@ namespace RiotAutoLogin.Services
                 RiotSwitchResult preparation;
                 using (var prepareTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
-                    prepareTimeout.CancelAfter(TimeSpan.FromSeconds(30));
+                    prepareTimeout.CancelAfter(TimeSpan.FromSeconds(60));
                     try
                     {
                         preparation = await switching.PrepareAsync(targetRegion, targetGameName, targetTagLine,

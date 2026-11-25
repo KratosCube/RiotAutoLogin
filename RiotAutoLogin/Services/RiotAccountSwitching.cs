@@ -8,6 +8,7 @@ internal enum RiotAuthState { Unknown, SignedOut, SignedIn, Verification }
 internal sealed record RiotSessionSnapshot(RiotAuthState Auth, string Region = "", string GameName = "", string TagLine = "",
     string Phase = "", bool GameRunning = false, bool LeagueOpen = false)
 {
+    internal bool CanRestart => !GameRunning && (CanLeave || Phase.Length == 0);
     internal bool CanLeave => !GameRunning && (!LeagueOpen || Phase is "None" or "Lobby" or "EndOfGame");
 }
 internal sealed record RiotSwitchResult(bool CanLogin, bool AlreadySignedIn, string Message, bool UnverifiedSession = false);
@@ -31,35 +32,36 @@ internal sealed class RiotAccountSwitching(
             string.Equals(current.GameName, gameName, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(current.TagLine, tag, StringComparison.OrdinalIgnoreCase))
             return new(false, true, "This account is already signed in.");
-        if (!current.CanLeave)
+        if (!current.CanRestart)
             return new(false, false, "Finish your game or leave matchmaking/champion select before switching accounts.");
-        if (current.Auth == RiotAuthState.Verification)
-            return new(false, false, "Complete or cancel the current Riot sign-in/verification, then choose the account again.");
-        if (current.Auth == RiotAuthState.Unknown && current.LeagueOpen)
-            return new(false, false, ManualLogout);
-
         bool changeServer = region.Length > 0 && target.Length > 0 && region != target;
         bool unknownServer = current.Auth == RiotAuthState.SignedIn && (region.Length == 0 || target.Length == 0);
-        if (current.Auth == RiotAuthState.SignedIn)
+        bool needsRestart = !current.CanLeave || current.Auth is RiotAuthState.Unknown or RiotAuthState.Verification;
+        if (current.Auth == RiotAuthState.SignedIn && current.CanLeave)
         {
             progress?.Invoke("Signing out of the current Riot account…");
-            if (!await logout(token).ConfigureAwait(false)) return new(false, false, ManualLogout);
             bool signedOut = false;
-            for (int attempt = 0; attempt < 16; attempt++)
+            using var graceful = CancellationTokenSource.CreateLinkedTokenSource(token);
+            graceful.CancelAfter(TimeSpan.FromSeconds(12));
+            try
             {
-                token.ThrowIfCancellationRequested();
-                var next = await read(token).ConfigureAwait(false);
-                if (next.Auth == RiotAuthState.SignedOut) { signedOut = true; break; }
-                await (pause?.Invoke(token) ?? Task.Delay(250, token)).ConfigureAwait(false);
+                bool requested = await logout(graceful.Token).ConfigureAwait(false);
+                for (int attempt = 0; requested && attempt < 12; attempt++)
+                {
+                    var next = await read(graceful.Token).ConfigureAwait(false);
+                    if (next.Auth == RiotAuthState.SignedOut) { signedOut = true; break; }
+                    await (pause?.Invoke(graceful.Token) ?? Task.Delay(250, graceful.Token)).ConfigureAwait(false);
+                }
             }
-            if (!signedOut) return new(false, false, ManualLogout);
+            catch (OperationCanceledException) when (!token.IsCancellationRequested) { }
+            needsRestart |= !signedOut;
         }
-        if (changeServer || unknownServer)
+        if (changeServer || unknownServer || needsRestart)
         {
-            progress?.Invoke("Restarting Riot Client for the selected server…");
+            progress?.Invoke("Closing the current clients and starting the selected account…");
             if (!await restart(token).ConfigureAwait(false))
                 return new(false, false, "Close Riot Client fully, then choose the account again. Its restart could not be confirmed.");
         }
-        return new(true, false, "Ready to sign in.", current.Auth == RiotAuthState.Unknown);
+        return new(true, false, "Ready to sign in.", false);
     }
 }

@@ -32,6 +32,15 @@ internal static class OpponentRankChecks
         calls.Clear();
         await service.ReadAsync("Two Words", "TAG", "euw1", RankedQueue.SoloDuo, default);
         Require(!calls.Any(path => path.StartsWith("lol-ranked/")), "A repeat refresh must reuse the rank cache.");
+        calls.Clear();
+        var cachedSample = JsonSerializer.Deserialize<OpponentRankSummary>(JsonSerializer.Serialize(sample))!;
+        var freshClientService = new LcuOpponentRankService(Read);
+        var checkedSample = await freshClientService.ReadAsync("Two Words", "TAG", "euw1", RankedQueue.SoloDuo, default, cachedSample);
+        Require(checkedSample?.UpdatedUtc == sample.UpdatedUtc && checkedSample.CheckedUtc >= sample.UpdatedUtc &&
+            !calls.Any(path => path.StartsWith("lol-ranked/") || path.StartsWith("lol-match-history/v1/games/")),
+            "Unchanged client history must reuse a persisted sample without enemy rank/detail reads, even after restart.");
+        Require(await freshClientService.ReadAsync("Two Words", "TAG", "euw1", RankedQueue.SoloDuo, default, cachedSample, expectedGameId: 999999) == null,
+            "A post-game refresh must wait until that specific match appears.");
         var fullRemake = new LcuOpponentRankService((path, token) =>
         {
             if (path != "lol-match-history/v1/games/12") return Read(path, token);

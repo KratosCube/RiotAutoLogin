@@ -6,6 +6,7 @@
         <Style x:Key="GhostIconButton" TargetType="Button">
             <Setter Property="Width" Value="34"/>
             <Setter Property="Height" Value="34"/>
+            <Setter Property="Foreground" Value="{StaticResource TextColorBrush}"/>
             <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -656,7 +657,7 @@
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
                                                     <TextBlock Grid.Column="0" Text="Ctrl + Alt +" Margin="0,0,10,0" VerticalAlignment="Center" Foreground="{StaticResource TextColorBrush}"/>
-                                                    <TextBox x:Name="txtHotkeyKey" Grid.Column="1" Width="68" MaxLength="1" CharacterCasing="Upper" Text="L" HorizontalContentAlignment="Center" Style="{StaticResource ModernTextBox}" PreviewTextInput="txtHotkeyKey_PreviewTextInput"/>
+                                                    <TextBox x:Name="txtHotkeyKey" Grid.Column="1" Width="68" Height="42" Padding="0" FontSize="16" MaxLength="1" CharacterCasing="Upper" Text="L" TextAlignment="Center" HorizontalContentAlignment="Stretch" Style="{StaticResource ModernTextBox}" PreviewTextInput="txtHotkeyKey_PreviewTextInput"/>
                                                     <Button x:Name="btnSaveHotkey" Grid.Column="2" Margin="12,0,0,0" Content="Save Hotkey" Style="{StaticResource ModernButton}" Click="btnSaveHotkey_Click"/>
                                                 </Grid>
                                                 <TextBlock x:Name="lblCurrentHotkey" Text="Current Hotkey: Ctrl + Alt + L" Margin="0,12,0,0" FontSize="13" Foreground="{StaticResource TextColorBrush}" Opacity="0.76"/>

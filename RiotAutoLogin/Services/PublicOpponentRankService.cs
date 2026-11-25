@@ -29,7 +29,7 @@ internal sealed class PublicOpponentRankService(Func<string, string, Cancellatio
         };
 
     internal async Task<OpponentRankSummary?> ReadAsync(string name, string tag, string region,
-        RankedQueue queue, string key, CancellationToken token)
+        RankedQueue queue, string key, CancellationToken token, OpponentRankSummary? previous = null, bool force = false, long expectedGameId = 0)
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(tag) ||
             string.IsNullOrWhiteSpace(key) || Route(region) is not { } route) return null;
@@ -46,10 +46,22 @@ internal sealed class PublicOpponentRankService(Func<string, string, Cancellatio
                 !string.Equals(Text(account, "tagLine"), tag.Trim(), StringComparison.OrdinalIgnoreCase) ||
                 Text(account, "puuid") is not { Length: > 0 } puuid) return null;
             int queueId = queue switch { RankedQueue.RankedFives => 710, RankedQueue.Flex => 440, _ => 420 };
-            var history = await get($"{cluster}/lol/match/v5/matches/by-puuid/{Uri.EscapeDataString(puuid)}/ids?start=0&count=100&queue={queueId}", key, token).ConfigureAwait(false);
+            string historyUrl = $"{cluster}/lol/match/v5/matches/by-puuid/{Uri.EscapeDataString(puuid)}/ids";
+            string expected = OpponentRankSummary.MatchKey(region, expectedGameId);
+            if (!force && previous?.LatestMatchId is { Length: > 0 } && (expected.Length == 0 || previous.LatestMatchId == expected))
+            {
+                var probe = await get($"{historyUrl}?start=0&count=1&queue={queueId}", key, token).ConfigureAwait(false);
+                if (probe is { ValueKind: JsonValueKind.Array } latest && latest.GetArrayLength() > 0 &&
+                    latest[0].ValueKind == JsonValueKind.String && MatchKey(latest[0].GetString()!, region, route.Platform) == previous.LatestMatchId)
+                    return previous.CheckedNow();
+            }
+            var history = await get($"{historyUrl}?start=0&count=100&queue={queueId}", key, token).ConfigureAwait(false);
             if (history is not { ValueKind: JsonValueKind.Array } ids) return null;
             var recent = ids.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String)
                 .Select(x => x.GetString()!).Distinct().Take(100).ToArray();
+            if (expected.Length > 0 && !recent.Any(id => MatchKey(id, region, route.Platform) == expected)) return null;
+            string newest = recent.FirstOrDefault(id => MatchKey(id, region, route.Platform).Length > 0) ?? "";
+            bool latestAvailable = false, complete = true;
             var result = new OpponentRankSummary { Source = "Riot API" };
             double total = 0;
             int reported = 0;
@@ -63,7 +75,7 @@ internal sealed class PublicOpponentRankService(Func<string, string, Cancellatio
                 if (!_matches.TryGetValue(cacheId, out var match))
                 {
                     var response = await get($"{cluster}/lol/match/v5/matches/{Uri.EscapeDataString(matchId)}", key, token).ConfigureAwait(false);
-                    if (response is not { } detail) continue;
+                    if (response is not { } detail) { complete = false; continue; }
                     match = detail;
                     if (Finished(match, matchId))
                     {
@@ -71,16 +83,18 @@ internal sealed class PublicOpponentRankService(Func<string, string, Cancellatio
                         _matches[cacheId] = match;
                     }
                 }
+                if (matchId == newest) latestAvailable = Finished(match, matchId) && Number(match.GetProperty("info"), "queueId") == queueId;
+                if (!Finished(match, matchId)) { complete = false; continue; }
                 if (!Completed(match, matchId, queueId)) continue;
                 var players = match.GetProperty("info").GetProperty("participants").EnumerateArray().ToArray();
                 var self = players.Where(p => Text(p, "puuid") == puuid).ToArray();
-                if (self.Length != 1) continue;
+                if (self.Length != 1) { complete = false; continue; }
                 int team = Number(self[0], "teamId");
                 if (team is not (100 or 200) || players.Length != 10 ||
                     players.Select(p => Text(p, "puuid")).Distinct().Count() != 10 ||
                     players.Any(p => Text(p, "puuid").Length == 0) ||
                     players.Count(p => Number(p, "teamId") == 100) != 5 ||
-                    players.Count(p => Number(p, "teamId") == 200) != 5) continue;
+                    players.Count(p => Number(p, "teamId") == 200) != 5) { complete = false; continue; }
                 result.Games++;
                 result.TotalOpponents += 5;
                 foreach (var enemy in players.Where(p => Number(p, "teamId") != team))
@@ -90,7 +104,7 @@ internal sealed class PublicOpponentRankService(Func<string, string, Cancellatio
                     if (!_ranks.TryGetValue(cacheKey, out var cached) || DateTime.UtcNow - cached.Updated >= TimeSpan.FromMinutes(15))
                     {
                         var entries = await get($"https://{route.Platform}.api.riotgames.com/lol/league/v4/entries/by-puuid/{Uri.EscapeDataString(enemyId)}", key, token).ConfigureAwait(false);
-                        if (entries is not { ValueKind: JsonValueKind.Array } array) continue;
+                        if (entries is not { ValueKind: JsonValueKind.Array } array) { complete = false; continue; }
                         cached = (DateTime.UtcNow, RankedQueues.ParseRanks(array));
                         if (_ranks.Count >= 1000) _ranks.Clear();
                         _ranks[cacheKey] = cached;
@@ -104,11 +118,16 @@ internal sealed class PublicOpponentRankService(Func<string, string, Cancellatio
             }
             if (recent.Length > 0 && result.Games == 0 || result.Games > 0 && reported == 0) return null;
             result.MeanRankPosition = result.RankedOpponents > 0 ? total / result.RankedOpponents : null;
-            result.UpdatedUtc = DateTime.UtcNow;
+            result.LatestMatchId = complete && latestAvailable ? MatchKey(newest, region, route.Platform) : "";
+            result.CheckedUtc = result.UpdatedUtc = DateTime.UtcNow;
             return result;
         }
         finally { _gate.Release(); }
     }
+
+    private static string MatchKey(string id, string region, string platform) =>
+        id.StartsWith(platform + "_", StringComparison.OrdinalIgnoreCase) && long.TryParse(id[(platform.Length + 1)..], out long gameId)
+        ? OpponentRankSummary.MatchKey(region, gameId) : "";
 
     private static bool Finished(JsonElement match, string id) =>
         match.ValueKind == JsonValueKind.Object && match.TryGetProperty("metadata", out var metadata) &&

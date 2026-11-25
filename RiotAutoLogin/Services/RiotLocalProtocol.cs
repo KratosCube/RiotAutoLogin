@@ -43,7 +43,7 @@ internal static class RiotLocalProtocol
 
     private static string Flag(string commandLine, string flag)
     {
-        var match = Regex.Match(commandLine, "(?:^|\\s)--" + Regex.Escape(flag) + "=(?:\"([^\"]+)\"|([^\\s\"]+))");
+        var match = Regex.Match(commandLine, "(?:^|\\s)\"?--" + Regex.Escape(flag) + "=(?:\"([^\"]+)\"|([^\\s\"]+))");
         return match.Success ? (match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value) : "";
     }
 }

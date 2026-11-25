@@ -62,8 +62,15 @@ internal static class Program
     }
 
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--client-stub")
+        {
+            System.IO.File.WriteAllText(args[1], "ready");
+            System.Threading.Thread.Sleep(System.Threading.Timeout.Infinite);
+            return;
+        }
+        ProcessSwitchChecks.RunAsync().GetAwaiter().GetResult();
         VelopackApp.Build().SetAutoApplyOnStartup(false).Run();
         var app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.InitializeComponent();
@@ -219,6 +226,23 @@ internal static class Program
                 for (int other = 0; other < settingsPages.Length; other++)
                     if (((FrameworkElement)window.FindName(settingsPages[other])).IsVisible != (other == page))
                         throw new Exception("Settings categories overlap or hide the selected page.");
+                if (page == 0)
+                {
+                    foreach (string glyph in new[] { "Q", "W", "M" })
+                    {
+                        keyBox.Text = glyph; keyBox.CaretIndex = 1; window.UpdateLayout();
+                        var leading = keyBox.GetRectFromCharacterIndex(0, false);
+                        var trailing = keyBox.GetRectFromCharacterIndex(0, true);
+                        if (leading.IsEmpty || leading.Left < 0 || trailing.Right > keyBox.ActualWidth || keyBox.HorizontalOffset > 1)
+                            throw new Exception("The hotkey glyph is clipped: " + glyph);
+                    }
+                    keyBox.Text = "Q";
+                    ((TextBlock)window.FindName("lblCurrentHotkey")).Text = "Current Hotkey: Ctrl + Alt + Q";
+                    var reload = (System.Windows.Controls.Button)window.FindName("btnRefreshQuickStats");
+                    if (reload.Foreground is not System.Windows.Media.SolidColorBrush brush ||
+                        brush.Color != ((System.Windows.Media.SolidColorBrush)window.FindResource("TextColorBrush")).Color)
+                        throw new Exception("The reload icon does not follow the UI foreground color.");
+                }
                 if (page == 0 && ((ScrollViewer)window.FindName("settingsScroll")).ScrollableHeight > 1)
                     throw new Exception("General settings should fit the minimum window size.");
                 string[] previewNames = ["general", "gameplay", "phone", "alerts", "data", "updates"];
