@@ -102,6 +102,23 @@ internal static class Program
             AccountGridChecks.Run(window, tabs);
             tabs.SelectedItem = accountsTab;
             window.Width = window.MinWidth; window.Height = window.MinHeight; window.UpdateLayout();
+            var accountBrowser = (System.Windows.Controls.ListBox)window.FindName("icAccounts");
+            saved.ItemsSource = Enumerable.Range(0, 8).Select(i => new Account
+            {
+                GameName = i == 0 ? "David" : new[] { "Ashen Fox", "North Star", "Pocket Support" }[(i - 1) % 3],
+                TagLine = $"R{i + 1}", Region = i % 2 == 0 ? "eun1" : "euw1",
+                QueueRanks = new() { [RankedQueue.SoloDuo] = new RankData { Tier = i % 2 == 0 ? "EMERALD" : "GOLD", Rank = "II", LeaguePoints = 38 } }
+            }).ToList();
+            accountBrowser.SelectedIndex = 1;
+            window.UpdateLayout();
+            if (((System.Windows.Controls.TextBox)window.FindName("txtGameName")).Text != "Ashen Fox")
+                throw new Exception("Changing compact account selection did not update the editor.");
+            accountBrowser.SelectedIndex = 0;
+            window.UpdateLayout();
+            if (((System.Windows.Controls.TextBox)window.FindName("txtGameName")).Text != "David")
+                throw new Exception("Compact account selection did not update the editor.");
+            var accountRow = (ListBoxItem)accountBrowser.ItemContainerGenerator.ContainerFromIndex(0);
+            if (accountRow.ActualHeight > 66 || !accountRow.IsSelected) throw new Exception("The compact account row is oversized or unselected.");
             var form = (ScrollViewer)window.FindName("accountFormScroll");
             if (form.ScrollableHeight > 1 || form.ScrollableWidth > 1) throw new Exception("The account form must fit the minimum window size.");
             AccountGridChecks.Capture(window, "accounts-editor-preview.png");
@@ -179,6 +196,18 @@ internal static class Program
                 throw new Exception("Closing the main window on launch did not keep it available in the tray.");
             window.Show();
             tabs.SelectedItem = window.FindName("SettingsTab");
+            if (alertsHost.Content != null) throw new Exception("General settings should not create the alert editor.");
+            var settingsNav = (System.Windows.Controls.ListBox)window.FindName("settingsNav");
+            string[] settingsPages = ["settingsGeneral", "settingsGameplay", "settingsPhone", "settingsAlerts", "settingsData", "settingsUpdates"];
+            for (int page = 0; page < settingsPages.Length; page++)
+            {
+                settingsNav.SelectedIndex = page; window.UpdateLayout();
+                for (int other = 0; other < settingsPages.Length; other++)
+                    if (((FrameworkElement)window.FindName(settingsPages[other])).IsVisible != (other == page))
+                        throw new Exception("Settings categories overlap or hide the selected page.");
+                if (page == 0) AccountGridChecks.Capture(window, "settings-general-preview.png");
+                if (page == 1) AccountGridChecks.Capture(window, "settings-gameplay-preview.png");
+            }
             if (alertsHost.Content is not ClientAlertsSettingsCard alerts)
                 throw new Exception("Settings did not create its alert controls on first use.");
             tabs.SelectedItem = accountsTab;
