@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="../RiotAutoLogin/Services/BuildChannel.cs" Link="BuildChannel.cs" />
     <Compile Include="../RiotAutoLogin/Services/AnnualCsService.cs" Link="AnnualCsService.cs" />
+    <Compile Include="../RiotAutoLogin/Services/AnnualCsStore.cs" Link="AnnualCsStore.cs" />
     <Compile Include="../RiotAutoLogin/Models/AnnualCs.cs" Link="AnnualCs.cs" />
     <Compile Include="../RiotAutoLogin/Services/RemoteChampionPositions.cs" Link="RemoteChampionPositions.cs" />
     <Compile Include="../RiotAutoLogin/Models/Account.cs" Link="Account.cs" />

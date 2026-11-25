@@ -75,9 +75,13 @@ namespace RiotAutoLogin
             btnStatsScope.Visibility = page == "time" ? Visibility.Visible : Visibility.Collapsed;
             btnRefreshQuickStats.Visibility = page == "results" ? Visibility.Visible : Visibility.Collapsed;
             btnSyncCs.Visibility = page == "farm" ? Visibility.Visible : Visibility.Collapsed;
-            txtStatsContext.Text = page == "farm" ? "Available history · all accounts · all queues · last 12 months" :
+            txtStatsContext.Text = page == "farm" ? _csMessage :
                 page == "time" ? "Tracked on this PC · selected ladder" : "Selected ladder · all accounts";
-            if (page == "farm") UIService.UpdateAnnualCsStats(this, _accounts);
+            if (page == "farm")
+            {
+                UIService.UpdateAnnualCsStats(this, _accounts);
+                _ = LoadAnnualCsAsync();
+            }
             UpdateWaitingStatsTimer();
         }
 

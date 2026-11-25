@@ -24,6 +24,30 @@ internal static class AnnualCsChecks
         Require(urls.Where(u => u.Contains("/ids?")).All(u => u.Contains("endTime=" + now.ToUnixTimeSeconds())),
             "Resuming the scan must retain the original endTime as new games arrive.");
         Require(restored.Unavailable.SetEquals(["EUN1_30"]), "Unavailable history must remain visible as partial coverage.");
+        string historyPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
+        try
+        {
+            var store = new AnnualCsStore(historyPath);
+            store.Save(new() { [AnnualCsStore.Identity(account)] = restored });
+            Require(store.Load()[AnnualCsStore.Identity(account)].Matches.Count == 29,
+                "History checkpoints must survive restart in their separate storage file.");
+            Require(!JsonSerializer.Serialize(account).Contains("EUN1_"), "Account startup JSON must not include the large match history.");
+        }
+        finally { File.Delete(historyPath); }
+        string legacyPath = historyPath + ".legacy";
+        try
+        {
+            string legacyJson = JsonSerializer.Serialize(new[]
+            {
+                new { GameName = "Farmer", TagLine = "TAG", Region = "eun1", AnnualCs = restored },
+                new { GameName = "farmer", TagLine = "tag", Region = "EUNE", AnnualCs = new AnnualCs() }
+            });
+            Require(AnnualCsStore.PreserveLegacy(legacyJson, legacyPath), "Legacy history must be preserved before startup saves account metadata.");
+            var migrated = new AnnualCsStore(historyPath, legacyPath).Load();
+            Require(migrated.Values.Single().Matches.Count == 29 && File.Exists(historyPath) && !File.Exists(legacyPath),
+                "Existing account-file history must move to standalone storage without losing imported games.");
+        }
+        finally { File.Delete(historyPath); File.Delete(legacyPath); }
         account.UpdateRiotId("Different", "TAG", "eun1");
         Require(account.AnnualCs.Matches.Count == 0, "Changing Riot ID must clear the previous account's CS.");
         using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
