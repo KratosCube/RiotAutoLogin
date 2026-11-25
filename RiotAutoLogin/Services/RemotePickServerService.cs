@@ -117,7 +117,8 @@ namespace RiotAutoLogin.Services
                         break;
 
                     TcpClient client = await _listener.AcceptTcpClientAsync(cancellationToken);
-                    _ = HandleClientAsync(client, cancellationToken);
+                    // Some legacy LCU helpers still block; keep them off the accept loop.
+                    _ = Task.Run(() => HandleClientAsync(client, cancellationToken));
                 }
                 catch (ObjectDisposedException)
                 {
