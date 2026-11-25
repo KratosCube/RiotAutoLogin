@@ -422,7 +422,7 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Border x:Name="AccountCard" Style="{StaticResource InteractiveCardStyle}"
-                                                        Margin="4,3,4,6" Padding="12,16" Tag="{Binding}"
+                                                        Margin="4,3,4,6" Padding="12,13" Tag="{Binding}"
                                                         MouseDown="LoginCard_MouseDown">
                                                     <StackPanel>
                                                         <Grid>

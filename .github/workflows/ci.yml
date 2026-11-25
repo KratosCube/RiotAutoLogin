@@ -54,6 +54,8 @@ jobs:
           if ($p.ExitCode -ne 0) { throw 'Developer startup failed.' }
           $channel = Get-Content build-channel.json -Raw | ConvertFrom-Json
           if (!$channel.development -or $channel.dataDirectory -ne 'RiotClientAutoLogin-Dev' -or $channel.startupSuffix -ne '-Dev') { throw 'Developer build uses public settings.' }
+          git rev-parse HEAD | Set-Content build/dev/BUILD.txt
+          Compress-Archive build/dev/* build/RiotAutoLogin-Developer.zip
 
       - name: Restore packaging tool
         run: dotnet tool restore
@@ -109,4 +111,14 @@ jobs:
             build/accounts-editor-preview.png
             build/update-dialog-preview.png
           if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Retain developer preview for testing before merge
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: developer-preview
+          path: build/RiotAutoLogin-Developer.zip
+          if-no-files-found: ignore
+          compression-level: 0
           retention-days: 7
