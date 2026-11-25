@@ -132,6 +132,7 @@
     .mini-card .sub { margin-top: 3px; color: var(--muted); font-size: .76rem; }
     .player-link { color: var(--cyan); text-decoration: none; overflow-wrap: anywhere; }
     .player-link:hover { text-decoration: underline; }
+    #positionFilter { flex: none; max-width: 105px; min-width: 0; min-height: 40px; padding: 5px; color: var(--text); background: var(--panel-soft); border: 1px solid var(--line); font: inherit; font-size: .78rem; }
     .search-wrap { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
     .count { white-space: nowrap; color: var(--muted); font-size: .84rem; font-variant-numeric: tabular-nums; }
     .search-controls { flex: 1; min-width: 0; display: flex; gap: 6px; }
@@ -299,7 +300,7 @@
       <aside id="allyPanel" class="panel"><h2>Ally picks</h2><div id="allyPickedList" class="rail-list"></div></aside>
       <main id="championView">
         <div class="search-wrap">
-          <div class="search-controls"><input id="search" type="search" aria-label="Search champions" placeholder="Search champions" autocomplete="off" spellcheck="false"><button id="clearSearch" class="search-clear" type="button" hidden>Clear</button></div>
+          <div class="search-controls"><select id="positionFilter" aria-label="Champion position" title="Recommended positions from League Client"><option value="">All roles</option><option value="top">Top</option><option value="jungle">Jungle</option><option value="mid">Mid</option><option value="bot">Bot</option><option value="support">Support</option><option value="unknown">Unlisted</option></select><input id="search" type="search" aria-label="Search champions" placeholder="Search champions" autocomplete="off" spellcheck="false"><button id="clearSearch" class="search-clear" type="button" hidden>Clear</button></div>
           <span id="count" class="count" role="status" aria-live="polite" hidden></span>
         </div>
         <div id="champions" class="champion-grid"></div>
@@ -342,6 +343,7 @@
       spellModal: $('spellModal'), spellGrid: $('spellGrid'), spellTitle: $('spellModalTitle'),
       confirmModal: $('confirmModal'), confirmTitle: $('confirmTitle'), confirmCopy: $('confirmCopy'), confirmAccept: $('acceptConfirm')
     };
+    let positionFilter = '';
     let state = null, hasFullState = false, query = '', selectedChampionId = 0;
     let statePending = false, timerPending = false, actionPending = false;
     let latestLive = null, latestRequestAt = -1, latestReceivedAt = -1;
@@ -637,9 +639,13 @@
         ui.empty.hidden = true;
         return;
       }
-      const filtered = champions.filter(champion => (champion.name || '').toLocaleLowerCase().includes(query));
-      ui.count.hidden = !query;
-      ui.count.textContent = query ? `${filtered.length} / ${champions.length}` : '';
+      const hasPositions = champions.some(champion => champion.positions?.length);
+      $('positionFilter').disabled = !hasPositions;
+      if (!hasPositions) { positionFilter = ''; $('positionFilter').value = ''; }
+      const filtered = champions.filter(champion => (champion.name || '').toLocaleLowerCase().includes(query) &&
+        (!positionFilter || (positionFilter === 'unknown' ? !champion.positions?.length : champion.positions?.includes(positionFilter))));
+      ui.count.hidden = !query && !positionFilter;
+      ui.count.textContent = (query || positionFilter) ? `${filtered.length} / ${champions.length}` : '';
       if (!champions.length) {
         gridKey = '';
         ui.champions.replaceChildren();
@@ -654,7 +660,7 @@
       ui.empty.hidden = true;
       const canPick = state.canPick || (state.isMyTurn && state.actionType === 'pick');
       const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
-      const nextKey = JSON.stringify([query, state.isInChampSelect, canPick, canBan,
+      const nextKey = JSON.stringify([query, positionFilter, state.isInChampSelect, canPick, canBan,
         filtered.map(champion => [champion.id, champion.name, champion.imageUrl, champion.isDisabled, champion.isBanned, champion.isPicked])]);
       if (nextKey === gridKey) { updateChampionDecorations(); return; }
       gridKey = nextKey;
@@ -955,6 +961,7 @@
       ui.search.value = ''; query = ''; ui.clearSearch.hidden = true;
       gridKey = ''; renderChampionGrid(); ui.search.focus();
     }
+    $('positionFilter').addEventListener('change', event => { positionFilter = event.target.value; gridKey = ''; renderChampionGrid(); });
     ui.search.addEventListener('input', () => {
       query = ui.search.value.trim().toLocaleLowerCase();
       ui.clearSearch.hidden = !query;

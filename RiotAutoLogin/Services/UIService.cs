@@ -30,6 +30,18 @@ namespace RiotAutoLogin.Services
             }
         }
 
+        public static void UpdateAnnualCsStats(Window window, System.Collections.Generic.List<Models.Account> accounts)
+        {
+            var (cs, games, rate, partial) = Models.AnnualCs.Totals(accounts, DateTimeOffset.UtcNow);
+            if (window.FindName("txtCsTotal") is TextBlock total) total.Text = games == 0 ? "—" : $"{cs:N0}" + (partial ? "+" : "");
+            if (window.FindName("txtCsGames") is TextBlock count) count.Text = games.ToString("N0");
+            if (window.FindName("txtCsPerMinute") is TextBlock speed) speed.Text = games == 0 ? "—" : rate.ToString("0.0");
+            if (window.FindName("txtCsTotal") is TextBlock label)
+                label.ToolTip = "Minions and jungle monsters combined. All saved accounts and queues, rolling last 12 months. " +
+                    "Based on available imported match history. + means the import is incomplete, has unavailable matches or needs refreshing. " +
+                    "Historical availability depends on Riot; a finished import does not guarantee every game from the year is still available.";
+        }
+
         public static void UpdateTotalGameStats(Window window, System.Collections.Generic.List<Models.Account> accounts, RankedQueue queue = RankedQueue.SoloDuo)
         {
             var (totalGames, totalWins, totalLosses, winRate, totalGreyscreens, totalGreyscreenSeconds) = AccountService.CalculateStats(accounts, queue);

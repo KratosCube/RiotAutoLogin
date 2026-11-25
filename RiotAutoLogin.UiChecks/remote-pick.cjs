@@ -6,6 +6,7 @@ const { chromium } = require('playwright-core');
 const html = fs.readFileSync(path.join(__dirname, '../RiotAutoLogin/Services/RemotePickPage.html'), 'utf8');
 const champions = Array.from({length: 90}, (_, i) => ({
   id: i + 1, name: i === 0 ? 'Annie' : i === 1 ? 'Ahri' : `Champion ${i + 1}`,
+  positions: i === 0 ? ['mid', 'support'] : ['top'],
   imageUrl: 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', isDisabled: i === 1
 }));
 const lobby = {phase: 'Lobby', phaseLabel: 'Lobby', queueName: 'Normal Draft', canStartLobby: true, partySize: 3,
@@ -64,6 +65,11 @@ async function run() {
     state = {...lobby, phase: 'ReadyCheck', phaseLabel: 'Match found', canStartLobby: false, canAcceptMatch: true};
     await paint();
     await page.getByRole('button', {name: 'Accept match'}).click();
+    await byId('positionFilter').selectOption('mid');
+    assert.equal(await byId('champions').locator('[data-select-id]').count(), 1);
+    await byId('positionFilter').selectOption('support');
+    assert.equal(await byId('champions').locator('[data-select-id]').count(), 1);
+    await byId('positionFilter').selectOption('');
     await page.getByRole('button', {name: 'Preview Annie'}).click();
     await page.waitForFunction(() => document.querySelector('#hoverName').textContent === 'Annie');
     assert.equal(await page.getByRole('button', {name: /^Hover/}).count(), 0);

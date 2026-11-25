@@ -313,7 +313,7 @@
                         </Border>
 
                         <TextBlock Grid.Column="1"
-                                   Text="Riot Auto Login"
+                                   x:Name="txtAppName" Text="Riot Auto Login"
                                    FontSize="21"
                                    FontWeight="SemiBold"
                                    Foreground="{StaticResource TextColorBrush}"
@@ -422,7 +422,7 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Border x:Name="AccountCard" Style="{StaticResource InteractiveCardStyle}"
-                                                        Margin="4,3,4,6" Padding="12,16" Tag="{Binding}"
+                                                        Margin="4,3,4,6" Padding="12,13" Tag="{Binding}"
                                                         MouseDown="LoginCard_MouseDown">
                                                     <StackPanel>
                                                         <Grid>
@@ -487,10 +487,21 @@
                  Visibility="Collapsed"
                  MouseDoubleClick="lbLoginAccounts_MouseDoubleClick"/>
 
-                                <Border x:Name="statsPanel" Grid.Row="2" Background="Transparent" Margin="0,14,0,0">
+                                <Border x:Name="statsPanel" Grid.Row="2" Margin="0,10,0,0">
                                     <Grid>
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="82"/></Grid.ColumnDefinitions>
-                                        <Grid x:Name="statsViewport" Height="76" ClipToBounds="True">
+                                        <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="68"/></Grid.RowDefinitions>
+                                        <DockPanel LastChildFill="True" Margin="0,0,0,5">
+                                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                                                <ToggleButton x:Name="btnStatsResults" Content="Results" Tag="results" IsChecked="True" Click="StatisticsPage_Click" Style="{StaticResource ModernToggleButton}" Padding="10,2" MinWidth="0" MinHeight="24" Height="24" FontSize="11" Margin="0,0,4,0"/>
+                                                <ToggleButton x:Name="btnStatsFarm" Content="Farming" Tag="farm" Click="StatisticsPage_Click" Style="{StaticResource ModernToggleButton}" Padding="10,2" MinWidth="0" MinHeight="24" Height="24" FontSize="11" Margin="0,0,4,0"/>
+                                                <ToggleButton x:Name="btnStatsTime" Content="Time" Tag="time" Click="StatisticsPage_Click" Style="{StaticResource ModernToggleButton}" Padding="10,2" MinWidth="0" MinHeight="24" Height="24" FontSize="11"/>
+                                            </StackPanel>
+                                            <Button x:Name="btnRefreshQuickStats" DockPanel.Dock="Right" Content="↻" Click="btnRefreshQuickStats_Click" Style="{StaticResource GhostIconButton}" Width="30" MinHeight="24" Height="24" ToolTip="Refresh ranks"/>
+                                            <Button x:Name="btnSyncCs" DockPanel.Dock="Right" Content="Sync history" Visibility="Collapsed" Click="SyncCs_Click" Style="{StaticResource SecondaryButton}" Padding="9,2" MinHeight="24" Height="24" FontSize="10"/>
+                                            <Button x:Name="btnStatsScope" DockPanel.Dock="Right" Content="Today" Visibility="Collapsed" Click="StatisticsScope_Click" Style="{StaticResource SecondaryButton}" Padding="9,2" MinHeight="24" Height="24" FontSize="10"/>
+                                            <TextBlock x:Name="txtStatsContext" Text="Selected ladder · all accounts" Margin="10,0" VerticalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                        </DockPanel>
+                                        <Grid x:Name="statsViewport" Grid.Row="1" ClipToBounds="True">
                                             <Grid x:Name="rankStatsPage">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -501,7 +512,7 @@
                                         </Grid.ColumnDefinitions>
 
                                         <Border Grid.Column="0"
-                                                Style="{StaticResource MetricCardStyle}">
+                                                Style="{StaticResource MetricCardStyle}" Padding="10">
                                             <StackPanel>
                                                 <TextBlock Text="Games"
                            FontSize="11"
@@ -510,14 +521,14 @@
                                                 <TextBlock x:Name="txtStatsGamesValue"
                            Text="0"
                            Margin="0,4,0,0"
-                           FontSize="20"
+                           FontSize="18"
                            FontWeight="SemiBold"
                            Foreground="{StaticResource TextColorBrush}"/>
                                             </StackPanel>
                                         </Border>
 
                                         <Border Grid.Column="1"
-                                                Style="{StaticResource MetricCardStyle}">
+                                                Style="{StaticResource MetricCardStyle}" Padding="10">
                                             <StackPanel>
                                                 <TextBlock Text="Wins"
                            FontSize="11"
@@ -526,14 +537,14 @@
                                                 <TextBlock x:Name="txtStatsWinsValue"
                            Text="0"
                            Margin="0,4,0,0"
-                           FontSize="20"
+                           FontSize="18"
                            FontWeight="SemiBold"
                            Foreground="#22BABB"/>
                                             </StackPanel>
                                         </Border>
 
                                         <Border Grid.Column="2"
-                                                Style="{StaticResource MetricCardStyle}">
+                                                Style="{StaticResource MetricCardStyle}" Padding="10">
                                             <StackPanel>
                                                 <TextBlock Text="Losses"
                            FontSize="11"
@@ -542,14 +553,14 @@
                                                 <TextBlock x:Name="txtStatsLossesValue"
                            Text="0"
                            Margin="0,4,0,0"
-                           FontSize="20"
+                           FontSize="18"
                            FontWeight="SemiBold"
                            Foreground="#F24405"/>
                                             </StackPanel>
                                         </Border>
 
                                         <Border Grid.Column="3"
-                                                Style="{StaticResource MetricCardStyle}">
+                                                Style="{StaticResource MetricCardStyle}" Padding="10">
                                             <StackPanel>
                                                 <TextBlock Text="Win Rate"
                            FontSize="11"
@@ -558,14 +569,14 @@
                                                 <TextBlock x:Name="txtStatsWinRateValue"
                            Text="0%"
                            Margin="0,4,0,0"
-                           FontSize="20"
+                           FontSize="18"
                            FontWeight="SemiBold"
                            Foreground="{StaticResource TextColorBrush}"/>
                                             </StackPanel>
                                         </Border>
 
                                         <Border Grid.Column="4"
-                                                Style="{StaticResource MetricCardStyle}">
+                                                Style="{StaticResource MetricCardStyle}" Padding="10">
                                             <StackPanel>
                                                 <TextBlock Text="Greyscreen"
                                                            FontSize="11"
@@ -573,7 +584,7 @@
                                                 <TextBlock x:Name="txtStatsGreyscreenTimeValue"
                                                            Text="0 min"
                                                            Margin="0,4,0,0"
-                                                           FontSize="20"
+                                                           FontSize="18"
                                                            FontWeight="SemiBold"
                                                            Foreground="#B88AFF"/>
                                             </StackPanel>
@@ -584,57 +595,52 @@
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/>
                                                 </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Style="{StaticResource MetricCardStyle}">
+                                            <Border Grid.Column="0" Style="{StaticResource MetricCardStyle}" Padding="10">
                                                 <StackPanel>
                                                     <TextBlock Text="Queue" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
-                                                    <TextBlock x:Name="txtQueueTimeValue" Text="0s" Margin="0,4,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#F4C95D"/>
+                                                    <TextBlock x:Name="txtQueueTimeValue" Text="0s" Margin="0,4,0,0" FontSize="18" FontWeight="SemiBold" Foreground="#F4C95D"/>
                                                 </StackPanel>
                                             </Border>
-                                            <Border Grid.Column="1" Style="{StaticResource MetricCardStyle}">
+                                            <Border Grid.Column="1" Style="{StaticResource MetricCardStyle}" Padding="10">
                                                 <StackPanel>
                                                     <TextBlock Text="Champ select" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
-                                                    <TextBlock x:Name="txtChampSelectTimeValue" Text="0s" Margin="0,4,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#22BABB"/>
+                                                    <TextBlock x:Name="txtChampSelectTimeValue" Text="0s" Margin="0,4,0,0" FontSize="18" FontWeight="SemiBold" Foreground="#22BABB"/>
                                                 </StackPanel>
                                             </Border>
-                                            <Border Grid.Column="2" Style="{StaticResource MetricCardStyle}">
+                                            <Border Grid.Column="2" Style="{StaticResource MetricCardStyle}" Padding="10">
                                                 <StackPanel>
                                                     <TextBlock Text="Loading" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
-                                                    <TextBlock x:Name="txtLoadingTimeValue" Text="0s" Margin="0,4,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#B88AFF"/>
+                                                    <TextBlock x:Name="txtLoadingTimeValue" Text="0s" Margin="0,4,0,0" FontSize="18" FontWeight="SemiBold" Foreground="#B88AFF"/>
                                                 </StackPanel>
                                             </Border>
-                                            <Border Grid.Column="3" Style="{StaticResource MetricCardStyle}">
+                                            <Border Grid.Column="3" Style="{StaticResource MetricCardStyle}" Padding="10">
                                                 <StackPanel>
                                                     <TextBlock Text="Total waiting" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
-                                                    <TextBlock x:Name="txtWaitingTimeValue" Text="0s" Margin="0,4,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#F5F7FA"/>
+                                                    <TextBlock x:Name="txtWaitingTimeValue" Text="0s" Margin="0,4,0,0" FontSize="18" FontWeight="SemiBold" Foreground="#F5F7FA"/>
                                                 </StackPanel>
                                             </Border>
-                                            <Border Grid.Column="4" Style="{StaticResource MetricCardStyle}">
+                                            <Border Grid.Column="4" Style="{StaticResource MetricCardStyle}" Padding="10">
                                                 <StackPanel>
                                                     <TextBlock Text="In game" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
-                                                    <TextBlock x:Name="txtInGameTimeValue" Text="0s" Margin="0,4,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#3DDC97"/>
+                                                    <TextBlock x:Name="txtInGameTimeValue" Text="0s" Margin="0,4,0,0" FontSize="18" FontWeight="SemiBold" Foreground="#3DDC97"/>
                                                 </StackPanel>
                                             </Border>
                                             </Grid>
-                                        </Grid>
-                                        <Grid Grid.Column="1">
-                                            <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="30"/></Grid.RowDefinitions>
-                                            <Button x:Name="btnRefreshQuickStats" Style="{StaticResource GhostIconButton}"
-                                                    Click="btnRefreshQuickStats_Click" ToolTip="Refresh ranks for all three queues"
-                                                    HorizontalAlignment="Center">
-                                                <Path Data="M12,2 A10,10 0 1 1 4.2,5.7 M4,1.5 V6 H8.5" Stroke="#A8B3C7" StrokeThickness="1.8"
-                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="15" Height="15"/>
-                                            </Button>
-                                            <Button x:Name="btnStatsScope" Style="{StaticResource SecondaryButton}" Content="Today"
-                                                    FontSize="11" Padding="8,4" Height="30" Visibility="Collapsed"
-                                                    Click="StatisticsScope_Click" ToolTip="Switch between today and all recorded time"/>
-                                            <Grid Grid.Row="1">
-                                                <Grid.ColumnDefinitions><ColumnDefinition Width="26"/><ColumnDefinition/><ColumnDefinition Width="26"/></Grid.ColumnDefinitions>
-                                                <Button Content="‹" FontSize="20" Width="26" Height="26" Style="{StaticResource GhostIconButton}"
-                                                        Click="PreviousStatistics_Click" ToolTip="Previous statistics page" AutomationProperties.Name="Previous statistics page"/>
-                                                <TextBlock x:Name="txtStatsPage" Grid.Column="1" Text="● ○" FontSize="10" Foreground="{StaticResource MutedTextBrush}"
-                                                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                                <Button Grid.Column="2" Content="›" FontSize="20" Width="26" Height="26" Style="{StaticResource GhostIconButton}"
-                                                        Click="NextStatistics_Click" ToolTip="Next statistics page" AutomationProperties.Name="Next statistics page"/>
+
+                                            <Grid x:Name="farmStatsPage" Visibility="Collapsed">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="1.4*"/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                                <Border Style="{StaticResource MetricCardStyle}" Padding="10"><StackPanel>
+                                                    <TextBlock Text="Total CS · last 12 months" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    <TextBlock x:Name="txtCsTotal" Text="—" FontSize="22" FontWeight="SemiBold" Foreground="#49C6B3" Margin="0,3,0,0"/>
+                                                </StackPanel></Border>
+                                                <Border Grid.Column="1" Style="{StaticResource MetricCardStyle}" Padding="10"><StackPanel>
+                                                    <TextBlock Text="Games imported" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    <TextBlock x:Name="txtCsGames" Text="—" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,3,0,0"/>
+                                                </StackPanel></Border>
+                                                <Border Grid.Column="2" Style="{StaticResource MetricCardStyle}" Padding="10"><StackPanel>
+                                                    <TextBlock Text="CS / min" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    <TextBlock x:Name="txtCsPerMinute" Text="—" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}" Margin="0,3,0,0"/>
+                                                </StackPanel></Border>
                                             </Grid>
                                         </Grid>
                                     </Grid>
@@ -748,143 +754,37 @@
                                          Visibility="Collapsed"
                                          SelectionChanged="lbAccounts_SelectionChanged"/>
 
-                                <!-- Right side -->
-                                <Border Grid.Column="1"
-                                        Background="{StaticResource CardBackgroundBrush}"
-                                        CornerRadius="18"
-                                        Padding="16">
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                                  Style="{StaticResource DarkScrollViewerStyle}">
+                                <Border Grid.Column="1" Background="{StaticResource CardBackgroundBrush}" CornerRadius="18" Padding="16">
+                                    <ScrollViewer x:Name="accountFormScroll" Style="{StaticResource DarkScrollViewerStyle}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                         <StackPanel>
-                                            <TextBlock Text="Account Details"
-                                                       FontSize="18"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{StaticResource TextColorBrush}"/>
-                                            <TextBlock Text="Create a new account or update the selected one."
-                                                       Margin="0,6,0,16"
-                                                       FontSize="13"
-                                                       Foreground="{StaticResource TextColorBrush}"
-                                                       Opacity="0.68"/>
-
-                                            <!-- Region -->
-                                            <StackPanel Margin="0,0,0,14">
-                                                <TextBlock Text="Region"
-                                                           FontSize="13"
-                                                           Margin="0,0,0,6"
-                                                           Foreground="{StaticResource TextColorBrush}"
-                                                           Opacity="0.8"/>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <ToggleButton x:Name="btnEUNE"
-                                                                  Content="EUNE"
-                                                                  Width="120"
-                                                                  IsChecked="True"
-                                                                  Style="{StaticResource ModernToggleButton}"
-                                                                  Checked="btnEUNE_Checked"/>
-                                                    <ToggleButton x:Name="btnEUW"
-                                                                  Content="EUW"
-                                                                  Width="120"
-                                                                  Margin="10,0,0,0"
-                                                                  Style="{StaticResource ModernToggleButton}"
-                                                                  Checked="btnEUW_Checked"/>
+                                            <DockPanel Margin="0,0,0,12">
+                                                <Border DockPanel.Dock="Right" Width="44" Height="44" CornerRadius="10" Background="#10151C"><Image x:Name="imgAvatarPreview" Stretch="UniformToFill"/></Border>
+                                                <StackPanel><TextBlock Text="Account details" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextColorBrush}"/>
+                                                    <Button x:Name="btnSelectAvatar" Content="Choose avatar" Click="btnSelectAvatar_Click" Style="{StaticResource SecondaryButton}" FontSize="10" Padding="8,3" HorizontalAlignment="Left" Margin="0,5,0,0"/>
                                                 </StackPanel>
-                                            </StackPanel>
-
-                                            <!-- Login -->
-                                            <StackPanel Margin="0,0,0,14">
-                                                <TextBlock Text="Account Login"
-                                                           FontSize="13"
-                                                           Margin="0,0,0,6"
-                                                           Foreground="{StaticResource TextColorBrush}"
-                                                           Opacity="0.8"/>
-                                                <TextBox x:Name="txtAccountLogin"
-                                                         Style="{StaticResource ModernTextBox}"/>
-                                            </StackPanel>
-
-                                            <!-- Game Name -->
-                                            <StackPanel Margin="0,0,0,14">
-                                                <TextBlock Text="Game Name"
-                                                           FontSize="13"
-                                                           Margin="0,0,0,6"
-                                                           Foreground="{StaticResource TextColorBrush}"
-                                                           Opacity="0.8"/>
-                                                <TextBox x:Name="txtGameName"
-                                                         Style="{StaticResource ModernTextBox}"/>
-                                            </StackPanel>
-
-                                            <!-- Tagline -->
-                                            <StackPanel Margin="0,0,0,14">
-                                                <TextBlock Text="Tagline"
-                                                           FontSize="13"
-                                                           Margin="0,0,0,6"
-                                                           Foreground="{StaticResource TextColorBrush}"
-                                                           Opacity="0.8"/>
-                                                <TextBox x:Name="txtTagLine"
-                                                         Style="{StaticResource ModernTextBox}"/>
-                                            </StackPanel>
-
-                                            <!-- Avatar -->
-                                            <StackPanel Margin="0,0,0,14">
-                                                <TextBlock Text="Avatar"
-                                                           FontSize="13"
-                                                           Margin="0,0,0,6"
-                                                           Foreground="{StaticResource TextColorBrush}"
-                                                           Opacity="0.8"/>
-                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Button x:Name="btnSelectAvatar"
-                                                            Content="Select Avatar"
-                                                            Style="{StaticResource SecondaryButton}"
-                                                            Click="btnSelectAvatar_Click"
-                                                            Margin="0,0,12,0"/>
-                                                    <Border Width="64"
-                                                            Height="64"
-                                                            CornerRadius="12"
-                                                            Background="#10151C">
-                                                        <Image x:Name="imgAvatarPreview"
-                                                               Stretch="UniformToFill"/>
-                                                    </Border>
+                                            </DockPanel>
+                                            <Grid Margin="0,0,0,10"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                                <ToggleButton x:Name="btnEUNE" Content="EUNE" IsChecked="True" Checked="btnEUNE_Checked" Style="{StaticResource ModernToggleButton}" Margin="0,0,4,0"/>
+                                                <ToggleButton x:Name="btnEUW" Grid.Column="1" Content="EUW" Checked="btnEUW_Checked" Style="{StaticResource ModernToggleButton}" Margin="4,0,0,0"/>
+                                            </Grid>
+                                            <TextBlock Text="Account login" Foreground="{StaticResource MutedTextBrush}" FontSize="12" Margin="0,0,0,4"/>
+                                            <TextBox x:Name="txtAccountLogin" Style="{StaticResource ModernTextBox}" Margin="0,0,0,10"/>
+                                            <TextBlock Text="Password" Foreground="{StaticResource MutedTextBrush}" FontSize="12" Margin="0,0,0,4"/>
+                                            <PasswordBox x:Name="txtAccountPassword" Template="{StaticResource ModernPasswordBox}" Foreground="{StaticResource TextColorBrush}" FontSize="14" BorderThickness="1" Margin="0,0,0,10"/>
+                                            <Grid Margin="0,0,0,16"><Grid.ColumnDefinitions><ColumnDefinition Width="1.8*"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                                <StackPanel Margin="0,0,5,0"><TextBlock Text="Game name" Foreground="{StaticResource MutedTextBrush}" FontSize="12" Margin="0,0,0,4"/>
+                                                    <TextBox x:Name="txtGameName" Style="{StaticResource ModernTextBox}"/>
                                                 </StackPanel>
-                                            </StackPanel>
-
-                                            <!-- Password -->
-                                            <StackPanel Margin="0,0,0,18">
-                                                <TextBlock Text="Password"
-                                                           FontSize="13"
-                                                           Margin="0,0,0,6"
-                                                           Foreground="{StaticResource TextColorBrush}"
-                                                           Opacity="0.8"/>
-                                                <PasswordBox x:Name="txtAccountPassword"
-                                                             Template="{StaticResource ModernPasswordBox}"
-                                                             Foreground="{StaticResource TextColorBrush}"
-                                                             BorderThickness="1"
-                                                             FontSize="14"/>
-                                            </StackPanel>
-
-                                            <!-- Buttons -->
-                                            <StackPanel>
-                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                                    <Button x:Name="btnAddAccount"
-                                                            Content="Add Account"
-                                                            Style="{StaticResource ModernButton}"
-                                                            Click="btnAddAccount_Click"
-                                                            Margin="0,0,10,0"/>
-
-                                                    <Button x:Name="btnUpdateAccount"
-                                                            Content="Update"
-                                                            Style="{StaticResource SecondaryButton}"
-                                                            Click="btnUpdateAccount_Click"
-                                                            Margin="0,0,10,0"/>
-
-                                                    <Button x:Name="btnDeleteAccount"
-                                                            Content="Delete"
-                                                            Style="{StaticResource SecondaryButton}"
-                                                            Click="btnDeleteAccount_Click"/>
+                                                <StackPanel Grid.Column="1" Margin="5,0,0,0"><TextBlock Text="Tagline" Foreground="{StaticResource MutedTextBrush}" FontSize="12" Margin="0,0,0,4"/>
+                                                    <TextBox x:Name="txtTagLine" Style="{StaticResource ModernTextBox}"/>
                                                 </StackPanel>
-
-                                                <Button x:Name="btnCheckRank"
-                                                        Content="Refresh Rank Data"
-                                                        Style="{StaticResource SecondaryButton}"
-                                                        Click="btnCheckRank_Click"/>
-                                            </StackPanel>
+                                            </Grid>
+                                            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                                <Button x:Name="btnAddAccount" Content="Add" Click="btnAddAccount_Click" Style="{StaticResource ModernButton}" Padding="6,9" Margin="0,0,4,0"/>
+                                                <Button x:Name="btnUpdateAccount" Grid.Column="1" Content="Save" Click="btnUpdateAccount_Click" Style="{StaticResource SecondaryButton}" Padding="6,9" Margin="4,0"/>
+                                                <Button x:Name="btnDeleteAccount" Grid.Column="2" Content="Delete" Click="btnDeleteAccount_Click" Style="{StaticResource SecondaryButton}" Padding="6,9" Margin="4,0,0,0"/>
+                                            </Grid>
+                                            <Button x:Name="btnCheckRank" Content="Refresh rank data" Click="btnCheckRank_Click" Style="{StaticResource SecondaryButton}" Margin="0,8,0,0" Padding="8,7"/>
                                         </StackPanel>
                                     </ScrollViewer>
                                 </Border>

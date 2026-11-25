@@ -13,6 +13,15 @@ namespace RiotAutoLogin
         [STAThread]
         private static void Main()
         {
+            if (System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "--describe-build") >= 0)
+            {
+                System.IO.File.WriteAllText("build-channel.json", System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    development = BuildChannel.IsDevelopment, dataDirectory = BuildChannel.DataDirectoryName,
+                    startupSuffix = BuildChannel.StartupSuffix
+                }));
+                return;
+            }
             // Handle updater hooks before constructing WPF or starting client monitors.
             // A downloaded update still waits for the user's Update & Restart action.
             VelopackApp.Build()

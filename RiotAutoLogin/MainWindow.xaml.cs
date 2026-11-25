@@ -38,7 +38,7 @@ namespace RiotAutoLogin
         private HotkeySettings _hotkeySettings = new HotkeySettings();
         private readonly string _hotkeySettingsFilePath = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "RiotClientAutoLogin", "hotkey_settings.json");
+            BuildChannel.DataDirectoryName, "hotkey_settings.json");
 
         // Update Service
         private UpdateService? _updateService;
@@ -57,6 +57,11 @@ namespace RiotAutoLogin
         public MainWindow()
         {
             InitializeComponent();
+            if (BuildChannel.IsDevelopment)
+            {
+                Title = "Riot Auto Login · DEV";
+                txtAppName.Text = "Riot Auto Login · DEV";
+            }
             DataContext = this;
 
             LoadAccounts();
@@ -1387,7 +1392,7 @@ namespace RiotAutoLogin
             {
                 string filePath = System.IO.Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "RiotClientAutoLogin", "autopick_settings.json");
+                    BuildChannel.DataDirectoryName, "autopick_settings.json");
 
                 if (System.IO.File.Exists(filePath))
                 {
@@ -1410,7 +1415,7 @@ namespace RiotAutoLogin
             {
                 string directory = System.IO.Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "RiotClientAutoLogin");
+                    BuildChannel.DataDirectoryName);
 
                 if (!System.IO.Directory.Exists(directory))
                     System.IO.Directory.CreateDirectory(directory);

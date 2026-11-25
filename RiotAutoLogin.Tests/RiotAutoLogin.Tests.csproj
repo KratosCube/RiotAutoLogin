@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../RiotAutoLogin/Services/BuildChannel.cs" Link="BuildChannel.cs" />
+    <Compile Include="../RiotAutoLogin/Services/AnnualCsService.cs" Link="AnnualCsService.cs" />
+    <Compile Include="../RiotAutoLogin/Models/AnnualCs.cs" Link="AnnualCs.cs" />
+    <Compile Include="../RiotAutoLogin/Services/RemoteChampionPositions.cs" Link="RemoteChampionPositions.cs" />
     <Compile Include="../RiotAutoLogin/Models/Account.cs" Link="Account.cs" />
     <Compile Include="../RiotAutoLogin/Models/OpponentRankSummary.cs" Link="OpponentRankSummary.cs" />
     <Compile Include="../RiotAutoLogin/Models/RankedQueue.cs" Link="RankedQueue.cs" />

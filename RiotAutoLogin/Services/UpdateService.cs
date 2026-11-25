@@ -40,7 +40,7 @@ namespace RiotAutoLogin.Services
             _githubApiUrl = $"https://api.github.com/repos/{githubOwner}/{githubRepo}/releases?per_page=100";
             _settingsFilePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "RiotClientAutoLogin", "update_settings.json");
+                BuildChannel.DataDirectoryName, "update_settings.json");
             _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("RiotAutoLogin-UpdateChecker");
             LoadSettings();
             SupportsDeltaUpdates = new Velopack.UpdateManager(
@@ -51,6 +51,11 @@ namespace RiotAutoLogin.Services
             CancellationToken cancellationToken = default)
         {
             var info = new UpdateInfo { CurrentVersion = GetCurrentVersion(), LastChecked = DateTime.Now };
+            if (BuildChannel.IsDevelopment)
+            {
+                info.ErrorMessage = "Development build. Download newer test builds from GitHub prereleases; public updates use the stable app.";
+                return info;
+            }
             if (!manual && !ShouldCheckForUpdates()) return info;
             if (!await _checkGate.WaitAsync(0, cancellationToken))
             {
@@ -230,7 +235,7 @@ namespace RiotAutoLogin.Services
                     else
                     {
                         var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                            "RiotClientAutoLogin", "Updates", "Setup", Guid.NewGuid().ToString("N"));
+                            BuildChannel.DataDirectoryName, "Updates", "Setup", Guid.NewGuid().ToString("N"));
                         var installer = await Task.Run(() => UpdateDownloadVerifier.ExtractInstaller(downloadPath, directory));
                         if (Process.Start(new ProcessStartInfo(installer) { UseShellExecute = true }) == null)
                             throw new IOException("Could not start the installer.");

@@ -12,7 +12,7 @@ namespace RiotAutoLogin.Services
     {
         private static readonly string ApiKeyFilePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "RiotClientAutoLogin", "apikey.txt");
+            BuildChannel.DataDirectoryName, "apikey.txt");
 
         public static string GetApiKey()
         {

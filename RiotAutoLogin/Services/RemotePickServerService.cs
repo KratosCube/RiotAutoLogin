@@ -31,6 +31,8 @@ namespace RiotAutoLogin.Services
         private Task? _serverTask;
         private List<ChampionModel>? _championCache;
         private List<RemoteChampionDto>? _remoteChampionCache;
+        private Dictionary<int, string[]> _championPositions = new();
+        private DateTime _nextPositionsRefresh;
         private Dictionary<int, RemoteChampionDto>? _allChampionMetadata;
         private DateTime _nextChampionMetadataAttemptUtc;
         private List<RemoteSummonerSpellDto>? _remoteSpellCache;
@@ -884,6 +886,7 @@ namespace RiotAutoLogin.Services
         private async Task AddChampionSpellAndRuneListsAsync(RemotePickState state, HashSet<int> bannedChampionIds, HashSet<int> pickedChampionIds, HashSet<int> allyPickedChampionIds, HashSet<int> enemyPickedChampionIds)
         {
             await EnsureRemoteChampionCacheAsync();
+            await EnsureChampionPositionsAsync();
             EnrichTeamSlots(state);
             await EnsureRemoteSpellCacheAsync();
 
@@ -897,6 +900,7 @@ namespace RiotAutoLogin.Services
                     Id = champion.Id,
                     Name = champion.Name,
                     ImageUrl = champion.ImageUrl,
+                    Positions = _championPositions.GetValueOrDefault(champion.Id) ?? Array.Empty<string>(),
                     IsBanned = bannedChampionIds.Contains(champion.Id),
                     IsPicked = pickedChampionIds.Contains(champion.Id),
                     IsSelected = state.SelectedChampionId == champion.Id,
@@ -1306,6 +1310,23 @@ namespace RiotAutoLogin.Services
                 Debug.WriteLine($"Could not parse current rune page: {ex.Message}");
             }
             return 0;
+        }
+
+        private async Task EnsureChampionPositionsAsync()
+        {
+            if (DateTime.UtcNow < _nextPositionsRefresh) return;
+            _nextPositionsRefresh = DateTime.UtcNow.AddSeconds(30);
+            var response = await LCUService.ClientRequestAsync("GET", "lol-perks/v1/recommended-champion-positions");
+            if (response[0] != "200") return;
+            try
+            {
+                using var json = JsonDocument.Parse(response[1]);
+                var positions = RemoteChampionPositions.Parse(json.RootElement);
+                if (positions.Count == 0) return;
+                _championPositions = positions;
+                _nextPositionsRefresh = DateTime.UtcNow.AddMinutes(5);
+            }
+            catch (JsonException) { }
         }
 
         private async Task EnsureRemoteChampionCacheAsync()
