@@ -1,6 +1,7 @@
 using RiotAutoLogin.Models;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
@@ -14,6 +15,20 @@ internal sealed class LcuOpponentRankService(Func<string, CancellationToken, Tas
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<(string Region, string Puuid), CachedRanks> _rankCache = new();
     private sealed record CachedRanks(DateTime UpdatedUtc, Dictionary<RankedQueue, RankData> Ranks);
+
+    // A failed account must not abort the remaining accounts in the UI's refresh batch.
+    // Cancellation still propagates so changing queues or closing the app stops the batch.
+    internal async Task<OpponentRankSummary?> TryReadAsync(string gameName, string tagLine, string region,
+        RankedQueue queue, CancellationToken token)
+    {
+        try { return await ReadAsync(gameName, tagLine, region, queue, token).ConfigureAwait(false); }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Opponent rank lookup failed for one account: {ex.Message}");
+            return null;
+        }
+    }
 
     internal async Task<OpponentRankSummary?> ReadAsync(string gameName, string tagLine, string region,
         RankedQueue queue, CancellationToken token)

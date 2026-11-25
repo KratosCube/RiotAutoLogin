@@ -85,7 +85,7 @@ internal static class OpponentRankChecks
         cancelled.Cancel();
         try
         {
-            await service.ReadAsync("Two Words", "TAG", "euw1", RankedQueue.SoloDuo, cancelled.Token);
+            await service.TryReadAsync("Two Words", "TAG", "euw1", RankedQueue.SoloDuo, cancelled.Token);
             throw new Exception("A cancelled queue lookup kept running.");
         }
         catch (OperationCanceledException) { }
@@ -129,6 +129,7 @@ internal static class OpponentRankChecks
         var legacy = JsonSerializer.Deserialize<Account>("""{"GameName":"Old","QueueOpponentRanks":null}""")!;
         legacy.MigrateLegacyRank();
         Require(legacy.OpponentRankLabel == "—", "Older accounts must remain readable.");
+        await CheckAccountFailureIsolation();
         Console.WriteLine("Opponent rank history, coverage, cache, queue, identity and saved-account checks passed.");
 
         Task<string[]> Read(string path, CancellationToken token)
@@ -161,7 +162,77 @@ internal static class OpponentRankChecks
         }
     }
 
-    private static JsonObject Game(long id, int queue = 420, bool summary = false)
+    private static async Task CheckAccountFailureIsolation()
+    {
+        foreach (var (clientRegion, platform, otherPlatform) in new[]
+                 { ("EUW", "EUW1", "EUN1"), ("EUNE", "EUN1", "EUW1") })
+        {
+            var accounts = new[]
+            {
+                new Account { GameName = "First", TagLine = "TAG", Region = platform },
+                new Account { GameName = "OtherRegion", TagLine = "TAG", Region = otherPlatform },
+                new Account { GameName = "Unavailable", TagLine = "TAG", Region = platform },
+                new Account { GameName = "Last", TagLine = "TAG", Region = platform }
+            };
+            var saved = new OpponentRankSummary { MeanRankPosition = 900, Games = 3 };
+            accounts[1].ApplyOpponentRanks(RankedQueue.SoloDuo, saved);
+            accounts[2].ApplyOpponentRanks(RankedQueue.SoloDuo, saved);
+            var visited = new List<string>();
+            var service = new LcuOpponentRankService(ReadBatch);
+            foreach (var account in accounts)
+            {
+                var summary = await service.TryReadAsync(account.GameName, account.TagLine, account.Region,
+                    RankedQueue.SoloDuo, default);
+                if (summary != null) account.ApplyOpponentRanks(RankedQueue.SoloDuo, summary);
+            }
+
+            Require(visited.SequenceEqual(["First", "Unavailable", "Last"]),
+                $"The {clientRegion} batch must skip another region and continue after a failed account.");
+            Require(accounts[0].DisplayOpponents is { Games: 1, RankedOpponents: 5 } &&
+                    accounts[3].DisplayOpponents is { Games: 1, RankedOpponents: 5 },
+                $"Both available {clientRegion} accounts must receive opponent statistics.");
+            Require(accounts[0].DisplayRank == null && accounts[3].DisplayRank == null,
+                "An account's own rank must not be required to load its opponent sample.");
+            Require(ReferenceEquals(saved, accounts[1].DisplayOpponents) &&
+                    ReferenceEquals(saved, accounts[2].DisplayOpponents),
+                "Skipped and failed accounts must retain their last successful sample.");
+
+            Task<string[]> ReadBatch(string path, CancellationToken token)
+            {
+                token.ThrowIfCancellationRequested();
+                if (path == "riotclient/region-locale")
+                    return Reply(JsonSerializer.Serialize(new { region = clientRegion }));
+                foreach (var account in accounts)
+                {
+                    if (path == $"lol-summoner/v1/alias/lookup?gameName={account.GameName}&tagLine=TAG")
+                    {
+                        visited.Add(account.GameName);
+                        return account.GameName == "Unavailable" ? Reply("{}", "500") :
+                            Reply(JsonSerializer.Serialize(new
+                            {
+                                alias = new { gameName = account.GameName, tagLine = account.TagLine },
+                                puuid = account.GameName
+                            }));
+                    }
+                    if (path == $"lol-match-history/v1/products/lol/{account.GameName}/matches?begIndex=0&endIndex=100")
+                    {
+                        var game = Game(50, platform: platform);
+                        game["participantIdentities"]![6]!["player"]!["puuid"] = account.GameName;
+                        return Reply(new JsonObject
+                        {
+                            ["platformId"] = platform,
+                            ["games"] = new JsonObject { ["games"] = new JsonArray(game) }
+                        }.ToJsonString());
+                    }
+                }
+                if (path.StartsWith("lol-ranked/v1/ranked-stats/player-"))
+                    return Reply("""{"queues":[{"queueType":"RANKED_SOLO_5x5","tier":"GOLD","division":"III","leaguePoints":0}]}""");
+                throw new Exception($"Unexpected account batch request {path}");
+            }
+        }
+    }
+
+    private static JsonObject Game(long id, int queue = 420, bool summary = false, string platform = "EUW1")
     {
         var identities = new JsonArray();
         var players = new JsonArray();
@@ -171,7 +242,7 @@ internal static class OpponentRankChecks
             identities.Add(new JsonObject
             {
                 ["participantId"] = participant,
-                ["player"] = new JsonObject { ["puuid"] = participant == 7 ? "self" : $"player-{participant}", ["currentPlatformId"] = "EUW1" }
+                ["player"] = new JsonObject { ["puuid"] = participant == 7 ? "self" : $"player-{participant}", ["currentPlatformId"] = platform }
             });
             players.Add(new JsonObject
             {
@@ -182,7 +253,7 @@ internal static class OpponentRankChecks
         return new JsonObject
         {
             ["gameId"] = id, ["gameCreation"] = id * 1000, ["gameDuration"] = 1200, ["queueId"] = queue,
-            ["platformId"] = "EUW1", ["participantIdentities"] = identities, ["participants"] = players
+            ["platformId"] = platform, ["participantIdentities"] = identities, ["participants"] = players
         };
     }
 
