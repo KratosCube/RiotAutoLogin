@@ -45,8 +45,17 @@ namespace RiotAutoLogin.Models
         [JsonIgnore] public OpponentRankSummary? DisplayOpponents => QueueOpponentRanks.GetValueOrDefault(SelectedQueue);
         [JsonIgnore] public string OpponentRankLabel => DisplayOpponents?.Label ?? "—";
         [JsonIgnore] public string OpponentSampleLabel => DisplayOpponents is { } sample ? $"{sample.Games}g" : "";
-        [JsonIgnore] public string OpponentRankTooltip => DisplayOpponents?.Tooltip ??
-            "Average opponent rank from up to 10 recent games in this queue. Open League Client on this account's region, then refresh account stats to sync.";
+        private readonly Dictionary<RankedQueue, string> _opponentRankStatuses = new();
+        [JsonIgnore] public string OpponentRankRefreshStatus => _opponentRankStatuses.GetValueOrDefault(SelectedQueue) ?? "";
+        [JsonIgnore] public string OpponentRankTooltip => (DisplayOpponents?.Tooltip ??
+            "Average opponent rank from up to 10 recent games in this queue. Open League Client in this account's region or save a Riot API key in Settings.") +
+            (OpponentRankRefreshStatus.Length > 0 ? "\n" + OpponentRankRefreshStatus : "");
+
+        public void SetOpponentRankStatus(RankedQueue queue, string status)
+        {
+            _opponentRankStatuses[queue] = status;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OpponentRankTooltip)));
+        }
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -113,6 +122,7 @@ namespace RiotAutoLogin.Models
 
             QueueRanks = new();
             QueueOpponentRanks = new();
+            _opponentRankStatuses.Clear();
             RanksUpdatedUtc = null;
             RankInfo = string.Empty;
             LeaguePoints = Wins = Losses = 0;

@@ -20,7 +20,6 @@ namespace RiotAutoLogin.Services
 
     public static class RiotClientAutomationService
     {
-        private static readonly HttpClient _httpClient = new();
         private static readonly ConcurrentDictionary<string, string> PuuidCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly SemaphoreSlim LoginGate = new(1, 1);
         private static readonly string[] LoginProcessNames =
@@ -76,14 +75,6 @@ namespace RiotAutoLogin.Services
             public int Top;
             public int Right;
             public int Bottom;
-        }
-
-        static RiotClientAutomationService()
-        {
-            _httpClient.DefaultRequestHeaders.Add(
-                "User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-            _httpClient.Timeout = TimeSpan.FromSeconds(30);
         }
 
         public static async Task<RiotLoginResult> LaunchAndLoginAsync(
@@ -443,7 +434,7 @@ namespace RiotAutoLogin.Services
 
         private static async Task<Dictionary<RankedQueue, RankData>> GetPublicRanksAsync(string gameName, string tagLine, string region, string apiKey)
         {
-            string identity = $"{region}/{gameName}#{tagLine}";
+            string identity = $"{RiotApiClient.KeyId(apiKey)}/{region}/{gameName}#{tagLine}";
             if (!PuuidCache.TryGetValue(identity, out string? puuid))
             {
                 puuid = await GetAccountPuuidByRiotIdAsync(gameName, tagLine, apiKey);
@@ -459,35 +450,8 @@ namespace RiotAutoLogin.Services
 
         private static async Task<string> SendRiotGetAsync(string url, string apiKey)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.TryAddWithoutValidation("X-Riot-Token", apiKey);
-
-            using var response = await _httpClient.SendAsync(request);
-            string content = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw CreateRiotApiException(response.StatusCode, content);
-            }
-
-            return content;
-        }
-
-        private static Exception CreateRiotApiException(HttpStatusCode statusCode, string responseBody)
-        {
-            int code = (int)statusCode;
-
-            return code switch
-            {
-                400 => new InvalidOperationException("Bad Riot API request."),
-                401 => new InvalidOperationException("Unauthorized Riot API request."),
-                403 => new InvalidOperationException("Invalid or expired Riot API key."),
-                404 => new InvalidOperationException("Riot account or summoner was not found."),
-                429 => new InvalidOperationException("Riot API rate limit exceeded. Try again in a moment."),
-                500 => new InvalidOperationException("Riot API internal server error."),
-                503 => new InvalidOperationException("Riot API is temporarily unavailable."),
-                _ => new InvalidOperationException($"Riot API error {code}: {responseBody}")
-            };
+            var response = await RiotApiClient.Shared.GetAsync(url, apiKey).ConfigureAwait(false);
+            return response?.GetRawText() ?? throw new InvalidOperationException("Riot account or summoner was not found.");
         }
 
         private static async Task<string?> GetAccountPuuidByRiotIdAsync(string gameName, string tagLine, string apiKey)

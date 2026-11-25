@@ -11,6 +11,7 @@ public partial class MainWindow
 {
     private readonly LcuOpponentRankService _opponentRanks = new(
         (path, token) => LCUService.ClientRequestAsync("GET", path, cancellationToken: token));
+    private readonly PublicOpponentRankService _publicOpponentRanks = new(RiotApiClient.Shared.GetAsync);
     private CancellationTokenSource? _opponentRefreshCts;
     private Task? _opponentRefreshTask;
     private Models.RankedQueue _opponentRefreshQueue;
@@ -21,6 +22,7 @@ public partial class MainWindow
         var queue = SelectedStatsQueue;
         if (!force && _opponentRefreshTask is { IsCompleted: false } && _opponentRefreshQueue == queue) return;
         _opponentRefreshCts?.Cancel();
+        foreach (var account in _accounts) account.SetOpponentRankStatus(queue, "");
         var source = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
         _opponentRefreshCts = source;
         _opponentRefreshQueue = queue;
@@ -31,7 +33,8 @@ public partial class MainWindow
             try
             {
                 await Task.Delay(1000, source.Token);
-                if (!await Task.Run(LCUService.CheckIfLeagueClientIsOpen, source.Token)) return;
+                var lookup = new OpponentRankSources(_opponentRanks.TryReadAsync, _publicOpponentRanks.ReadAsync);
+                string key = await Task.Run(ApiKeyManager.GetApiKey, source.Token);
                 foreach (var account in _accounts.ToArray())
                 {
                     source.Token.ThrowIfCancellationRequested();
@@ -40,10 +43,29 @@ public partial class MainWindow
                         continue;
                     string name = account.GameName, tag = account.TagLine, region = account.Region;
                     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(source.Token);
-                    timeout.CancelAfter(TimeSpan.FromSeconds(45));
+                    timeout.CancelAfter(TimeSpan.FromMinutes(4));
                     Models.OpponentRankSummary? summary;
-                    try { summary = await _opponentRanks.TryReadAsync(name, tag, region, queue, timeout.Token); }
-                    catch (OperationCanceledException) when (!source.IsCancellationRequested) { continue; }
+                    string status;
+                    account.SetOpponentRankStatus(queue, "Refreshing opponent ranks in the background…");
+                    try
+                    {
+                        bool clientOpen = await Task.Run(LCUService.CheckIfLeagueClientIsOpen, timeout.Token);
+                        (summary, status) = await lookup.ReadAsync(name, tag, region, queue, clientOpen, key, timeout.Token);
+                    }
+                    catch (OperationCanceledException) when (!source.IsCancellationRequested)
+                    {
+                        if (_accounts.Contains(account) && account.MatchesRiotId(name, tag, region))
+                            account.SetOpponentRankStatus(queue, "Refresh timed out. Saved statistics are retained; try refreshing again.");
+                        continue;
+                    }
+                    finally
+                    {
+                        if (source.IsCancellationRequested && ReferenceEquals(_opponentRefreshCts, source) &&
+                            _accounts.Contains(account) && account.MatchesRiotId(name, tag, region))
+                            account.SetOpponentRankStatus(queue, "");
+                    }
+                    if (!source.IsCancellationRequested && _accounts.Contains(account) && account.MatchesRiotId(name, tag, region))
+                        account.SetOpponentRankStatus(queue, status);
                     if (summary == null || source.IsCancellationRequested || !_accounts.Contains(account) ||
                         !account.MatchesRiotId(name, tag, region)) continue;
                     account.ApplyOpponentRanks(queue, summary);

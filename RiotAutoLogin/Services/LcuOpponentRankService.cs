@@ -66,7 +66,7 @@ internal sealed class LcuOpponentRankService(Func<string, CancellationToken, Tas
                 .Take(100)
                 .Where(game => CompletedInQueue(game, queue))
                 .ToArray();
-            var result = new OpponentRankSummary();
+            var result = new OpponentRankSummary { Source = "League Client" };
             double totalPosition = 0;
             int reportedOpponents = 0;
             foreach (var game in recent)
