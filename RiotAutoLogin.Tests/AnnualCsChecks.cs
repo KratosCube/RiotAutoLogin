@@ -37,7 +37,11 @@ internal static class AnnualCsChecks
         string legacyPath = historyPath + ".legacy";
         try
         {
-            string legacyJson = JsonSerializer.Serialize(new[] { new { GameName = "Farmer", TagLine = "TAG", Region = "eun1", AnnualCs = restored } });
+            string legacyJson = JsonSerializer.Serialize(new[]
+            {
+                new { GameName = "Farmer", TagLine = "TAG", Region = "eun1", AnnualCs = restored },
+                new { GameName = "farmer", TagLine = "tag", Region = "EUNE", AnnualCs = new AnnualCs() }
+            });
             Require(AnnualCsStore.PreserveLegacy(legacyJson, legacyPath), "Legacy history must be preserved before startup saves account metadata.");
             var migrated = new AnnualCsStore(historyPath, legacyPath).Load();
             Require(migrated.Values.Single().Matches.Count == 29 && File.Exists(historyPath) && !File.Exists(legacyPath),

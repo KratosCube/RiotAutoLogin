@@ -39,7 +39,19 @@ internal sealed class AnnualCsStore(string path, string? legacyPath = null)
                 TagLine = row.GetProperty("TagLine").GetString() ?? "",
                 Region = row.GetProperty("Region").GetString() ?? ""
             };
-            saved[Identity(identity)] = history.Deserialize<AnnualCs>() ?? new();
+            string key = Identity(identity);
+            var imported = history.Deserialize<AnnualCs>() ?? new();
+            if (saved.TryGetValue(key, out var previous))
+            {
+                // Duplicate saved Riot IDs may have different partial imports. Preserve both sets of games.
+                var latest = imported.ScanUntil >= previous.ScanUntil ? imported : previous;
+                var other = ReferenceEquals(latest, imported) ? previous : imported;
+                foreach (var game in other.Matches) latest.Matches.TryAdd(game.Key, game.Value);
+                latest.Unavailable.UnionWith(other.Unavailable);
+                latest.Unavailable.ExceptWith(latest.Matches.Keys);
+                imported = latest;
+            }
+            saved[key] = imported;
         }
         Save(saved); // Only remove the migration snapshot after the standalone history is durable.
         File.Delete(legacyPath);
