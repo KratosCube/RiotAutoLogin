@@ -202,7 +202,7 @@ internal static class Program
             for (int page = 0; page < settingsPages.Length; page++)
             {
                 settingsNav.SelectedIndex = page;
-                window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
                 window.UpdateLayout();
                 string[][] requiredControls = [
                     ["tglRunOnStartup", "txtHotkeyKey", "btnSaveHotkey", "txtExecutablePath"],
