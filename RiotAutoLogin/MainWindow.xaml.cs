@@ -768,6 +768,7 @@ namespace RiotAutoLogin
             if (success)
             {
                 apiKeyTextBox.Text = "••••••••••••••••••••" + apiKey.Substring(Math.Max(0, apiKey.Length - 4));
+                StartOpponentRankRefresh(force: true);
                 System.Windows.MessageBox.Show("API key saved successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else

@@ -14,6 +14,7 @@ public sealed class OpponentRankSummary
     public int RankedOpponents { get; set; }
     public int TotalOpponents { get; set; }
     public DateTime UpdatedUtc { get; set; }
+    public string Source { get; set; } = "";
 
     [JsonIgnore]
     public string Label
@@ -32,10 +33,11 @@ public sealed class OpponentRankSummary
     [JsonIgnore]
     public string Tooltip =>
         $"Average current rank of {RankedOpponents}/{TotalOpponents} opponents across {Games} games in this queue. " +
-        $"Up to {SampleLimit} recent completed games from the client's latest 100 history entries. " +
+        $"Up to {SampleLimit} recent completed games from " +
+        (Source == "Riot API" ? "the API's latest 100 entries in this queue. " : "the client's latest 100 history entries. ") +
         "Remakes, unavailable and unranked opponents are excluded from the average. " +
         "Ranks reflect the latest lookup, cached for up to 15 minutes. Each division spans 100 LP and Master+ uses a shared LP ladder. " +
-        $"Updated {UpdatedUtc.ToLocalTime():g}.";
+        $"Updated {UpdatedUtc.ToLocalTime():g}." + (Source.Length > 0 ? $" Source: {Source}." : "");
 
     internal static double? Position(RankData rank)
     {
