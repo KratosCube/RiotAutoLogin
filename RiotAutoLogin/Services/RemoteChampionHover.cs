@@ -31,7 +31,7 @@ internal static class RemoteChampionHover
 
     internal static async Task<RemotePickActionResult> ApplyAsync(int championId, string expectedDraft,
         Func<Task<string>> phase, Func<string, string, string?, Task<string[]>> request,
-        Action invalidate, Func<int, Task> delay, string gameMode = "")
+        Action invalidate, Func<int, Task> delay, Func<int, string>? queueMode = null)
     {
         if (championId <= 0) return Fail("Invalid champion.");
         if (await phase() != "ChampSelect") return Fail("You are not in champion select.");
@@ -41,7 +41,9 @@ internal static class RemoteChampionHover
         if (session == null) return Fail("Cannot read the current champion select session.");
         var state = await ReadState(session.RootElement);
         if (expectedDraft.Length > 0 && expectedDraft != state.DraftId) return Fail("The draft has changed. Choose your champion again.");
-        if (RemoteRandomSelection.IsRandom(session.RootElement, state.QueueId, gameMode)) return Fail("Choose a champion card or take a champion from the bench.");
+        string mode = queueMode?.Invoke(state.QueueId) ?? "";
+        if (mode.Length == 0) mode = RemoteLobbyData.Text(session.RootElement, "gameMode");
+        if (RemoteRandomSelection.IsRandom(session.RootElement, state.QueueId, mode)) return Fail("Choose a champion card or take a champion from the bench.");
         if (state.DraftId.Length == 0 || state.IsPickLocked || !RemoteDraftInteractions.ValidId(state.PickActionId) || !OpenPick(session.RootElement, state.PickActionId) ||
             (!state.IsPlanning && !state.CanPick && (state.ChampSelectPhase != "BAN_PICK" || state.CanBan)))
             return Fail("The client is not accepting a pick hover in this phase.");

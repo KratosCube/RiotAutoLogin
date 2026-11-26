@@ -73,6 +73,13 @@ internal static class RemoteHoverChecks
         }
         Require((await RemoteChampionHover.ApplyAsync(17,"123456",() => Task.FromResult("ChampSelect"),SeparateTimer,() => {},Delay)).Success,
             "A client exposing the phase through its timer endpoint must still support planning intent.");
+        client = JsonNode.Parse(Planning)!; client["queueId"] = 9876;
+        int beforeModeChecks = writes.Count;
+        Require(!(await RemoteChampionHover.ApplyAsync(17,"123456",() => Task.FromResult("ChampSelect"),Transport,() => {},Delay, _ => "ARAM")).Success && writes.Count == beforeModeChecks,
+            "The same cached client queue mode must protect random variants even when their ID is unfamiliar.");
+        client["queueId"] = 1700; client["benchEnabled"] = true;
+        Require((await RemoteChampionHover.ApplyAsync(17,"123456",() => Task.FromResult("ChampSelect"),Transport,() => {},Delay, _ => "CHERRY")).Success,
+            "Arena must retain normal pick declaration even if a shared client capability flag resembles ARAM.");
         Console.WriteLine("Remote hover LCU transcript checks passed: inactive planning pick action, repeated changes, fresh read-back, ignored acknowledgement and stale/completed-action guards.");
     }
     private static void Require(bool value,string message) { if (!value) throw new Exception(message); }

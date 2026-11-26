@@ -46,7 +46,7 @@ internal static class RemoteDraftActions
         if (pendingChampion > 0 && !state.IsPickLocked && (planning || !blocked))
         {
             state.HoveredChampionId = state.PickIntentChampionId = pendingChampion;
-            state.HoveredChampionSource = planning ? "PlanningPickAction" : "PickIntentAction";
+            state.HoveredChampionSource = planning ? "PlanningPickAction" : state.CanPick ? "ActivePick" : "PickIntentAction";
         }
         if (blocked) { state.HoveredBanChampionId = 0; state.TimerActionKey = $"phase:{state.ChampSelectPhase}"; }
         else if (state.TimerActionKey.Length == 0) state.TimerActionKey = $"phase:{state.ChampSelectPhase}|action:{state.ActionType}|id:{state.ActionId}";

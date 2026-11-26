@@ -731,7 +731,9 @@ namespace RiotAutoLogin.Services
                 return await RemoteChampionHover.ApplyAsync(request.ChampionId, expectedDraft,
                     () => LCUService.GetCurrentGamePhaseAsync(),
                     (method, path, payload) => LCUService.ClientRequestAsync(method, path, payload),
-                    LCUService.InvalidateCachedReads, Task.Delay);
+                    LCUService.InvalidateCachedReads, Task.Delay,
+                    id => _queueCatalog is { } catalog
+                        ? RemoteLobbyData.Text(catalog.Json.EnumerateArray().FirstOrDefault(queue => RemoteLobbyData.Number(queue, "id") == id), "gameMode") : "");
             }
             catch (JsonException) { return Failure("Invalid champion."); }
             finally { _hoverGate.Release(); }
