@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../RiotAutoLogin/Services/RemoteDraftActions.cs" Link="RemoteDraftActions.cs" />
+    <Compile Include="../RiotAutoLogin/Services/RemoteLobbyPositions.cs" Link="RemoteLobbyPositions.cs" />
+    <Compile Include="../RiotAutoLogin/Services/RemoteReadyCheck.cs" Link="RemoteReadyCheck.cs" />
+    <Compile Include="../RiotAutoLogin/Services/RemoteChatData.cs" Link="RemoteChatData.cs" />
     <Compile Include="../RiotAutoLogin/Services/RemoteDraftInteractions.cs" Link="RemoteDraftInteractions.cs" />
     <Compile Include="../RiotAutoLogin/Services/RemoteSkinData.cs" Link="RemoteSkinData.cs" />
     <Compile Include="../RiotAutoLogin/Services/RemoteDraftExit.cs" Link="RemoteDraftExit.cs" />

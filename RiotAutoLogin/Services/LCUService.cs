@@ -144,7 +144,9 @@ namespace RiotAutoLogin.Services
                                 }
                             }
 
-                            string[] acceptResult = ClientRequest("POST", "lol-matchmaking/v1/ready-check/accept");
+                            cancellationToken.ThrowIfCancellationRequested();
+                            if (AutoAcceptDeclineGuardService.IsManualDeclineActive) continue;
+                            string[] acceptResult = await ClientRequestAsync("POST", "lol-matchmaking/v1/ready-check/accept", cancellationToken: cancellationToken);
                             Debug.WriteLine(acceptResult[0].StartsWith("2")
                                 ? "Match accepted successfully!"
                                 : $"Failed to accept match. Status: {acceptResult[0]}");
@@ -197,7 +199,7 @@ namespace RiotAutoLogin.Services
         {
             string path = url.TrimStart('/');
             int ttl = path switch { "lol-champ-select/v1/session" => 150, "lol-lobby/v2/lobby" => 250,
-                "lol-matchmaking/v1/ready-check" => 100,
+                "lol-matchmaking/v1/ready-check" => 100, "lol-chat/v1/conversations" => 500,
                 "lol-champ-select/v1/session/pick-order-swaps" or "lol-champ-select/v1/session/position-swaps" => 1000,
                 "lol-champ-select/v1/skin-selector-info" or "lol-champ-select/v1/skin-carousel-skins" or "lol-champ-select/v1/pickable-skin-ids" => 150, "lol-lobby-team-builder/champ-select/v1/subset-champion-list" => 150, _ => 0 };
             if (method == "GET" && ttl > 0)

@@ -10,7 +10,7 @@ const champions = Array.from({length: 90}, (_, i) => ({
   imageUrl: 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', isDisabled: i === 1
 }));
 const lobby = {phase: 'Lobby', phaseLabel: 'Lobby', queueName: 'Normal Draft', canStartLobby: true, partySize: 3,
-  queueId: 400, canChangeQueue: true, lobbyMembers: [{playerName: 'My Player', tagLine: 'EUW', isLocalPlayer: true, isLeader: true}, {playerName: 'Friend', firstPosition: 'MIDDLE'}, {playerName: '<friend>'}], queues: [{id: 400, name: 'Normal Draft', isAvailable: true}, {id: 420, name: 'Ranked Solo / Duo', isAvailable: true}, {id: 2400, name: 'ARAM Mayhem', isAvailable: true}, {id: 9876, name: 'Arena', isAvailable: false, unavailableReason: 'Unavailable'}], isInChampSelect: false, canLeave: true, phaseElapsedSeconds: -1, timeLeftInPhaseMs: -1};
+  queueId: 400, canChangeQueue: true, canSelectPositions:true, firstPosition:'MIDDLE', secondPosition:'UTILITY', lobbyMembers: [{playerName: 'My Player', tagLine: 'EUW', isLocalPlayer: true, isLeader: true}, {playerName: 'Friend', firstPosition: 'MIDDLE'}, {playerName: '<friend>'}], queues: [{id: 400, name: 'Normal Draft', isAvailable: true}, {id: 420, name: 'Ranked Solo / Duo', isAvailable: true}, {id: 2400, name: 'ARAM Mayhem', isAvailable: true}, {id: 9876, name: 'Arena', isAvailable: false, unavailableReason: 'Unavailable'}], isInChampSelect: false, canLeave: true, phaseElapsedSeconds: -1, timeLeftInPhaseMs: -1};
 const draft = {...lobby, phase: 'ChampSelect', draftId: 'match-101', swaps: [], phaseLabel: 'Pick Phase', isInChampSelect: true, canStartLobby: false,
   champions, canPick: true, actionType: 'pick', actionId: '42', timeLeftInPhaseMs: 21000,
   allySlots: [{cellId: 0, isLocalPlayer: true}], enemySlots: [{cellId: 5}]};
@@ -22,10 +22,12 @@ async function run() {
     page.setDefaultTimeout(6500);
     const errors = [], posts = [];
     page.on('pageerror', e => errors.push(e.message));
-    let state = {...lobby}, tick = 0, delayFull = null, skinSelected = 1000, failSkin = false;
+    let state = {...lobby}, tick = 0, delayFull = null, skinSelected = 1000, failSkin = false, failChat = false;
+    let messages = [{id:'first',author:'Friend',body:'I can swap to jungle.',isLocalPlayer:false},{id:'markup',author:'Ally 3',body:'<img src=x onerror=alert(1)>',isLocalPlayer:false}];
     await page.route('https://remote-pick.test/**', async route => {
       const url = new URL(route.request().url());
       if (url.pathname === '/') return route.fulfill({contentType: 'text/html', body: html});
+      if (url.pathname === '/api/chat' && route.request().method() === 'GET') return route.fulfill({json:{draftId:state.draftId,roomId:'room-'+state.draftId,isAvailable:true,messages}});
       if (url.pathname === '/api/skins') return route.fulfill({json: {draftId:state.draftId,championId:state.selectedChampionId,selectedSkinId:skinSelected,canSelect:!!state.canSelectSkin,skins:[
         {id:1000,name:'Annie',isAvailable:true,imageUrl:champions[0].imageUrl,thumbnailUrl:champions[0].imageUrl},
         {id:1001,name:'Gothic Annie',isAvailable:true,imageUrl:champions[0].imageUrl,thumbnailUrl:champions[0].imageUrl}
@@ -35,6 +37,13 @@ async function run() {
         posts.push(url.pathname);
         let result = {success: true};
         switch (url.pathname) {
+          case '/api/positions': { const body = route.request().postDataJSON(); assert.equal(body.queueId,state.queueId); state = {...state,firstPosition:body.firstPreference,secondPosition:body.secondPreference}; break; }
+          case '/api/chat': {
+            const body = route.request().postDataJSON(); assert.equal(body.draftId,state.draftId); assert.equal(body.roomId,'room-'+state.draftId);
+            if (failChat) result = {success:false,message:'Message not confirmed.'};
+            else messages = [...messages,{id:'sent-'+messages.length,author:'You',body:body.message,isLocalPlayer:true}]; break;
+          }
+          case '/api/decline-match': assert.equal(route.request().postDataJSON().readyCheckId,state.readyCheckId); state = {...lobby,phase:'Matchmaking',canStartLobby:false}; break;
           case '/api/skin': {
             const body = route.request().postDataJSON(); assert.equal(body.draftId,state.draftId); assert.equal(body.championId,1);
             if (failSkin) result = {success:false,message:'Skin change not confirmed.'};
@@ -55,7 +64,7 @@ async function run() {
           case '/api/change-queue': state = {...state, queueId: route.request().postDataJSON().queueId}; break;
           case '/api/bench-swap': state = {...state, selectedChampionId: route.request().postDataJSON().championId, benchChampionIds: []}; break;
           case '/api/start-queue': state = {...lobby, phase: 'Matchmaking', canStartLobby: false, phaseElapsedSeconds: 93}; break;
-          case '/api/accept-match': state = {...draft}; break;
+          case '/api/accept-match': assert.equal(route.request().postDataJSON().readyCheckId,state.readyCheckId); state = {...draft}; break;
           case '/api/hover':
           case '/api/ban-hover': {
             const id = route.request().postDataJSON().championId;
@@ -99,7 +108,7 @@ async function run() {
     state = {...lobby}; await paint();
     await byId('roomAction').click();
     await page.waitForFunction(() => document.querySelector('#timer').textContent.startsWith('1:3'));
-    state = {...lobby, phase: 'ReadyCheck', phaseLabel: 'Match found', canStartLobby: false, canAcceptMatch: true};
+    state = {...lobby, phase: 'ReadyCheck', phaseLabel: 'Match found', readyCheckId:'ready-1',canDeclineMatch:true, canStartLobby: false, canAcceptMatch: true};
     await paint();
     await page.getByRole('button', {name: 'Accept match'}).click();
     await byId('positionFilter').selectOption('mid');
@@ -238,8 +247,65 @@ async function run() {
     await byId('queueSelect').selectOption('2400'); await byId('changeQueue').click(); await byId('acceptConfirm').click();
     await page.waitForFunction(() => state.queueId === 2400);
     assert.deepEqual(posts.slice(-8),['/api/swap','/api/swap','/api/swap','/api/swap','/api/skin','/api/skin','/api/leave','/api/change-queue']);
+    state = {...draft,isPlanning:true,champSelectPhase:'PLANNING',canPick:false,canBan:false,isMyTurn:true,actionType:'ban',actionId:'9'}; await paint();
+    assert.equal(await byId('phase').textContent(),'Hover your champion');
+    assert.equal(await page.getByRole('button',{name:'Set ban Annie',exact:true}).count(),0);
+    const planningPosts = posts.length;
+    await page.getByRole('button',{name:'Preview Annie',exact:true}).click();
+    await page.waitForFunction(() => state.hoveredChampionId === 1);
+    assert.deepEqual(posts.slice(planningPosts),['/api/hover']);
+    assert.equal(await byId('commitChampion').isVisible(),false);
+    state = {...state,isPlanning:false,champSelectPhase:'BAN_PICK',canBan:true}; await paint();
+    await page.getByRole('button',{name:'Set ban Annie',exact:true}).waitFor();
+    state = {...draft,selectedChampionId:1,canPick:false,isPickLocked:false}; await paint();
+    assert.equal(await page.getByRole('button',{name:'Chat',exact:true}).count(),0,'A hover must not replace champion selection');
+    state = {...state,isPickLocked:true}; await paint();
+    await page.getByRole('button',{name:'Chat',exact:true}).click();
+    await byId('chatMessages').getByText('I can swap to jungle.',{exact:true}).waitFor();
+    assert.equal(await byId('championView').isVisible(),false);
+    assert.equal(await byId('chatMessages').getByText('<img src=x onerror=alert(1)>',{exact:true}).count(),1);
+    assert.equal(await byId('chatMessages').locator('img').count(),0,'Chat markup must stay text');
+    for (const [width,height] of [[390,844],[932,430],[667,375]]) {
+      await page.setViewportSize({width,height});
+      const geometry = await page.evaluate(() => { const form = document.querySelector('#chatForm').getBoundingClientRect(), nav = document.querySelector('nav').getBoundingClientRect();
+        return {formBottom:form.bottom,formTop:form.top,navTop:nav.top,overflow:document.documentElement.scrollHeight-innerHeight,x:document.documentElement.scrollWidth-innerWidth}; });
+      assert.ok(geometry.formTop >= 0 && geometry.formBottom <= geometry.navTop + 1 && geometry.overflow <= 1 && geometry.x <= 1, 'Chat fits '+JSON.stringify(geometry));
+      await page.screenshot({path:`build/remote-chat-${width}-preview.png`});
+    }
+    failChat = true; await byId('chatInput').fill('Ready when you are'); await byId('chatSend').click();
+    await page.getByText('Message not confirmed.',{exact:true}).waitFor(); await page.waitForFunction(() => !actionPending);
+    assert.equal(await byId('chatInput').inputValue(),'Ready when you are','Failed send must retain the draft');
+    failChat = false; await byId('chatSend').click();
+    await byId('chatMessages').getByText('Ready when you are',{exact:true}).waitFor();
+    assert.equal(await byId('chatInput').inputValue(),'');
+    state = {...state,draftId:'new-chat-draft'}; messages = []; await paint();
+    assert.equal(await byId('chatMessages').getByText('Ready when you are',{exact:true}).count(),0,'A new draft must not inherit old chat');
+    state = {...draft,isPickLocked:true,isRandomChampionMode:true,benchEnabled:true,benchChampionIds:[3],cardChampionIds:[],canSelectCard:false,canPick:false}; await paint();
+    await page.getByRole('button',{name:'Champions',exact:true}).waitFor();
+    assert.equal(await byId('chatView').isVisible(),false,'ARAM bench remains available after its initial choice');
+    state = {...lobby,canChangeQueue:false}; await paint();
+    assert.equal(await byId('firstPosition').isDisabled(),false,'A non-leader may choose their own role');
+    await byId('firstPosition').selectOption('TOP'); await byId('secondPosition').selectOption('TOP');
+    assert.equal(await byId('savePositions').isDisabled(),true);
+    await byId('secondPosition').selectOption('JUNGLE'); await byId('savePositions').click();
+    await page.waitForFunction(() => state.firstPosition === 'TOP' && state.secondPosition === 'JUNGLE');
+    await byId('firstPosition').selectOption('FILL'); assert.equal(await byId('secondPosition').isDisabled(),true);
+    await byId('savePositions').click(); await page.waitForFunction(() => state.firstPosition === 'FILL');
+    state = {...lobby,canSelectPositions:false,queueId:450}; await paint();
+    assert.equal(await byId('positionControls').isVisible(),false);
+    state = {...lobby,phase:'ReadyCheck',readyCheckId:'ready-2',canStartLobby:false,canAcceptMatch:true,canDeclineMatch:true,canLeave:false}; await paint();
+    await page.getByRole('button',{name:'Decline',exact:true}).click();
+    await page.waitForFunction(() => state.phase === 'Matchmaking');
+    assert.equal(await byId('confirmModal').isVisible(),false,'Ready-check decline is a direct, timely response');
+    state = {...lobby,phase:'ReadyCheck',readyCheckId:'ready-3',canStartLobby:false,canAcceptMatch:true,canDeclineMatch:true}; await paint();
+    await page.getByRole('button',{name:'Accept match',exact:true}).click();
+    await page.waitForFunction(() => state.phase === 'ChampSelect');
+    state = {...lobby,phase:'ReadyCheck',readyCheckId:'ready-4',canStartLobby:false,canAcceptMatch:false,canDeclineMatch:false,matchAccepted:true}; await paint();
+    assert.equal(await page.getByRole('button',{name:'Accept match',exact:true}).count(),0);
+    assert.equal(await page.getByRole('button',{name:'Decline',exact:true}).count(),0);
+    assert.equal(await byId('phase').textContent(),'Match accepted');
     assert.deepEqual(errors, []);
-    console.log('Remote Pick: party roster, queue authority, ARAM cards and bench, lobby to draft, portrait and landscape, delayed clocks, skins with confirmed selection, role/order swaps and failed/stale dodge confirmed.');
+    console.log('Remote Pick: party roster, queue authority, ARAM cards and bench, lobby to draft, portrait and landscape, delayed clocks, skins with confirmed selection, role/order swaps failed/stale dodge, planning, post-pick team chat, lobby roles and direct ready-check responses confirmed.');
   } finally { await browser.close(); }
 }
 run().catch(err => { console.error(err); process.exitCode = 1; });
