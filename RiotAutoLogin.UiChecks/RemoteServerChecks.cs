@@ -31,7 +31,7 @@ internal static class RemoteServerChecks
         unicodeRequest.Headers.Add("X-Remote-Pick-Request", "1");
         unicodeRequest.Content = new StringContent("{\"message\":\"Ahoj, žluťoučký 😀 " + new string('x', 501) + "\"}", System.Text.Encoding.UTF8, "application/json");
         using var unicodeResponse = await http.SendAsync(unicodeRequest);
-        if (!unicodeResponse.IsSuccessStatusCode || !(await unicodeResponse.Content.ReadAsStringAsync()).Contains("500 characters"))
+        if (unicodeResponse.StatusCode != HttpStatusCode.BadRequest || !(await unicodeResponse.Content.ReadAsStringAsync()).Contains("500 characters"))
             throw new Exception("A Unicode chat request did not finish with its expected validation result.");
         var stalled = new TcpClient(); await stalled.ConnectAsync(IPAddress.Loopback, port);
         await stalled.GetStream().WriteAsync("GET / HTTP/1.1\r\n"u8.ToArray());
