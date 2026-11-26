@@ -276,6 +276,9 @@ async function run() {
     failChat = true; await byId('chatInput').fill('Ready when you are'); await byId('chatSend').click();
     await page.getByText('Message not confirmed.',{exact:true}).waitFor(); await page.waitForFunction(() => !actionPending);
     assert.equal(await byId('chatInput').inputValue(),'Ready when you are','Failed send must retain the draft');
+    await page.evaluate(() => showDisconnectedState());
+    assert.equal(await byId('chatInput').inputValue(),'Ready when you are','A network interruption must retain unsent text');
+    await paint(); await page.waitForFunction(() => !document.querySelector('#chatSend').disabled);
     failChat = false; await byId('chatSend').click();
     await byId('chatMessages').getByText('Ready when you are',{exact:true}).waitFor();
     assert.equal(await byId('chatInput').inputValue(),'');

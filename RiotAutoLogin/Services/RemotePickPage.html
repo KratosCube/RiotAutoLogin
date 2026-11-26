@@ -1358,7 +1358,8 @@
       chatView.hidden = !next;
       const tab = document.querySelector('[data-view-button="champions"]');
       tab.textContent = next ? 'Chat' : 'Champions'; tab.setAttribute('aria-controls', next ? 'chatView' : 'championView');
-      const context = next ? state.draftId || '' : '';
+      // A connection loss is not proof that the draft ended; preserve its unsent text until reconnect.
+      const context = state ? next ? state.draftId || '' : '' : chatContext;
       if (chatContext !== context) {
         chatContext = context; chatData = null; chatKey = ''; chatReadAt = -Infinity;
         chatMessages.replaceChildren(); chatInput.value = ''; chatHint.textContent = '';
