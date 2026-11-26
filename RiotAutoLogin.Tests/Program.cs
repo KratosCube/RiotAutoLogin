@@ -17,6 +17,7 @@ await MatchRefreshChecks.Run();
 await RemoteLobbyChecks.Run();
 await RemoteInteractionChecks.Run();
 RemotePlanningChatChecks.Run();
+await RemoteHoverChecks.Run();
 void Equal<T>(T expected, T actual, string reason)
 {
     if (!EqualityComparer<T>.Default.Equals(expected, actual)) throw new Exception($"{reason}: expected {expected}, got {actual}");

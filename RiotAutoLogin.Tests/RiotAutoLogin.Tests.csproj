@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../RiotAutoLogin/Services/RemoteChampionHover.cs" Link="RemoteChampionHover.cs" />
     <Compile Include="../RiotAutoLogin/Services/RemoteDraftActions.cs" Link="RemoteDraftActions.cs" />
     <Compile Include="../RiotAutoLogin/Services/RemoteLobbyPositions.cs" Link="RemoteLobbyPositions.cs" />
     <Compile Include="../RiotAutoLogin/Services/RemoteReadyCheck.cs" Link="RemoteReadyCheck.cs" />

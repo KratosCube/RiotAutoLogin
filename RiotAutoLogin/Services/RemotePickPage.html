@@ -464,7 +464,7 @@
     let wasDraft = false, wasBan = false;
     let gridKey = '', loadoutKey = '', draftKey = '';
     let renderedSelectedId = 0, renderedHoveredId = 0, teamRailsKey = '', loadoutShortcutKey = '';
-    let hoverTask = null, queuedHoverId = 0, queuedHoverMode = 'pick', hoveringId = 0, hoverConfirmedAt = 0;
+    let hoverTask = null, queuedHoverId = 0, queuedHoverDraft = '', queuedHoverMode = 'pick', hoveringId = 0, hoverConfirmedAt = 0;
     let timerBaseMs = null, timerBasePerf = 0, phaseElapsedBase = null, timerInfinite = false, activeModal = null, returnFocus = null, confirmResolve = null;
 
     const liveFields = [
@@ -1049,6 +1049,7 @@
     async function flushHover() {
       while (queuedHoverId) {
         const id = queuedHoverId;
+        const draftId = queuedHoverDraft;
         const mode = queuedHoverMode;
         queuedHoverId = 0;
         hoveringId = id;
@@ -1057,10 +1058,10 @@
           const response = await fetch(mode === 'ban' ? '/api/ban-hover' : '/api/hover', {
             method: 'POST',
             headers: {'Content-Type': 'application/json', 'X-Remote-Pick-Request': '1'},
-            body: JSON.stringify({championId: id})
+            body: JSON.stringify({championId: id, draftId})
           });
           const result = await response.json();
-          if (state?.isInChampSelect && !!state.canBan === (mode === 'ban') && result.success && typeof result.confirmedChampionId === 'number') {
+          if (state?.isInChampSelect && state.draftId === draftId && !!state.canBan === (mode === 'ban') && result.success && typeof result.confirmedChampionId === 'number') {
             if (mode === 'ban') {
               state.hoveredBanChampionId = result.confirmedChampionId;
               state.banFallbackArmed = !!result.autoBanArmed;
@@ -1082,7 +1083,7 @@
     }
     function hoverChampion(id) {
       if (!hasFullState || !state?.isInChampSelect || actionPending) return Promise.resolve(false);
-      queuedHoverId = id;
+      queuedHoverId = id; queuedHoverDraft = state.draftId || '';
       queuedHoverMode = state.canBan ? 'ban' : 'pick';
       if (!hoverTask) hoverTask = flushHover().finally(() => { hoverTask = null; });
       return hoverTask;

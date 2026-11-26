@@ -67,7 +67,9 @@ async function run() {
           case '/api/accept-match': assert.equal(route.request().postDataJSON().readyCheckId,state.readyCheckId); state = {...draft}; break;
           case '/api/hover':
           case '/api/ban-hover': {
-            const id = route.request().postDataJSON().championId;
+            const hoverRequest = route.request().postDataJSON();
+            assert.equal(hoverRequest.draftId,state.draftId);
+            const id = hoverRequest.championId;
             if (state.canBan) { state.hoveredBanChampionId = id; state.banFallbackArmed = !state.isTimerInfinite; }
             else state.hoveredChampionId = id;
             result = {...result, confirmedChampionId: id, autoBanArmed: !!state.banFallbackArmed};
@@ -255,6 +257,9 @@ async function run() {
     await page.getByRole('button',{name:'Preview Annie',exact:true}).click();
     await page.waitForFunction(() => state.hoveredChampionId === 1);
     assert.deepEqual(posts.slice(planningPosts),['/api/hover']);
+    await page.getByRole('button',{name:'Preview Champion 3',exact:true}).click();
+    await page.waitForFunction(() => state.hoveredChampionId === 3);
+    assert.deepEqual(posts.slice(planningPosts),['/api/hover','/api/hover']);
     assert.equal(await byId('commitChampion').isVisible(),false);
     state = {...state,isPlanning:false,champSelectPhase:'BAN_PICK',canBan:true}; await paint();
     await page.getByRole('button',{name:'Set ban Annie',exact:true}).waitFor();
