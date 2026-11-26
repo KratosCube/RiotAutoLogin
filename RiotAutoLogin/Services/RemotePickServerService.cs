@@ -140,7 +140,8 @@ namespace RiotAutoLogin.Services
         private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
         {
             await using NetworkStream stream = client.GetStream();
-            using StreamReader reader = new(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
+            // HTTP Content-Length counts bytes. Latin-1 keeps a one-to-one byte mapping through the buffered header reader.
+            using StreamReader reader = new(stream, Encoding.Latin1, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
 
             try
             {
@@ -280,7 +281,7 @@ namespace RiotAutoLogin.Services
             return IPAddress.TryParse(name, out var ip) && (IPAddress.IsLoopback(ip) || ip.MapToIPv4().Equals(local.Address.MapToIPv4()));
         }
 
-        private static async Task<string> ReadBodyAsync(StreamReader reader, int contentLength, CancellationToken token)
+        internal static async Task<string> ReadBodyAsync(StreamReader reader, int contentLength, CancellationToken token)
         {
             if (contentLength <= 0)
                 return string.Empty;
@@ -295,7 +296,7 @@ namespace RiotAutoLogin.Services
                 totalRead += read;
             }
 
-            return new string(buffer, 0, totalRead);
+            return Encoding.UTF8.GetString(Encoding.Latin1.GetBytes(buffer, 0, totalRead));
         }
 
         public async Task<RemotePickState> GetStateAsync()
