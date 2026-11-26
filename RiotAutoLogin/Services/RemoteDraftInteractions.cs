@@ -30,7 +30,7 @@ internal static class RemoteDraftInteractions
         }
         return result.GroupBy(s => s.Id).Select(g => g.First()).ToList();
     }
-    private static string Scalar(JsonElement root, string field) => root.ValueKind == JsonValueKind.Object && root.TryGetProperty(field, out var value)
+    internal static string Scalar(JsonElement root, string field) => root.ValueKind == JsonValueKind.Object && root.TryGetProperty(field, out var value)
         ? value.ValueKind == JsonValueKind.Number ? value.GetRawText() : value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "" : "";
     internal static bool ValidId(string id) => id.Length is > 0 and <= 19 && id.All(char.IsAsciiDigit) && long.TryParse(id, out _);
     internal static bool Allows(RemoteSwapDto swap, string action) => (swap.State, action) is

@@ -23,9 +23,11 @@ namespace RiotAutoLogin.Models
         public long TimerSampleAgeMs => System.Math.Max(0, System.Environment.TickCount64 - TimerMeasuredTickMs);
         public bool IsTimerInfinite { get; set; }
         public bool IsInChampSelect { get; set; }
+        public bool IsPlanning => IsInChampSelect && ChampSelectPhase.Contains("PLANNING", System.StringComparison.OrdinalIgnoreCase);
+        public bool IsPickLocked { get; set; }
         public bool IsMyTurn { get; set; }
-        public bool CanPick => (IsMyTurn && ActionType == "pick" && !IsRandomChampionMode) || (IsInChampSelect && CanSelectCard);
-        public bool CanBan => IsMyTurn && ActionType == "ban";
+        public bool CanPick => (IsMyTurn && ActionType == "pick" && !IsRandomChampionMode && !IsPlanning) || (IsInChampSelect && CanSelectCard);
+        public bool CanBan => IsMyTurn && ActionType == "ban" && !IsPlanning;
         public bool CanLeave { get; set; }
         public bool CanStartLobby { get; set; }
         public bool IsCustomLobby { get; set; }
@@ -41,6 +43,12 @@ namespace RiotAutoLogin.Models
         public int RerollsRemaining { get; set; }
         public int PartySize { get; set; }
         public string LobbyHint { get; set; } = string.Empty;
+        public string ReadyCheckId { get; set; } = "";
+        public bool CanDeclineMatch { get; set; }
+        public bool MatchDeclined { get; set; }
+        public bool CanSelectPositions { get; set; }
+        public string FirstPosition { get; set; } = "UNSELECTED";
+        public string SecondPosition { get; set; } = "UNSELECTED";
         public bool CanAcceptMatch { get; set; }
         public bool MatchAccepted { get; set; }
         public string ActionId { get; set; } = string.Empty;
@@ -95,6 +103,21 @@ namespace RiotAutoLogin.Models
         public RemoteRunePageDto? CurrentRunePage { get; set; }
     }
 
+    public sealed class RemoteChatDto
+    {
+        public string DraftId { get; set; } = "";
+        public string RoomId { get; set; } = "";
+        public bool IsAvailable { get; set; }
+        public List<RemoteChatMessageDto> Messages { get; set; } = new();
+    }
+    public sealed class RemoteChatMessageDto
+    {
+        public string Id { get; set; } = "";
+        public string Body { get; set; } = "";
+        public string Author { get; set; } = "Teammate";
+        public string Timestamp { get; set; } = "";
+        public bool IsLocalPlayer { get; set; }
+    }
     public sealed class RemoteSkinGalleryDto
     {
         public string DraftId { get; set; } = "";

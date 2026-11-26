@@ -340,6 +340,43 @@
       .skin-modal .modal-head, .skin-footer { padding: 5px 10px; }
       .skin-modal .modal-head h2 { font-size: 1rem; }
     }
+
+    .lobby-positions { display: flex; gap: 8px; flex: 1 0 100%; min-width: 0; align-items: end; }
+    .lobby-positions label { display: grid; flex: 1; min-width: 0; gap: 3px; color: var(--gold-light); font-size: .7rem; }
+    .lobby-positions select { min-width: 0; min-height: 44px; padding: 5px; color: var(--text); border: 1px solid var(--line); background: #112333; font: inherit; font-size: .85rem; }
+    .lobby-positions button { flex: none; padding-inline: 12px; }
+    .chat-view { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; min-height: 0; height: min(650px, calc(100dvh - var(--status-height, 180px) - 110px)); }
+    .chat-view h2 { flex: none; margin: 0; }
+    .chat-messages { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+    .chat-message { flex: none; align-self: flex-start; max-width: 92%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 3px 12px 12px; background: #112333; overflow-wrap: anywhere; }
+    .chat-message.local { align-self: flex-end; border-color: #28736e; border-radius: 12px 3px 12px 12px; background: #103138; }
+    .chat-message strong { color: var(--gold-light); font-size: .73rem; }
+    .chat-message p { margin: 5px 0 0; white-space: pre-wrap; font-size: .86rem; line-height: 1.45; }
+    .chat-empty { margin: auto; color: var(--muted); font-size: .84rem; text-align: center; }
+    .chat-compose { flex: none; padding: 8px; border-top: 1px solid var(--line); }
+    .chat-compose form { display: flex; gap: 8px; }
+    .chat-compose input { flex: 1; min-width: 0; min-height: 44px; padding: 8px; color: var(--text); border: 1px solid var(--line); background: #0c1924; }
+    .chat-hint { margin: 0 0 6px; color: var(--muted); font-size: .75rem; }
+    .chat-hint:empty { display: none; }
+    @media (max-width: 850px), (max-height: 550px) and (max-width: 1180px) and (orientation: landscape) {
+      .layout:not([data-view="champions"]) #chatView { display: none; }
+      .layout[data-view="champions"] #chatView { height: 100%; min-height: 0; }
+    }
+    @media (orientation: landscape) and (max-height: 550px) and (max-width: 1180px) {
+      body[data-screen="room"] .app { display: grid; grid-template: auto minmax(0, 1fr) / minmax(0, 1fr) minmax(260px, .85fr); gap: 8px; }
+      body[data-screen="room"] .site-header { display: none; }
+      body[data-screen="room"] .status { grid-column: 1; grid-row: 1; }
+      body[data-screen="room"] .status-main { padding: 10px; }
+      body[data-screen="room"] #roomTitle { font-size: 1.3rem; margin: 6px 0; }
+      body[data-screen="room"] #roomDetail { font-size: .75rem; }
+      body[data-screen="room"] .party-panel { grid-column: 1; grid-row: 2; margin: 0; }
+      body[data-screen="room"] .room-controls { grid-column: 2; grid-row: 1 / -1; display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: flex-end; margin: 0; padding: 0; min-height: 0; overflow-y: auto; }
+      body[data-screen="room"] .room-controls > button { flex: none; }
+      body[data-screen="room"] .queue-controls { flex: none; }
+      body[data-screen="room"] .queue-controls label { display: none; }
+      body[data-screen="room"] .lobby-positions { flex: none; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+      body[data-screen="room"] .lobby-positions button { grid-column: 1 / -1; }
+    }
   </style>
 </head>
 <body data-screen="room" data-view="champions">
@@ -376,10 +413,12 @@
         <div id="champions" class="champion-grid"></div>
         <div id="emptyState" class="empty-state" hidden><strong id="emptyTitle">Waiting for champion select</strong><p id="emptyMessage">Champions will appear here when the client starts champion select.</p><button id="emptyClear" class="subtle-button" type="button" hidden>Clear search</button></div>
       </main>
+      <section id="chatView" class="panel chat-view" aria-label="Team chat" hidden><h2>Team chat</h2><div id="chatMessages" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions"></div><div class="chat-compose"><p id="chatHint" class="chat-hint" role="status"></p><form id="chatForm"><input id="chatInput" type="text" maxlength="500" autocomplete="off" aria-label="Message your team" placeholder="Message your team" disabled><button id="chatSend" class="secondary-command" type="submit" disabled>Send</button></form></div></section>
       <div class="right-rail"><aside id="enemyPanel" class="panel"><h2>Enemy picks</h2><div id="enemyPickedList" class="rail-list"></div></aside><aside id="desktopLoadout" class="panel loadout-panel" aria-label="Loadout"></aside></div>
     </section>
     <div id="roomControls" class="room-controls" hidden>
       <div id="queueControls" class="queue-controls" hidden><label for="queueSelect">Queue</label><select id="queueSelect" aria-label="Game queue"></select><button id="changeQueue" type="button" class="secondary-command">Change</button></div>
+<div id="positionControls" class="lobby-positions" hidden><label>Primary<select id="firstPosition" aria-label="Primary role"><option value="UNSELECTED">Choose</option><option value="TOP">Top</option><option value="JUNGLE">Jungle</option><option value="MIDDLE">Mid</option><option value="BOTTOM">Bot</option><option value="UTILITY">Support</option><option value="FILL">Fill</option></select></label><label>Secondary<select id="secondPosition" aria-label="Secondary role"><option value="UNSELECTED">Choose</option><option value="TOP">Top</option><option value="JUNGLE">Jungle</option><option value="MIDDLE">Mid</option><option value="BOTTOM">Bot</option><option value="UTILITY">Support</option></select></label><button id="savePositions" class="secondary-command" type="button">Set roles</button></div>
       <button id="roomAction" type="button" class="main-command" hidden></button>
       <button id="roomLeave" type="button" class="secondary-command" hidden></button>
       <button id="refreshButton" type="button" class="secondary-command" hidden>Reconnect</button>
@@ -429,7 +468,7 @@
     let timerBaseMs = null, timerBasePerf = 0, phaseElapsedBase = null, timerInfinite = false, activeModal = null, returnFocus = null, confirmResolve = null;
 
     const liveFields = [
-      'draftId', 'selectedSkinId', 'canSelectSkin', 'swaps', 'phase', 'champSelectPhase', 'phaseLabel', 'timeLeftInPhaseMs', 'totalTimeInPhaseMs', 'phaseElapsedSeconds', 'isTimerInfinite',
+      'isPlanning', 'isPickLocked', 'canSelectPositions', 'firstPosition', 'secondPosition', 'readyCheckId', 'canDeclineMatch', 'matchDeclined', 'draftId', 'selectedSkinId', 'canSelectSkin', 'swaps', 'phase', 'champSelectPhase', 'phaseLabel', 'timeLeftInPhaseMs', 'totalTimeInPhaseMs', 'phaseElapsedSeconds', 'isTimerInfinite',
       'isInChampSelect', 'isMyTurn', 'canPick', 'canBan', 'canLeave', 'actionType', 'actionId', 'actionGroupIndex',
       'canChangeQueue', 'isRandomChampionMode', 'benchEnabled', 'benchChampionIds', 'cardChampionIds', 'canSelectCard', 'canReroll', 'rerollsRemaining', 'canStartLobby', 'isCustomLobby', 'partySize', 'lobbyHint', 'canAcceptMatch', 'matchAccepted', 'queueName',
       'timerActionKey', 'isGameClientRunning', 'isGameLoaded', 'gameTimeSeconds', 'gameStatus', 'message',
@@ -527,8 +566,8 @@
       wasBan = !!state.canBan;
       document.body.dataset.screen = draft ? 'draft' : 'room';
       ui.layout.hidden = ui.draftControls.hidden = !draft;
-      ui.phase.textContent = draft && state.isRandomChampionMode ? (state.canSelectCard ? 'Choose your card' : 'Your champion') : state.canBan ? 'Your ban' : state.canPick ? 'Your pick'
-        : state.phase === 'Matchmaking' ? 'Finding match' : state.matchAccepted ? 'Match accepted'
+      ui.phase.textContent = state.isPlanning ? 'Hover your champion' : draft && state.isRandomChampionMode ? (state.canSelectCard ? 'Choose your card' : 'Your champion') : state.canBan ? 'Your ban' : state.canPick ? 'Your pick'
+        : state.phase === 'Matchmaking' ? 'Finding match' : state.matchDeclined ? 'Match declined' : state.matchAccepted ? 'Match accepted'
         : state.phaseLabel && state.phaseLabel !== 'Waiting' ? state.phaseLabel : 'League Client';
       const mode = !draft && ['Lobby', 'Matchmaking', 'ReadyCheck'].includes(state.phase) ? state.queueName : '';
       ui.roomTitle.textContent = mode || '';
@@ -546,11 +585,11 @@
       ui.leave.hidden = ui.mobileLeave.hidden = !(draft && state.canLeave);
       ui.nav.classList.toggle('has-leave', !ui.mobileLeave.hidden);
       ui.roomLeave.textContent = state.phase === 'Matchmaking' ? 'Cancel queue' : state.phase === 'ReadyCheck' ? 'Decline' : 'Leave lobby';
-      ui.roomLeave.hidden = draft || !state.canLeave || (state.phase === 'ReadyCheck' && !state.canAcceptMatch);
+      ui.roomLeave.hidden = draft || (state.phase === 'ReadyCheck' ? !state.canDeclineMatch : !state.canLeave);
       ui.roomAction.hidden = !(state.phase === 'Lobby' && state.canStartLobby || state.phase === 'ReadyCheck' && state.canAcceptMatch);
       ui.roomAction.textContent = state.phase === 'ReadyCheck' ? 'Accept match' : state.isCustomLobby ? 'Start custom game' : 'Start queue';
-      renderParty();
-      ui.roomControls.hidden = draft || (ui.roomAction.hidden && ui.roomLeave.hidden && ui.refresh.hidden && ui.queueControls.hidden);
+      renderParty(); updatePrimaryView();
+      ui.roomControls.hidden = draft || (ui.roomAction.hidden && ui.roomLeave.hidden && ui.refresh.hidden && ui.queueControls.hidden && $('positionControls').hidden);
       ui.reroll.hidden = !draft || !state.canReroll;
       ui.reroll.textContent = `Reroll (${state.rerollsRemaining || 0})`;
       ui.reroll.disabled = !hasFullState || actionPending;
@@ -659,7 +698,7 @@
       ui.roomControls.hidden = false;
       ui.hoverReadout.hidden = ui.loadoutShortcut.hidden = true;
       latestLive = state = null;
-      updateSkinContext(); $('swapAlerts').hidden = true;
+      updateSkinContext(); updatePrimaryView(); $('swapAlerts').hidden = true;
       selectedChampionId = queuedHoverId = 0;
       gridKey = draftKey = teamRailsKey = loadoutShortcutKey = '';
       renderDraftStrip(); updateTimerDisplay();
@@ -775,8 +814,8 @@
         return;
       }
       ui.empty.hidden = true;
-      const canPick = state.canPick || (state.isMyTurn && state.actionType === 'pick');
-      const canBan = state.canBan || (state.isMyTurn && state.actionType === 'ban');
+      const canPick = !!state.canPick;
+      const canBan = !!state.canBan;
       const nextKey = JSON.stringify([query, positionFilter, state.isInChampSelect, canPick, canBan, state.isRandomChampionMode, state.canSelectCard, state.benchEnabled, state.cardChampionIds, state.benchChampionIds, state.selectedChampionId,
         filtered.map(champion => [champion.id, champion.name, champion.imageUrl, champion.isDisabled, champion.isBanned, champion.isPicked])]);
       if (nextKey === gridKey) { updateChampionDecorations(); return; }
@@ -820,7 +859,7 @@
       const champion = getSelectedChampion();
       if (champion && !champion.isDisabled && state?.isInChampSelect &&
           (state.canBan ? state.hoveredBanChampionId !== id || !state.banFallbackArmed :
-            state.actionType !== 'ban' && state.hoveredChampionId !== id))
+            state.hoveredChampionId !== id))
         hoverChampion(id);
     }
     function getSelectedChampion() {
@@ -994,7 +1033,7 @@
           showToast(result.message || 'League Client rejected the action.', true);
           return false;
         }
-        if (!['/api/start-queue', '/api/start-custom', '/api/accept-match', '/api/leave'].includes(path)) showToast(result.message || fallback);
+        if (!['/api/start-queue', '/api/start-custom', '/api/accept-match', '/api/decline-match', '/api/chat', '/api/leave'].includes(path)) showToast(result.message || fallback);
         await loadState();
         await loadTimer();
         return true;
@@ -1083,9 +1122,10 @@
       ui.layout.dataset.view = view;
       document.body.dataset.view = view;
       if (view === 'loadout') loadSkins(true);
+      if (view === 'champions' && primaryIsChat) loadChat(true);
       for (const button of document.querySelectorAll('[data-view-button]')) button.setAttribute('aria-pressed', String(button.dataset.viewButton === view));
       if (!scroll || getComputedStyle(ui.nav).display !== 'none') return;
-      const target = view === 'loadout' ? ui.loadout : view === 'picks' ? $('allyPanel') : $('championView');
+      const target = view === 'loadout' ? ui.loadout : view === 'picks' ? $('allyPanel') : primaryIsChat ? chatView : $('championView');
       target?.scrollIntoView({behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start'});
     }
     function clearSearch() {
@@ -1107,7 +1147,7 @@
     ui.loadout.addEventListener('error', event => { if (event.target instanceof HTMLImageElement) event.target.hidden = true; }, true);
     ui.leave.onclick = leaveLobby;
     ui.mobileLeave.onclick = leaveLobby;
-    ui.roomLeave.onclick = leaveLobby;
+    ui.roomLeave.onclick = () => state?.phase === 'ReadyCheck' && state.canDeclineMatch ? runAction('/api/decline-match',{readyCheckId:state.readyCheckId},'Match declined.') : leaveLobby();
     ui.changeQueue.onclick = async () => {
       const id = Number(ui.queueSelect.value), queue = state?.queues?.find(q => q.id === id);
       if (!queue?.isAvailable || !state.canChangeQueue || id === state.queueId) return;
@@ -1121,7 +1161,7 @@
     };
     ui.roomAction.onclick = () => {
       if (state?.phase === 'ReadyCheck' && state.canAcceptMatch)
-        return runAction('/api/accept-match', {}, 'Match accepted.');
+        return runAction('/api/accept-match', {readyCheckId:state.readyCheckId}, 'Match accepted.');
       if (state?.phase === 'Lobby' && state.canStartLobby)
         return runAction(state.isCustomLobby ? '/api/start-custom' : '/api/start-queue', {}, 'Lobby started.');
     };
@@ -1302,6 +1342,96 @@
       if (event.key === 'Escape' && !actionPending) closeSkins();
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); moveSkin(event.key === 'ArrowLeft' ? -1 : 1); }
     });
+
+    let primaryIsChat = false, chatData = null, chatPending = false, chatRefreshAgain = false, chatReadAt = -Infinity;
+    let chatKey = '', chatContext = '', positionKey = '';
+    const chatView = $('chatView'), chatMessages = $('chatMessages'), chatInput = $('chatInput'), chatSend = $('chatSend'), chatHint = $('chatHint');
+    const roleFirst = $('firstPosition'), roleSecond = $('secondPosition'), roleSave = $('savePositions');
+    function chatVisible() {
+      return primaryIsChat && document.visibilityState === 'visible' && (ui.layout.dataset.view === 'champions' || getComputedStyle(ui.nav).display === 'none');
+    }
+    function updatePrimaryView() {
+      const next = !!state?.isInChampSelect && !!state.isPickLocked && !state.isRandomChampionMode;
+      if (next && !primaryIsChat && $('championView').contains(document.activeElement)) document.activeElement.blur();
+      primaryIsChat = next;
+      $('championView').hidden = next;
+      chatView.hidden = !next;
+      const tab = document.querySelector('[data-view-button="champions"]');
+      tab.textContent = next ? 'Chat' : 'Champions'; tab.setAttribute('aria-controls', next ? 'chatView' : 'championView');
+      // A connection loss is not proof that the draft ended; preserve its unsent text until reconnect.
+      const context = state ? next ? state.draftId || '' : '' : chatContext;
+      if (chatContext !== context) {
+        chatContext = context; chatData = null; chatKey = ''; chatReadAt = -Infinity;
+        chatMessages.replaceChildren(); chatInput.value = ''; chatHint.textContent = '';
+      }
+      renderChat(); renderPositions();
+      if (chatVisible()) loadChat();
+    }
+    async function loadChat(force = false) {
+      if (!chatVisible()) return;
+      if (chatPending) { if (force) chatRefreshAgain = true; return; }
+      if (!force && performance.now() - chatReadAt < 1800) return;
+      chatPending = true; chatReadAt = performance.now(); const draft = state?.draftId;
+      try {
+        const data = await getJson('/api/chat');
+        if (!primaryIsChat || state?.draftId !== draft || data.draftId !== draft) return;
+        chatData = data; renderChat();
+      } catch { if (state?.draftId === draft) chatHint.textContent = 'Cannot reach team chat. Your text has been kept.'; }
+      finally {
+        chatPending = false;
+        if (chatRefreshAgain) { chatRefreshAgain = false; loadChat(true); }
+      }
+    }
+    function renderChat() {
+      const current = primaryIsChat && chatData?.draftId === state?.draftId;
+      const available = current && chatData.isAvailable;
+      chatInput.disabled = chatSend.disabled = !available || actionPending;
+      if (!primaryIsChat) return;
+      if (current) chatHint.textContent = available ? '' : 'Team chat is not available in this lobby.';
+      const messages = current ? chatData.messages || [] : [];
+      const key = JSON.stringify([chatContext,messages]);
+      if (key === chatKey) return; chatKey = key;
+      const nearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 56;
+      const oldTop = chatMessages.scrollTop;
+      chatMessages.replaceChildren(...messages.map(message => {
+        const row = document.createElement('article'); row.className = `chat-message${message.isLocalPlayer ? ' local' : ''}`;
+        const author = document.createElement('strong'); author.textContent = message.author || 'Teammate';
+        const text = document.createElement('p'); text.textContent = message.body || '';
+        row.append(author,text); return row;
+      }));
+      if (!messages.length) { const empty = document.createElement('p'); empty.className = 'chat-empty'; empty.textContent = 'Your team’s messages appear here.'; chatMessages.append(empty); }
+      chatMessages.scrollTop = nearBottom ? chatMessages.scrollHeight : oldTop;
+    }
+    $('chatForm').onsubmit = async event => {
+      event.preventDefault();
+      if (chatSend.disabled || !chatData?.isAvailable || !chatInput.value.trim()) return;
+      const draftId = state.draftId, roomId = chatData.roomId, message = chatInput.value;
+      const sent = await runAction('/api/chat',{draftId,roomId,message},'Message sent.');
+      if (sent && state?.draftId === draftId && chatInput.value === message) chatInput.value = '';
+      await loadChat(true);
+      if (sent && chatVisible()) chatInput.focus({preventScroll:true});
+    };
+    function renderPositions() {
+      const panel = $('positionControls');
+      panel.hidden = state?.phase !== 'Lobby' || !state?.canSelectPositions;
+      if (panel.hidden) { positionKey = ''; return; }
+      const key = JSON.stringify([state.queueId,state.firstPosition,state.secondPosition]);
+      if (key !== positionKey) {
+        positionKey = key; roleFirst.value = state.firstPosition || 'UNSELECTED'; roleSecond.value = state.secondPosition || 'UNSELECTED';
+      }
+      updateRoleControls();
+    }
+    function updateRoleControls() {
+      const fill = roleFirst.value === 'FILL';
+      if (fill) roleSecond.value = 'UNSELECTED';
+      roleFirst.disabled = actionPending; roleSecond.disabled = actionPending || fill;
+      roleSave.disabled = actionPending || roleFirst.value === 'UNSELECTED' || !fill && (roleSecond.value === 'UNSELECTED' || roleFirst.value === roleSecond.value);
+    }
+    roleFirst.onchange = roleSecond.onchange = updateRoleControls;
+    roleSave.onclick = () => {
+      if (!roleSave.disabled && state?.phase === 'Lobby' && state.canSelectPositions)
+        runAction('/api/positions',{queueId:state.queueId,firstPreference:roleFirst.value,secondPreference:roleSecond.value},'Positions updated.');
+    };
 
     loadState(); loadTimer();
     function pollDelay(full) {

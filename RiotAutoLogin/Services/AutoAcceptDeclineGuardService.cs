@@ -12,6 +12,12 @@ namespace RiotAutoLogin.Services
         private static CancellationTokenSource? _cts;
         private static Task? _monitorTask;
         private static volatile bool _manualDeclineActive;
+        private static volatile bool _remoteDeclineRequested;
+        public static void RegisterRemoteDecline()
+        {
+            _remoteDeclineRequested = _manualDeclineActive = true;
+            LCUService.StopAutoAccept();
+        }
 
         public static bool IsManualDeclineActive => _manualDeclineActive;
 
@@ -42,7 +48,7 @@ namespace RiotAutoLogin.Services
 
                 _cts = null;
                 _monitorTask = null;
-                _manualDeclineActive = false;
+                _remoteDeclineRequested = _manualDeclineActive = false;
             }
         }
 
@@ -59,7 +65,7 @@ namespace RiotAutoLogin.Services
                     }
                     if (!LCUService.CheckIfLeagueClientIsOpen())
                     {
-                        _manualDeclineActive = false;
+                        _remoteDeclineRequested = _manualDeclineActive = false;
                         await Task.Delay(1000, cancellationToken);
                         continue;
                     }
@@ -67,7 +73,7 @@ namespace RiotAutoLogin.Services
                     string phase = await LCUService.GetCurrentGamePhaseAsync();
                     if (!string.Equals(phase, "ReadyCheck", StringComparison.OrdinalIgnoreCase))
                     {
-                        _manualDeclineActive = false;
+                        _remoteDeclineRequested = _manualDeclineActive = false;
                         await Task.Delay(phase == "Matchmaking" ? 500 : 2500, cancellationToken);
                         continue;
                     }
@@ -83,9 +89,9 @@ namespace RiotAutoLogin.Services
                             _manualDeclineActive = true;
                             LCUService.StopAutoAccept();
                         }
-                        else if (string.Equals(playerResponse, "None", StringComparison.OrdinalIgnoreCase))
+                        else if (!_remoteDeclineRequested && string.Equals(playerResponse, "None", StringComparison.OrdinalIgnoreCase))
                         {
-                            _manualDeclineActive = false;
+                            _remoteDeclineRequested = _manualDeclineActive = false;
                         }
                     }
 
