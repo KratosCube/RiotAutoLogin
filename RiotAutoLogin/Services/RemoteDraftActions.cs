@@ -13,7 +13,7 @@ internal static class RemoteDraftActions
         state.ActionGroupIndex = -1; state.IsPickLocked = false;
         if (!root.TryGetProperty("localPlayerCellId", out _) || !root.TryGetProperty("actions", out var actions) || actions.ValueKind != JsonValueKind.Array) return;
         int self = RemoteLobbyData.Number(root, "localPlayerCellId"), groupIndex = 0, localPicks = 0, completedPicks = 0;
-        bool foundOpenPick = false;
+        bool foundOpenPick = false; int pendingChampion = 0;
         bool planning = state.ChampSelectPhase.Contains("PLANNING", StringComparison.OrdinalIgnoreCase);
         bool blocked = planning || state.ChampSelectPhase.Contains("FINAL", StringComparison.OrdinalIgnoreCase) || state.ChampSelectPhase.Contains("GAME_START", StringComparison.OrdinalIgnoreCase);
         foreach (var group in actions.EnumerateArray())
@@ -29,7 +29,8 @@ internal static class RemoteDraftActions
                 if (type == "pick")
                 {
                     localPicks++; if (complete) completedPicks++;
-                    if (state.PickActionId.Length == 0 || !complete && !foundOpenPick) state.PickActionId = id;
+                    if (state.PickActionId.Length == 0 || !complete && !foundOpenPick)
+                    { state.PickActionId = id; pendingChampion = complete ? 0 : RemoteLobbyData.Number(action, "championId"); }
                     if (!complete) foundOpenPick = true;
                     if (!blocked && active && !complete && RemoteLobbyData.Number(action, "championId") is > 0 and var hover)
                     { state.HoveredChampionId = hover; state.HoveredChampionSource = "ActivePick"; }
@@ -41,6 +42,12 @@ internal static class RemoteDraftActions
             groupIndex++;
         }
         state.IsPickLocked = !planning && localPicks > 0 && localPicks == completedPicks && state.SelectedChampionId > 0;
+        // Planning updates may arrive in the inactive pick action before myTeam mirrors the intent.
+        if (pendingChampion > 0 && !state.IsPickLocked && (planning || !blocked))
+        {
+            state.HoveredChampionId = state.PickIntentChampionId = pendingChampion;
+            state.HoveredChampionSource = planning ? "PlanningPickAction" : "PickIntentAction";
+        }
         if (blocked) { state.HoveredBanChampionId = 0; state.TimerActionKey = $"phase:{state.ChampSelectPhase}"; }
         else if (state.TimerActionKey.Length == 0) state.TimerActionKey = $"phase:{state.ChampSelectPhase}|action:{state.ActionType}|id:{state.ActionId}";
     }

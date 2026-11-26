@@ -717,72 +717,24 @@ namespace RiotAutoLogin.Services
             }
         }
 
+        private readonly SemaphoreSlim _hoverGate = new(1, 1);
         public async Task<RemotePickActionResult> HoverChampionAsync(string body)
         {
             RemotePickRequest? request = ParseChampionRequest(body);
-            if (request == null)
-                return Failure("Invalid champion.");
-
-            RemotePickState state = await GetTimerStateAsync();
-            if (!state.IsInChampSelect)
-                return Failure("You are not in champion select.");
-            if (state.BannedChampionIds.Contains(request.ChampionId))
-                return Failure("This champion is banned.");
-            if (state.IsRandomChampionMode && state.AvailableChampionIds.Count > 0 && !state.AvailableChampionIds.Contains(request.ChampionId))
-                return Failure("This champion is not available in the current ARAM/random selection.");
-
-            if (state.IsRandomChampionMode) return Failure("Choose a champion card or take a champion from the bench.");
-            int confirmedId = state.HoveredChampionId;
-            string confirmedSource = state.HoveredChampionSource;
-            if (confirmedId == request.ChampionId)
-                return new RemotePickActionResult { Success = true, Message = "Hover confirmed in League Client session.", ConfirmedChampionId = confirmedId, ConfirmedChampionSource = confirmedSource };
-
-            async Task<bool> TryHoverAsync(string endpoint, object payload)
+            if (request == null) return Failure("Invalid champion.");
+            if (!await _hoverGate.WaitAsync(0)) return Failure("A hover change is already in progress.");
+            try
             {
-                string json = JsonSerializer.Serialize(payload, _jsonOptions);
-                string[] reply = await LCUService.ClientRequestAsync("PATCH", endpoint, json);
-                if (!reply[0].StartsWith("2"))
-                    return false;
-
-                // An accepted PATCH does not prove that the client actually changed its hover.
-                // Read the session back before reporting success to the phone.
-                for (int attempt = 0; attempt < 3; attempt++)
-                {
-                    if (attempt > 0)
-                        await Task.Delay(80);
-                    RemotePickState? observed = await ReadClientHoverAsync();
-                    if (observed != null)
-                    {
-                        confirmedId = observed.HoveredChampionId;
-                        confirmedSource = observed.HoveredChampionSource;
-                        if (confirmedId == request.ChampionId)
-                            return true;
-                    }
-                }
-                return false;
+                string expectedDraft = "";
+                using (var json = JsonDocument.Parse(body)) expectedDraft = RemoteLobbyData.Text(json.RootElement, "draftId");
+                // The helper reads the current session itself; do not delay this short planning window with full-state enrichment.
+                return await RemoteChampionHover.ApplyAsync(request.ChampionId, expectedDraft,
+                    () => LCUService.GetCurrentGamePhaseAsync(),
+                    (method, path, payload) => LCUService.ClientRequestAsync(method, path, payload),
+                    LCUService.InvalidateCachedReads, Task.Delay);
             }
-
-            bool confirmed = false;
-            if (state.CanPick && !string.IsNullOrWhiteSpace(state.ActionId))
-                confirmed = await TryHoverAsync($"lol-champ-select/v1/session/actions/{state.ActionId}",
-                    new { championId = request.ChampionId, completed = false });
-
-            if (!confirmed)
-                confirmed = await TryHoverAsync("lol-champ-select/v1/session/my-selection",
-                    new { championPickIntent = request.ChampionId });
-
-            if (!confirmed)
-                confirmed = await TryHoverAsync("lol-champ-select/v1/session/my-selection",
-                    new { championId = request.ChampionId });
-
-            return new RemotePickActionResult
-            {
-                Success = confirmed,
-                ConfirmedChampionId = confirmedId,
-                ConfirmedChampionSource = confirmedSource,
-                Message = confirmed ? "Hover confirmed in League Client session." :
-                    "League Client did not confirm this hover. It may no longer accept changes in this phase."
-            };
+            catch (JsonException) { return Failure("Invalid champion."); }
+            finally { _hoverGate.Release(); }
         }
 
         private static async Task<RemotePickState?> ReadClientHoverAsync()
