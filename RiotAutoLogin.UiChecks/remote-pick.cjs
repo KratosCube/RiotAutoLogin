@@ -230,8 +230,8 @@ async function run() {
     assert.equal(await byId('skinSummary').locator('strong').textContent(),'Gothic Annie');
     assert.equal(await byId('skinStatus').textContent(),'Selected in client');
     await page.emulateMedia({reducedMotion:'reduce'});
-    const duration = await page.locator('.skin-art').first().evaluate(img => getComputedStyle(img).transitionDuration);
-    assert.equal(duration,'0s'); await page.emulateMedia({reducedMotion:'no-preference'});
+    // The outgoing image can be removed during the media-change round trip. Check the connected visible layer atomically.
+    await page.waitForFunction(() => { const img = document.querySelector('#skinStage .skin-art.visible'); return img && getComputedStyle(img).transitionDuration === '0s'; }); await page.emulateMedia({reducedMotion:'no-preference'});
     await page.setViewportSize({width:390,height:844});
     await page.screenshot({path:'build/remote-skins-preview.png'});
     await byId('closeSkinModal').click();
