@@ -16,6 +16,9 @@ internal sealed class RemoteReadyCheck
             return _id;
         }
     }
-    internal static string MatchId(JsonElement gameflow) => gameflow.TryGetProperty("gameData", out var data)
-        ? RemoteDraftInteractions.Scalar(data, "gameId") : "";
+    internal static string MatchId(JsonElement gameflow)
+    {
+        string id = gameflow.TryGetProperty("gameData", out var data) ? RemoteDraftInteractions.Scalar(data, "gameId") : "";
+        return id == "0" ? "" : id;
+    }
 }

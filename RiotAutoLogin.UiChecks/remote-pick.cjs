@@ -99,6 +99,7 @@ async function run() {
       await page.setViewportSize({width,height});
       const layout = await page.evaluate(() => ({overflow: document.documentElement.scrollHeight - innerHeight,
         x: document.documentElement.scrollWidth - innerWidth, footer: document.querySelector('#roomControls').getBoundingClientRect().bottom <= innerHeight}));
+      fs.mkdirSync('build',{recursive:true}); await page.screenshot({path:`build/remote-lobby-roles-${width}-preview.png`});
       assert.ok(layout.overflow <= 1 && layout.x <= 1 && layout.footer, 'Lobby controls must remain reachable: '+JSON.stringify(layout));
     }
     await byId('queueSelect').selectOption('420'); await byId('changeQueue').click(); await byId('acceptConfirm').click();

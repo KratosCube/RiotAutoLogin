@@ -362,6 +362,21 @@
       .layout:not([data-view="champions"]) #chatView { display: none; }
       .layout[data-view="champions"] #chatView { height: 100%; min-height: 0; }
     }
+    @media (orientation: landscape) and (max-height: 550px) and (max-width: 1180px) {
+      body[data-screen="room"] .app { display: grid; grid-template: auto minmax(0, 1fr) / minmax(0, 1fr) minmax(260px, .85fr); gap: 8px; }
+      body[data-screen="room"] .site-header { display: none; }
+      body[data-screen="room"] .status { grid-column: 1; grid-row: 1; }
+      body[data-screen="room"] .status-main { padding: 10px; }
+      body[data-screen="room"] #roomTitle { font-size: 1.3rem; margin: 6px 0; }
+      body[data-screen="room"] #roomDetail { font-size: .75rem; }
+      body[data-screen="room"] .party-panel { grid-column: 1; grid-row: 2; margin: 0; }
+      body[data-screen="room"] .room-controls { grid-column: 2; grid-row: 1 / -1; display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: flex-end; margin: 0; padding: 0; min-height: 0; overflow-y: auto; }
+      body[data-screen="room"] .room-controls > button { flex: none; }
+      body[data-screen="room"] .queue-controls { flex: none; }
+      body[data-screen="room"] .queue-controls label { display: none; }
+      body[data-screen="room"] .lobby-positions { flex: none; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+      body[data-screen="room"] .lobby-positions button { grid-column: 1 / -1; }
+    }
   </style>
 </head>
 <body data-screen="room" data-view="champions">

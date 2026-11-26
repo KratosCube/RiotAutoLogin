@@ -145,7 +145,7 @@ namespace RiotAutoLogin.Services
                             }
 
                             cancellationToken.ThrowIfCancellationRequested();
-                            if (AutoAcceptDeclineGuardService.IsManualDeclineActive) continue;
+                            if (AutoAcceptDeclineGuardService.IsManualDeclineActive) { await Task.Delay(500, cancellationToken); continue; }
                             string[] acceptResult = await ClientRequestAsync("POST", "lol-matchmaking/v1/ready-check/accept", cancellationToken: cancellationToken);
                             Debug.WriteLine(acceptResult[0].StartsWith("2")
                                 ? "Match accepted successfully!"
