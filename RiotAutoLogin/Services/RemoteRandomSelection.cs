@@ -10,7 +10,7 @@ internal static class RemoteRandomSelection
 {
     internal static bool IsRandom(JsonElement session, int queueId, string mode) =>
         !mode.Equals("CHERRY", StringComparison.OrdinalIgnoreCase) &&
-        (mode.Equals("ARAM", StringComparison.OrdinalIgnoreCase) || queueId is 450 or 720 ||
+        (RemoteLobbyData.IsAram(queueId, mode) ||
          RemoteLobbyData.Flag(session, "benchEnabled") || RemoteLobbyData.Flag(session, "allowRerolling"));
 
     internal static void Read(JsonElement session, RemotePickState state, IEnumerable<int> cards)

@@ -208,6 +208,8 @@ namespace RiotAutoLogin.Services
                     await WriteHtmlResponseAsync(stream, RemotePickPageHtml.Get(), cancellationToken);
                 else if (method == "GET" && path.StartsWith("/api/timer", StringComparison.OrdinalIgnoreCase))
                     await WriteJsonResponseAsync(stream, 200, "OK", await GetTimerStateAsync(), cancellationToken);
+                else if (method == "GET" && path == "/api/skins")
+                    await WriteJsonResponseAsync(stream, 200, "OK", await GetSkinsAsync(), cancellationToken);
                 else if (method == "GET" && path.StartsWith("/api/rune-debug", StringComparison.OrdinalIgnoreCase))
                     await WriteJsonResponseAsync(stream, 200, "OK", await GetRuneDebugAsync(), cancellationToken);
                 else if (method == "GET" && path.StartsWith("/api/state", StringComparison.OrdinalIgnoreCase))
@@ -226,6 +228,10 @@ namespace RiotAutoLogin.Services
                     await WriteActionResponseAsync(stream, await SelectRecommendedRunePageAsync(body), cancellationToken);
                 else if (method == "POST" && path.StartsWith("/api/rune-page", StringComparison.OrdinalIgnoreCase))
                     await WriteActionResponseAsync(stream, await SelectRunePageAsync(body), cancellationToken);
+                else if (method == "POST" && path == "/api/skin")
+                    await WriteActionResponseAsync(stream, await SelectSkinAsync(body), cancellationToken);
+                else if (method == "POST" && path == "/api/swap")
+                    await WriteActionResponseAsync(stream, await SwapDraftAsync(body), cancellationToken);
                 else if (method == "POST" && path == "/api/change-queue")
                     await WriteActionResponseAsync(stream, await ChangeQueueAsync(body), cancellationToken);
                 else if (method == "POST" && path == "/api/bench-swap")
@@ -324,7 +330,7 @@ namespace RiotAutoLogin.Services
             if (!state.IsInChampSelect) _phaseClock.Reset(state.LiveSampleTickMs);
             if (state.Phase == "Lobby")
             {
-                using var document = await ReadClientObjectAsync("lol-lobby/v2/lobby");
+                using var document = await ReadClientJsonAsync("lol-lobby/v2/lobby");
                 if (document != null && RemoteLobby.Read(document.RootElement) is { } lobby)
                 {
                     state.QueueId = lobby.QueueId;
@@ -342,18 +348,18 @@ namespace RiotAutoLogin.Services
                 TryLoadQueueFromGameflowOrLobby(state);
                 if (state.Phase is "Matchmaking" or "ReadyCheck")
                 {
-                    using var party = await ReadClientObjectAsync("lol-lobby/v2/lobby");
+                    using var party = await ReadClientJsonAsync("lol-lobby/v2/lobby");
                     if (party != null) { state.LobbyMembers = RemoteLobbyData.Members(party.RootElement); state.PartySize = state.LobbyMembers.Count; }
                 }
                 if (state.Phase == "Matchmaking")
                 {
-                    using var search = await ReadClientObjectAsync("lol-matchmaking/v1/search");
+                    using var search = await ReadClientJsonAsync("lol-matchmaking/v1/search");
                     state.TimerMeasuredTickMs = Environment.TickCount64;
                     if (search != null) state.PhaseElapsedSeconds = RemoteLobby.QueueSeconds(search.RootElement);
                 }
                 else if (state.Phase == "ReadyCheck")
                 {
-                    using var ready = await ReadClientObjectAsync("lol-matchmaking/v1/ready-check");
+                    using var ready = await ReadClientJsonAsync("lol-matchmaking/v1/ready-check");
                     string? response = ready == null ? null : GetStringProperty(ready.RootElement, "playerResponse");
                     state.CanAcceptMatch = response == "None";
                     state.MatchAccepted = response == "Accepted";
@@ -408,6 +414,8 @@ namespace RiotAutoLogin.Services
             using JsonDocument doc = JsonDocument.Parse(sessionResult[1]);
             JsonElement root = doc.RootElement;
             ParseLocalPlayerSelection(root, state);
+            state.DraftId = RemoteDraftInteractions.DraftId(root);
+            state.CanSelectSkin = GetBoolProperty(root, "allowSkinSelection") && state.SelectedChampionId > 0;
             ParseTimer(root, state);
             ParseActions(root, state);
             await SyncDraftClockAsync(root, state);
@@ -438,6 +446,7 @@ namespace RiotAutoLogin.Services
             ParsePicks(root, allPicks, allies, enemies);
             state.PickedChampionIds = allPicks.ToList(); state.AllyPickedChampionIds = allies.ToList(); state.EnemyPickedChampionIds = enemies.ToList();
             ParseAvailableSpellIds(root, state);
+            await AddSwapsAsync(root, state);
             state.BanFallbackArmed = IsBanFallbackArmed(state.ActionId, state.HoveredBanChampionId);
             if (state.HoveredChampionId <= 0 && state.SelectedChampionId > 0 &&
                 state.ChampSelectPhase.Contains("PLANNING", StringComparison.OrdinalIgnoreCase))
@@ -865,14 +874,14 @@ namespace RiotAutoLogin.Services
             };
         }
 
-        private static async Task<JsonDocument?> ReadClientObjectAsync(string endpoint)
+        private static async Task<JsonDocument?> ReadClientJsonAsync(string endpoint, JsonValueKind expectedKind = JsonValueKind.Object)
         {
             string[] result = await LCUService.ClientRequestAsync("GET", endpoint);
             if (result[0] != "200") return null;
             try
             {
                 var document = JsonDocument.Parse(result[1]);
-                if (document.RootElement.ValueKind == JsonValueKind.Object) return document;
+                if (document.RootElement.ValueKind == expectedKind) return document;
                 document.Dispose();
             }
             catch (JsonException) { }
@@ -885,7 +894,7 @@ namespace RiotAutoLogin.Services
             try
             {
                 if (await LCUService.GetCurrentGamePhaseAsync() != "Lobby") return Failure("The lobby has changed.");
-                using var doc = await ReadClientObjectAsync("lol-lobby/v2/lobby");
+                using var doc = await ReadClientJsonAsync("lol-lobby/v2/lobby");
                 var lobby = doc == null ? null : RemoteLobby.Read(doc.RootElement);
                 if (lobby == null || lobby.IsCustom != custom) return Failure("The lobby has changed.");
                 if (!lobby.CanStart) return Failure(lobby.StartHint);
@@ -901,7 +910,7 @@ namespace RiotAutoLogin.Services
         private async Task<RemotePickActionResult> AcceptMatchAsync()
         {
             if (await LCUService.GetCurrentGamePhaseAsync() != "ReadyCheck") return Failure("The ready check has ended.");
-            using var ready = await ReadClientObjectAsync("lol-matchmaking/v1/ready-check");
+            using var ready = await ReadClientJsonAsync("lol-matchmaking/v1/ready-check");
             string? response = ready == null ? null : GetStringProperty(ready.RootElement, "playerResponse");
             if (response == "Accepted") return new RemotePickActionResult { Success = true, Message = "Match accepted." };
             if (response != "None") return Failure("The match is no longer awaiting your response.");
@@ -934,10 +943,22 @@ namespace RiotAutoLogin.Services
                 return RequestLeave("Lobby", LCUService.ClientRequest("DELETE", "lol-lobby/v2/lobby"));
             if (phase == "ChampSelect")
             {
-                string[] result = LCUService.ClientRequest("POST", "lol-champ-select/v1/session/quit");
-                if (!result[0].StartsWith("2"))
-                    result = LCUService.ClientRequest("DELETE", "lol-lobby/v2/lobby");
-                return RequestLeave("ChampSelect", result);
+                if (!await _lobbyActionGate.WaitAsync(0)) return Failure("Another lobby action is in progress.");
+                try
+                {
+                    using var draft = await ReadClientJsonAsync("lol-champ-select/v1/session");
+                    if (draft == null) return Failure("Cannot confirm the current draft. Check League Client.");
+                    string identity = RemoteDraftInteractions.DraftId(draft.RootElement);
+                    if (!string.IsNullOrWhiteSpace(body))
+                    {
+                        using var request = JsonDocument.Parse(body);
+                        if (RemoteLobbyData.Text(request.RootElement, "draftId") != identity) return Failure("The draft has changed.");
+                    }
+                    CancelBanFallback();
+                    return await RemoteDraftExit.RunAsync(identity, ProbeDraftExitAsync,
+                        endpoint => LCUService.ClientRequestAsync("POST", endpoint), Task.Delay, GetBoolProperty(draft.RootElement, "isCustomGame"));
+                }
+                finally { _lobbyActionGate.Release(); }
             }
 
             return Failure($"Cannot leave during phase: {phase}");
@@ -1499,6 +1520,7 @@ namespace RiotAutoLogin.Services
                     state.HoveredChampionId = intentChampionId;
                     if (intentChampionId > 0) state.HoveredChampionSource = "PickIntent";
                 }
+                if (TryGetPropertyInt(player, "selectedSkinId", out int skinId)) state.SelectedSkinId = skinId;
                 if (TryGetPropertyInt(player, "spell1Id", out int spell1Id)) state.Spell1Id = spell1Id;
                 if (TryGetPropertyInt(player, "spell2Id", out int spell2Id)) state.Spell2Id = spell2Id;
                 state.AssignedPosition = GetStringProperty(player, "assignedPosition", "position") ?? string.Empty;
@@ -1539,6 +1561,8 @@ namespace RiotAutoLogin.Services
                 slots.Add(new RemoteTeamSlotDto
                 {
                     CellId = cellId,
+                    AssignedPosition = GetStringProperty(player, "assignedPosition", "position") ?? "",
+                    PickTurn = TryGetPropertyInt(player, "pickTurn", out int pickTurn) ? pickTurn : -1,
                     ChampionId = GetIntProperty(player, "championId"),
                     IntentChampionId = GetIntProperty(player, "championPickIntent"),
                     IsLocalPlayer = localCellId >= 0 && cellId == localCellId,
@@ -1549,7 +1573,8 @@ namespace RiotAutoLogin.Services
                     RiotTagLine = visible ? tagLine : string.Empty
                 });
             }
-            return slots;
+            // Swapping pick order changes pickTurn; myTeam array order need not change.
+            return slots.Count > 0 && slots.All(s => s.PickTurn >= 0) ? slots.OrderBy(s => s.PickTurn).ToList() : slots;
         }
 
         private string GetProfileRegion()
@@ -1804,7 +1829,7 @@ namespace RiotAutoLogin.Services
                 TryGetPropertyLong(timer, "internalNowInEpochMs", out epoch);
             if (!state.IsTimerInfinite && (epoch <= 0 || state.TimeLeftInPhaseMs < 0))
             {
-                using var live = await ReadClientObjectAsync("lol-champ-select/v1/session/timer");
+                using var live = await ReadClientJsonAsync("lol-champ-select/v1/session/timer");
                 if (live != null && (state.ChampSelectPhase.Length == 0 || GetStringProperty(live.RootElement, "phase") == state.ChampSelectPhase))
                 {
                     ReadTimerFields(live.RootElement, state);
@@ -2065,7 +2090,7 @@ namespace RiotAutoLogin.Services
             else state.ChampSelectMode = string.IsNullOrWhiteSpace(state.QueueName) ? string.Empty : state.QueueName;
         }
 
-        private static bool IsKnownRandomChampionQueue(int queueId) => queueId is 450 or 720;
+        private static bool IsKnownRandomChampionQueue(int queueId) => queueId is 450 or 720 or 2400;
 
 
         private static string GetQueueName(int queueId, bool randomMode)
@@ -2079,6 +2104,7 @@ namespace RiotAutoLogin.Services
                 450 => "ARAM",
                 700 => "Clash",
                 720 => "ARAM Clash",
+                2400 => "ARAM Mayhem",
                 900 => "ARURF",
                 1020 => "One for All",
                 1300 => "Nexus Blitz",

@@ -14,7 +14,7 @@ internal static class RemoteLobbyChecks
         Require(!RemoteLobbyData.CanChange(member.RootElement), "A regular member cannot change the party queue.");
         using var custom = JsonDocument.Parse("""{"localMember":{"isLeader":true},"gameConfig":{"isCustom":true}}""");
         Require(!RemoteLobbyData.CanChange(custom.RootElement), "A custom lobby must not silently become a matchmade lobby.");
-        using var catalog = JsonDocument.Parse("""[{"id":420,"gameMode":"CLASSIC","queueAvailability":"Available","isEnabled":true,"allowablePremadeSizes":[1,2]},{"id":400,"gameMode":"CLASSIC","queueAvailability":"Available","allowablePremadeSizes":[1,2,3,4,5]},{"id":9876,"name":"Arena","gameMode":"CHERRY","queueAvailability":"PlatformDisabled"},{"id":450,"gameMode":"ARAM","queueAvailability":"Available"},{"id":2400,"name":"ARAM Mayhem","gameMode":"ARAM","queueAvailability":"Available"}]""");
+        using var catalog = JsonDocument.Parse("""[{"id":420,"gameMode":"CLASSIC","queueAvailability":"Available","isEnabled":true,"allowablePremadeSizes":[1,2]},{"id":400,"gameMode":"CLASSIC","queueAvailability":"Available","allowablePremadeSizes":[1,2,3,4,5]},{"id":9876,"name":"Arena","gameMode":"CHERRY","queueAvailability":"PlatformDisabled"},{"id":450,"gameMode":"ARAM","queueAvailability":"Available"},{"id":2400,"name":"ARAM Mayhem","gameMode":"KIWI","queueAvailability":"Available"}]""");
         var options = RemoteLobbyData.Queues(catalog.RootElement, 3);
         Require(!options.Single(q => q.Id == 420).IsAvailable && options.Single(q => q.Id == 400).IsAvailable && !options.Single(q => q.Id == 9876).IsAvailable && options.Single(q => q.Id == 2400).IsAvailable,
             "Catalog availability, actual Arena IDs and party sizes must control queue selection.");
@@ -30,6 +30,7 @@ internal static class RemoteLobbyChecks
         Require(!state.CanPick, "A completed card choice must not show another lock-in action.");
         Require(RemoteRandomSelection.IsRandom(cards.RootElement, 450, "ARAM") && !RemoteRandomSelection.IsRandom(cards.RootElement, 1700, "CHERRY"),
             "Arena is not ARAM just because the client exposes a subset flag.");
+        Require(RemoteRandomSelection.IsRandom(cards.RootElement, 2400, "KIWI"), "Mayhem must use random selection despite its distinct game mode.");
         Require(new RemoteChampionDto { Id = 1, IsOwnedOrFree = false }.IsDisabled, "Disabled champion serialization must be a pure ownership check.");
 
         long tick = 0; int reads = 0;

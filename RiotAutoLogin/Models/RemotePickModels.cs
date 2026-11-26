@@ -8,6 +8,10 @@ namespace RiotAutoLogin.Models
     {
         private List<RemoteChampionDto> _champions = new();
 
+        public string DraftId { get; set; } = "";
+        public int SelectedSkinId { get; set; }
+        public bool CanSelectSkin { get; set; }
+        public List<RemoteSwapDto> Swaps { get; set; } = new();
         public string Phase { get; set; } = "None";
         public string ChampSelectPhase { get; set; } = string.Empty;
         public string PhaseLabel { get; set; } = "Waiting";
@@ -91,6 +95,30 @@ namespace RiotAutoLogin.Models
         public RemoteRunePageDto? CurrentRunePage { get; set; }
     }
 
+    public sealed class RemoteSkinGalleryDto
+    {
+        public string DraftId { get; set; } = "";
+        public int ChampionId { get; set; }
+        public int SelectedSkinId { get; set; }
+        public bool CanSelect { get; set; }
+        public List<RemoteSkinDto> Skins { get; set; } = new();
+    }
+    public sealed class RemoteSkinDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string ImageUrl { get; set; } = "";
+        public string ThumbnailUrl { get; set; } = "";
+        public bool IsAvailable { get; set; }
+        public bool IsChroma { get; set; }
+    }
+    public sealed class RemoteSwapDto
+    {
+        public string Id { get; set; } = "";
+        public string Kind { get; set; } = "";
+        public int CellId { get; set; }
+        public string State { get; set; } = "";
+    }
     public sealed class RemoteLobbyMemberDto
     {
         public string PlayerName { get; set; } = "";
@@ -118,6 +146,8 @@ namespace RiotAutoLogin.Models
     public class RemoteTeamSlotDto
     {
         public int CellId { get; set; }
+        public string AssignedPosition { get; set; } = "";
+        public int PickTurn { get; set; } = -1;
         public int ChampionId { get; set; }
         public int IntentChampionId { get; set; }
         public bool IsLocalPlayer { get; set; }

@@ -10,8 +10,8 @@ const champions = Array.from({length: 90}, (_, i) => ({
   imageUrl: 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', isDisabled: i === 1
 }));
 const lobby = {phase: 'Lobby', phaseLabel: 'Lobby', queueName: 'Normal Draft', canStartLobby: true, partySize: 3,
-  queueId: 400, canChangeQueue: true, lobbyMembers: [{playerName: 'My Player', tagLine: 'EUW', isLocalPlayer: true, isLeader: true}, {playerName: 'Friend', firstPosition: 'MIDDLE'}, {playerName: '<friend>'}], queues: [{id: 400, name: 'Normal Draft', isAvailable: true}, {id: 420, name: 'Ranked Solo / Duo', isAvailable: true}, {id: 9876, name: 'Arena', isAvailable: false, unavailableReason: 'Unavailable'}], isInChampSelect: false, canLeave: true, phaseElapsedSeconds: -1, timeLeftInPhaseMs: -1};
-const draft = {...lobby, phase: 'ChampSelect', phaseLabel: 'Pick Phase', isInChampSelect: true, canStartLobby: false,
+  queueId: 400, canChangeQueue: true, lobbyMembers: [{playerName: 'My Player', tagLine: 'EUW', isLocalPlayer: true, isLeader: true}, {playerName: 'Friend', firstPosition: 'MIDDLE'}, {playerName: '<friend>'}], queues: [{id: 400, name: 'Normal Draft', isAvailable: true}, {id: 420, name: 'Ranked Solo / Duo', isAvailable: true}, {id: 2400, name: 'ARAM Mayhem', isAvailable: true}, {id: 9876, name: 'Arena', isAvailable: false, unavailableReason: 'Unavailable'}], isInChampSelect: false, canLeave: true, phaseElapsedSeconds: -1, timeLeftInPhaseMs: -1};
+const draft = {...lobby, phase: 'ChampSelect', draftId: 'match-101', swaps: [], phaseLabel: 'Pick Phase', isInChampSelect: true, canStartLobby: false,
   champions, canPick: true, actionType: 'pick', actionId: '42', timeLeftInPhaseMs: 21000,
   allySlots: [{cellId: 0, isLocalPlayer: true}], enemySlots: [{cellId: 5}]};
 
@@ -22,15 +22,36 @@ async function run() {
     page.setDefaultTimeout(6500);
     const errors = [], posts = [];
     page.on('pageerror', e => errors.push(e.message));
-    let state = {...lobby}, tick = 0, delayFull = null;
+    let state = {...lobby}, tick = 0, delayFull = null, skinSelected = 1000, failSkin = false;
     await page.route('https://remote-pick.test/**', async route => {
       const url = new URL(route.request().url());
       if (url.pathname === '/') return route.fulfill({contentType: 'text/html', body: html});
+      if (url.pathname === '/api/skins') return route.fulfill({json: {draftId:state.draftId,championId:state.selectedChampionId,selectedSkinId:skinSelected,canSelect:!!state.canSelectSkin,skins:[
+        {id:1000,name:'Annie',isAvailable:true,imageUrl:champions[0].imageUrl,thumbnailUrl:champions[0].imageUrl},
+        {id:1001,name:'Gothic Annie',isAvailable:true,imageUrl:champions[0].imageUrl,thumbnailUrl:champions[0].imageUrl}
+      ]}});
       if (route.request().method() === 'POST') {
         assert.equal(route.request().headers()['x-remote-pick-request'], '1');
         posts.push(url.pathname);
         let result = {success: true};
         switch (url.pathname) {
+          case '/api/skin': {
+            const body = route.request().postDataJSON(); assert.equal(body.draftId,state.draftId); assert.equal(body.championId,1);
+            if (failSkin) result = {success:false,message:'Skin change not confirmed.'};
+            else { skinSelected = body.skinId; state.selectedSkinId = skinSelected; } break;
+          }
+          case '/api/swap': {
+            const body = route.request().postDataJSON(); assert.equal(body.draftId,state.draftId);
+            const swap = state.swaps.find(s => s.kind === body.kind && s.id === body.id && s.cellId === body.cellId);
+            assert.ok(swap, 'A real contract must be sent');
+            if (body.action === 'request') swap.state = 'SENT'; else {
+              if (body.action === 'accept' && body.kind === 'pick-order') state.allySlots = [...state.allySlots].reverse();
+              if (body.action === 'accept' && body.kind === 'position') { state.allySlots[0].assignedPosition = 'TOP'; state.allySlots[1].assignedPosition = 'MIDDLE'; }
+              state.swaps = state.swaps.filter(s => s !== swap);
+            }
+            break;
+          }
+          case '/api/leave': assert.equal(route.request().postDataJSON().draftId,state.draftId); result = {success:false,message:'Dodge could not be confirmed.'}; break;
           case '/api/change-queue': state = {...state, queueId: route.request().postDataJSON().queueId}; break;
           case '/api/bench-swap': state = {...state, selectedChampionId: route.request().postDataJSON().championId, benchChampionIds: []}; break;
           case '/api/start-queue': state = {...lobby, phase: 'Matchmaking', canStartLobby: false, phaseElapsedSeconds: 93}; break;
@@ -159,8 +180,66 @@ async function run() {
       state = {...data}; await page.setViewportSize({width:390,height:844}); await paint();
       await page.screenshot({path: `build/remote-${name}-preview.png`});
     }
+    state = {...draft,canPick:false,actionType:'',selectedChampionId:1,selectedSkinId:1000,canSelectSkin:true,
+      allySlots:[{cellId:0,isLocalPlayer:true,assignedPosition:'MIDDLE'},{cellId:1,playerName:'Friend',assignedPosition:'TOP'}],
+      swaps:[{id:'51',kind:'position',cellId:1,state:'RECEIVED'},{id:'52',kind:'pick-order',cellId:1,state:'AVAILABLE'}]};
+    await paint();
+    assert.equal(await byId('swapAlerts').isVisible(),true);
+    await byId('swapAlerts').getByRole('button',{name:'Accept · role · Friend',exact:true}).click();
+    await page.waitForFunction(() => !state.swaps.some(s => s.kind === 'position'));
+    await page.getByRole('button',{name:'Picks',exact:true}).click();
+    await page.getByRole('button',{name:'Swap pick order · pick order · Friend',exact:true}).click();
+    await byId('swapAlerts').getByRole('button',{name:'Cancel · pick order · Friend',exact:true}).waitFor();
+    await byId('swapAlerts').getByRole('button',{name:'Cancel · pick order · Friend',exact:true}).click();
+    await page.waitForFunction(() => state.swaps.length === 0);
+    assert.equal(await byId('allyPickedList').locator('.assigned-position').first().textContent(),'#1 · TOP');
+    state.swaps = [{id:'53',kind:'pick-order',cellId:1,state:'RECEIVED'}]; await paint();
+    await byId('swapAlerts').getByRole('button',{name:'Accept · pick order · Friend',exact:true}).click();
+    await page.waitForFunction(() => state.allySlots[0].cellId === 1);
+    assert.equal(await byId('allyPickedList').locator('.assigned-position').first().textContent(),'#1 · MIDDLE');
+    await page.getByRole('button',{name:'Loadout',exact:true}).click();
+    await page.getByRole('button',{name:'Choose skin',exact:true}).click();
+    await page.getByRole('button',{name:'Preview Gothic Annie',exact:true}).click();
+    assert.equal(await byId('skinCaption').textContent(),'Gothic Annie');
+    assert.equal(await byId('toast').isVisible(),false,'Success notifications must not cover the skin gallery');
+    assert.equal(await byId('toast').evaluate(el => getComputedStyle(el).pointerEvents),'none');
+    assert.equal(await byId('skinSummary').locator('strong').textContent(),'Annie','Preview is not the actual client selection');
+    for (const [width,height] of [[390,844],[932,430],[667,375]]) {
+      await page.setViewportSize({width,height});
+      const box = await page.evaluate(() => { const dialog = document.querySelector('.skin-modal').getBoundingClientRect(), apply = document.querySelector('#applySkin').getBoundingClientRect();
+        return {top:dialog.top,bottom:dialog.bottom,applyBottom:apply.bottom,applyHeight:apply.height,x:document.documentElement.scrollWidth-innerWidth}; });
+      await page.screenshot({path:`build/remote-skins-${width}-preview.png`});
+      assert.ok(box.top >= 0 && box.bottom <= height + 1 && box.applyBottom <= height && box.applyHeight >= 44 && box.x <= 1, 'Skin gallery fits '+JSON.stringify(box));
+    }
+    failSkin = true; await byId('applySkin').click();
+    await page.getByText('Skin change not confirmed.',{exact:true}).waitFor();
+    await page.waitForFunction(() => !actionPending);
+    assert.equal(await byId('skinSummary').locator('strong').textContent(),'Annie');
+    failSkin = false; await byId('applySkin').click();
+    await page.waitForFunction(() => skinGallery?.selectedSkinId === 1001);
+    assert.equal(await byId('skinSummary').locator('strong').textContent(),'Gothic Annie');
+    assert.equal(await byId('skinStatus').textContent(),'Selected in client');
+    await page.emulateMedia({reducedMotion:'reduce'});
+    const duration = await page.locator('.skin-art').first().evaluate(img => getComputedStyle(img).transitionDuration);
+    assert.equal(duration,'0s'); await page.emulateMedia({reducedMotion:'no-preference'});
+    await page.setViewportSize({width:390,height:844});
+    await page.screenshot({path:'build/remote-skins-preview.png'});
+    await byId('closeSkinModal').click();
+    await page.getByRole('button',{name:'Dodge',exact:true}).click(); await byId('acceptConfirm').click();
+    await page.getByText('Dodge could not be confirmed.',{exact:true}).waitFor();
+    assert.equal(await byId('layout').isVisible(),true,'A failed dodge must not invent a return to lobby');
+    await page.waitForFunction(() => !actionPending);
+    const leaves = posts.filter(p => p === '/api/leave').length;
+    await page.getByRole('button',{name:'Dodge',exact:true}).click();
+    state = {...state,draftId:'different-match'}; await paint();
+    await byId('acceptConfirm').click();
+    assert.equal(posts.filter(p => p === '/api/leave').length,leaves,'Old confirmation must not dodge another draft');
+    state = {...lobby}; await paint();
+    await byId('queueSelect').selectOption('2400'); await byId('changeQueue').click(); await byId('acceptConfirm').click();
+    await page.waitForFunction(() => state.queueId === 2400);
+    assert.deepEqual(posts.slice(-8),['/api/swap','/api/swap','/api/swap','/api/swap','/api/skin','/api/skin','/api/leave','/api/change-queue']);
     assert.deepEqual(errors, []);
-    console.log('Remote Pick: party roster, queue authority, ARAM cards and bench, lobby to draft, portrait and landscape, delayed clock samples, pick and ban confirmed.');
+    console.log('Remote Pick: party roster, queue authority, ARAM cards and bench, lobby to draft, portrait and landscape, delayed clocks, skins with confirmed selection, role/order swaps and failed/stale dodge confirmed.');
   } finally { await browser.close(); }
 }
 run().catch(err => { console.error(err); process.exitCode = 1; });

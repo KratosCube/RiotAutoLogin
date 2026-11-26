@@ -298,6 +298,48 @@
       .queue-controls button { flex: none; }
       .draft-controls > .reroll-command { flex: none; width: auto; padding: 7px; font-size: .75rem; }
     }
+
+    .skin-summary { display: block; position: relative; width: 100%; min-height: 92px; overflow: hidden; padding: 14px; margin-top: 12px; text-align: left; color: var(--text); border: 1px solid var(--gold); background: #112333; }
+    .skin-summary img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .48; }
+    .skin-summary::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #07111ded, transparent); }
+    .skin-summary > span { position: relative; z-index: 1; display: grid; gap: 4px; }
+    .skin-summary small { color: var(--gold); font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
+    .skin-summary strong { font: 500 1.25rem Georgia, serif; }
+    .skin-summary em { font-style: normal; font-size: .75rem; color: var(--muted); }
+    .skin-modal { display: flex; flex-direction: column; width: min(100%, 850px); height: min(85dvh, 720px); max-height: calc(100dvh - 24px); overflow: hidden; }
+    body.modal-open .toast:not(.error) { display: none; }
+    .toast { pointer-events: none; }
+    .skin-modal .modal-head button { min-height: 44px; }
+    .skin-modal .modal-head h2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .skin-modal .modal-head { flex: none; padding: 10px 14px; }
+    .skin-stage { position: relative; flex: 1; min-height: 60px; overflow: hidden; background: radial-gradient(ellipse at center, #1b3443, #08121c); }
+    .skin-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transform: scale(1.025); transition: opacity 280ms ease, transform 320ms ease; }
+    .skin-art.visible { opacity: 1; transform: scale(1); }
+    .skin-browser { flex: none; display: flex; gap: 7px; padding: 10px 8px; border-top: 1px solid var(--line); }
+    .skin-options { display: flex; flex: 1; min-width: 0; gap: 7px; overflow-x: auto; overscroll-behavior: contain; }
+    .skin-option { flex: 0 0 108px; position: relative; padding: 0; overflow: hidden; color: var(--text); border: 1px solid var(--line); background: #112333; }
+    .skin-option img { display: block; width: 100%; height: 57px; object-fit: cover; }
+    .skin-option span { display: block; padding: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: .7rem; }
+    .skin-option[aria-pressed="true"] { border-color: var(--gold-light); box-shadow: inset 0 -2px var(--gold-light); }
+    .skin-option.client-selected::after { content: '✓'; position: absolute; right: 3px; top: 3px; border-radius: 50%; background: #0a3431; color: var(--cyan); padding: 2px 5px; }
+    .skin-arrow { flex: none; min-width: 44px; min-height: 44px; padding: 3px; font-size: 1.8rem; color: var(--gold-light); border: 1px solid var(--line); background: #112333; }
+    .skin-footer { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--line); }
+    .skin-footer p { margin: 0; color: var(--muted); font-size: .76rem; }
+    .skin-footer button { flex: none; min-height: 44px; }
+    .swap-alerts { grid-column: 1 / -1; max-height: 128px; overflow-y: auto; border-top: 1px solid var(--cyan); }
+    .swap-offer { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: #12303b; }
+    .swap-offer > span { flex: 1; min-width: 0; font-size: .75rem; overflow-wrap: anywhere; }
+    .swap-button { min-height: 44px; padding: 5px 8px; color: var(--gold-light); border: 1px solid var(--line); background: #142b38; font-size: .73rem; }
+    .swap-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px; }
+    .swap-actions button { flex: 1; }
+    .assigned-position { display: block; margin-top: 3px; color: var(--gold); font-size: .65rem; }
+    @media (orientation: landscape) and (max-height: 550px) {
+      .skin-modal { width: min(100%, 800px); height: calc(100dvh - 24px); }
+      .skin-option img { height: 37px; }
+      .skin-browser { padding: 5px; }
+      .skin-modal .modal-head, .skin-footer { padding: 5px 10px; }
+      .skin-modal .modal-head h2 { font-size: 1rem; }
+    }
   </style>
 </head>
 <body data-screen="room" data-view="champions">
@@ -319,6 +361,7 @@
         <div id="hoverReadout" class="hover-readout" role="status" aria-live="polite" hidden><img id="hoverPortrait" alt="" hidden><div><span id="hoverLabel">In client</span><strong id="hoverName"></strong><small id="hoverHint"></small></div></div>
       </div>
       <div id="timerBox" class="timer-box" hidden><span id="timer" class="timer-value"></span><span id="timerLabel" class="timer-label"></span></div>
+      <div id="swapAlerts" class="swap-alerts" aria-label="Swap requests" aria-live="polite" hidden></div>
       <div class="draft-strip" aria-label="Team picks" hidden><div class="draft-team"><span class="draft-team-label">Ally</span><div id="allyStrip" class="draft-slots"></div></div><div class="draft-team"><span class="draft-team-label">Enemy</span><div id="enemyStrip" class="draft-slots"></div></div></div>
     </section>
     <section id="partyPanel" class="party-panel" aria-label="Lobby members" hidden><h2>Your party</h2><div id="partyMembers" class="party-members" role="list"></div></section>
@@ -352,6 +395,7 @@
       </nav>
     </footer>
   </div>
+  <div id="skinModal" class="modal-backdrop" hidden><div class="modal skin-modal" role="dialog" aria-modal="true" aria-labelledby="skinCaption"><div class="modal-head"><h2 id="skinCaption">Skins</h2><button id="closeSkinModal" class="subtle-button" type="button">Close</button></div><div class="skin-stage" id="skinStage"></div><div class="skin-browser"><button id="previousSkin" class="skin-arrow" type="button" aria-label="Previous skin">‹</button><div id="skinOptions" class="skin-options" aria-label="Skin previews"></div><button id="nextSkin" class="skin-arrow" type="button" aria-label="Next skin">›</button></div><div class="skin-footer"><p id="skinStatus" aria-live="polite"></p><button id="applySkin" class="modal-button primary" type="button">Use this skin</button></div></div></div>
   <div id="spellModal" class="modal-backdrop" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="spellModalTitle"><div class="modal-head"><h2 id="spellModalTitle">Choose spell</h2><button id="closeSpellModal" class="subtle-button" type="button">Close</button></div><div id="spellGrid" class="spell-grid"></div></div></div>
   <div id="confirmModal" class="modal-backdrop" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmCopy"><div class="modal-head"><h2 id="confirmTitle">Confirm action</h2></div><p id="confirmCopy" class="confirm-copy"></p><div class="confirm-actions"><button id="cancelConfirm" class="modal-button" type="button">Cancel</button><button id="acceptConfirm" class="modal-button primary" type="button">Confirm</button></div></div></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
@@ -385,7 +429,7 @@
     let timerBaseMs = null, timerBasePerf = 0, phaseElapsedBase = null, timerInfinite = false, activeModal = null, returnFocus = null, confirmResolve = null;
 
     const liveFields = [
-      'phase', 'champSelectPhase', 'phaseLabel', 'timeLeftInPhaseMs', 'totalTimeInPhaseMs', 'phaseElapsedSeconds', 'isTimerInfinite',
+      'draftId', 'selectedSkinId', 'canSelectSkin', 'swaps', 'phase', 'champSelectPhase', 'phaseLabel', 'timeLeftInPhaseMs', 'totalTimeInPhaseMs', 'phaseElapsedSeconds', 'isTimerInfinite',
       'isInChampSelect', 'isMyTurn', 'canPick', 'canBan', 'canLeave', 'actionType', 'actionId', 'actionGroupIndex',
       'canChangeQueue', 'isRandomChampionMode', 'benchEnabled', 'benchChampionIds', 'cardChampionIds', 'canSelectCard', 'canReroll', 'rerollsRemaining', 'canStartLobby', 'isCustomLobby', 'partySize', 'lobbyHint', 'canAcceptMatch', 'matchAccepted', 'queueName',
       'timerActionKey', 'isGameClientRunning', 'isGameLoaded', 'gameTimeSeconds', 'gameStatus', 'message',
@@ -515,6 +559,7 @@
       ui.roomAction.disabled = ui.roomLeave.disabled = ui.leave.disabled = ui.mobileLeave.disabled = !hasFullState || actionPending;
       ui.loadoutShortcut.hidden = !draft;
       renderHoverReadout();
+      updateSkinContext();
       updateTimerDisplay();
     }
     function getChampionMeta(id) {
@@ -597,7 +642,7 @@
 
     function renderTeamRails() {
       if (!state?.isInChampSelect) { teamRailsKey = ''; return; }
-      const key = JSON.stringify([state.allySlots, state.enemySlots]);
+      const key = JSON.stringify([state.allySlots, state.enemySlots, state.swaps, actionPending]);
       if (teamRailsKey === key) return;
       teamRailsKey = key;
       renderRail(ui.ally, state?.allySlots || [], 'Ally');
@@ -614,6 +659,7 @@
       ui.roomControls.hidden = false;
       ui.hoverReadout.hidden = ui.loadoutShortcut.hidden = true;
       latestLive = state = null;
+      updateSkinContext(); $('swapAlerts').hidden = true;
       selectedChampionId = queuedHoverId = 0;
       gridKey = draftKey = teamRailsKey = loadoutShortcutKey = '';
       renderDraftStrip(); updateTimerDisplay();
@@ -673,6 +719,7 @@
       if (!state) return;
       if (selectedChampionId && !state.champions?.some(champion => champion.id === selectedChampionId && !champion.isDisabled)) selectedChampionId = 0;
       updateStatus(); renderChampionGrid(); renderCommitAction(); renderLoadout(); renderDraftStrip(); renderTeamRails();
+      if (skinsVisible()) loadSkins();
     }
     function renderEmpty(title, message, allowClear = false) {
       ui.empty.hidden = false;
@@ -802,6 +849,8 @@
           <div class="sub">${slot.profileUrl && slot.playerName
             ? `<a class="player-link" href="${escapeAttr(slot.profileUrl)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeAttr('Open ' + slot.playerName + ' on League of Graphs')}">${escapeHtml(slot.playerName)} ↗</a>`
             : slot.isLocalPlayer ? 'You' : id && !slot.championId ? 'Intent' : ''}</div></div>`;
+        if (slot.assignedPosition || slot.pickTurn >= 0) { const position = document.createElement('span'); position.className = 'assigned-position'; position.textContent = `#${index + 1}${slot.assignedPosition ? ' · ' + slot.assignedPosition : ''}`; row.lastElementChild.append(position); }
+        if (team === 'Ally') addSwapButtons(row, slot);
         fragment.appendChild(row);
       }
       target.replaceChildren(fragment);
@@ -872,10 +921,11 @@
         return;
       }
       const spells = state.summonerSpells || [];
-      ui.loadout.innerHTML = `<h2>Loadout</h2><div class="loadout"><div class="spell-slots">${renderSpellButton(1, spells.find(spell => spell.isSpell1))}${renderSpellButton(2, spells.find(spell => spell.isSpell2))}</div>${renderRecommendedRunes()}${renderSavedRunes()}</div>`;
+      ui.loadout.innerHTML = `<h2>Loadout</h2><div id="skinSummary"></div><div class="loadout"><div class="spell-slots">${renderSpellButton(1, spells.find(spell => spell.isSpell1))}${renderSpellButton(2, spells.find(spell => spell.isSpell2))}</div>${renderRecommendedRunes()}${renderSavedRunes()}</div>`;
       for (const button of ui.loadout.querySelectorAll('[data-slot]')) button.onclick = () => openSpellModal(Number(button.dataset.slot));
       for (const button of ui.loadout.querySelectorAll('[data-rune-id]')) button.onclick = () => selectRunePage(Number(button.dataset.runeId));
       for (const button of ui.loadout.querySelectorAll('[data-recommended-index]')) button.onclick = () => selectRecommendedRunes(Number(button.dataset.recommendedIndex));
+      renderSkinSummary();
       if (focusSelector) ui.loadout.querySelector(focusSelector)?.focus({preventScroll: true});
     }
     function openModal(modal, initialFocus) {
@@ -889,7 +939,7 @@
       modal.hidden = true;
       if (activeModal === modal) activeModal = null;
       document.body.classList.remove('modal-open');
-      const replacement = returnFocus?.dataset?.slot ? ui.loadout.querySelector(`[data-slot="${returnFocus.dataset.slot}"]`) : null;
+      const replacement = returnFocus?.dataset?.openSkins ? ui.loadout.querySelector('[data-open-skins]') : returnFocus?.dataset?.slot ? ui.loadout.querySelector(`[data-slot="${returnFocus.dataset.slot}"]`) : null;
       (returnFocus?.isConnected ? returnFocus : replacement || ui.search)?.focus({preventScroll: true});
       returnFocus = null;
     }
@@ -932,7 +982,7 @@
       if (actionPending || !hasFullState) return false;
       actionPending = true;
       document.body.classList.add('busy');
-      renderCommitAction(); updateStatus();
+      renderCommitAction(); updateStatus(); renderTeamRails();
       try {
         const response = await fetch(path, {
           method: 'POST',
@@ -954,7 +1004,7 @@
       } finally {
         actionPending = false;
         document.body.classList.remove('busy');
-        renderCommitAction(); updateStatus();
+        renderCommitAction(); updateStatus(); renderTeamRails();
       }
     }
     async function flushHover() {
@@ -1020,18 +1070,19 @@
     function selectRecommendedRunes(index) { return runAction('/api/recommended-rune-page', {index}, 'Recommended runes applied.'); }
     async function leaveLobby() {
       if (!state?.canLeave) return;
-      const draftPhase = state.phase;
+      const draftPhase = state.phase, draftId = state.draftId;
       const label = state.isInChampSelect ? 'Dodge' : ui.roomLeave.textContent;
       const warning = state.phase === 'ChampSelect'
         ? 'You will leave champion select. League Client may apply a dodge penalty.'
         : state.phase === 'ReadyCheck' ? 'You will decline this ready check.' : 'You will leave the current lobby or queue.';
-      if (await confirmAction(`${label}?`, warning, label, true) && state?.phase === draftPhase)
-        await runAction('/api/leave', {phase: draftPhase}, 'Leave request sent.');
+      if (await confirmAction(`${label}?`, warning, label, true) && state?.phase === draftPhase && state?.draftId === draftId)
+        await runAction('/api/leave', {phase: draftPhase, draftId}, 'Leave request sent.');
     }
     function setView(view, scroll = true) {
       if (view === 'loadout' && state?.loadoutReady === false) loadState();
       ui.layout.dataset.view = view;
       document.body.dataset.view = view;
+      if (view === 'loadout') loadSkins(true);
       for (const button of document.querySelectorAll('[data-view-button]')) button.setAttribute('aria-pressed', String(button.dataset.viewButton === view));
       if (!scroll || getComputedStyle(ui.nav).display !== 'none') return;
       const target = view === 'loadout' ? ui.loadout : view === 'picks' ? $('allyPanel') : $('championView');
@@ -1101,11 +1152,157 @@
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     });
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') { loadState(); loadTimer(); }
+      if (document.visibilityState === 'visible') { loadState(); loadTimer(); loadSkins(true); }
     });
     if ('ResizeObserver' in window) {
       new ResizeObserver(() => document.documentElement.style.setProperty('--status-height', `${ui.status.getBoundingClientRect().height + 12}px`)).observe(ui.status);
     }
+    let skinGallery = null, skinPreviewId = 0, skinPending = false, skinPaint = 0, skinLastRead = -Infinity;
+    let swapAlertKey = '';
+    const skinModal = $('skinModal'), skinStage = $('skinStage'), skinOptions = $('skinOptions');
+    const skinApply = $('applySkin'), skinCaption = $('skinCaption'), skinStatus = $('skinStatus');
+    function skinsVisible() {
+      return state?.isInChampSelect && (activeModal === skinModal || ui.layout.dataset.view === 'loadout' || getComputedStyle(ui.nav).display === 'none');
+    }
+    function skinContextValid() { return !!skinGallery && skinGallery.draftId === state?.draftId && skinGallery.championId === state?.selectedChampionId; }
+    async function loadSkins(force = false) {
+      if (!state?.isInChampSelect || skinPending || !skinsVisible() || !force && performance.now() - skinLastRead < 1800) return;
+      skinPending = true; skinLastRead = performance.now();
+      const draft = state.draftId, champion = state.selectedChampionId;
+      try {
+        const gallery = await getJson('/api/skins');
+        if (state?.draftId !== draft || state?.selectedChampionId !== champion || gallery.draftId !== draft || gallery.championId !== champion) return;
+        const followClient = !skinContextValid() || skinPreviewId === skinGallery.selectedSkinId;
+        skinGallery = gallery;
+        if (followClient || !gallery.skins?.some(s => s.id === skinPreviewId)) skinPreviewId = gallery.selectedSkinId || gallery.skins?.[0]?.id || 0;
+        renderSkinSummary(); renderSkinGallery();
+      } catch { if (activeModal === skinModal) skinStatus.textContent = 'Cannot read skins from League Client. Try again.'; }
+      finally { skinPending = false; }
+    }
+    function renderSkinSummary() {
+      const target = $('skinSummary'); if (!target) return;
+      const selected = skinContextValid() && skinGallery.skins?.find(s => s.id === skinGallery.selectedSkinId);
+      const key = JSON.stringify([selected, state?.selectedChampionId]);
+      if (target.dataset.key === key) return; target.dataset.key = key;
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'skin-summary'; button.dataset.openSkins = '1'; button.setAttribute('aria-label','Choose skin');
+      if (selected?.imageUrl) { const img = new Image(); img.src = selected.imageUrl; img.alt = ''; img.loading = 'lazy'; button.append(img); }
+      const copy = document.createElement('span');
+      copy.innerHTML = `<small>Skin</small><strong>${escapeHtml(selected?.name || 'Choose skin')}</strong><em>View skins ›</em>`;
+      button.append(copy); button.onclick = openSkins; target.replaceChildren(button);
+    }
+    function renderSkinGallery() {
+      if (activeModal !== skinModal) return;
+      const valid = skinContextValid(), skins = valid ? skinGallery.skins || [] : [];
+      const preview = skins.find(s => s.id === skinPreviewId);
+      skinCaption.textContent = preview?.name || 'Skins';
+      skinStatus.textContent = !skins.length ? (state?.selectedChampionId ? '' : 'Choose your champion to view skins.') :
+        preview?.id === skinGallery.selectedSkinId ? 'Selected in client' : skinGallery.canSelect ? '' : 'Skin selection is currently locked in the client.';
+      skinApply.textContent = preview?.id === skinGallery?.selectedSkinId ? 'Selected' : 'Use this skin';
+      skinApply.disabled = actionPending || !preview?.isAvailable || !valid || !skinGallery.canSelect || preview.id === skinGallery.selectedSkinId;
+      $('previousSkin').disabled = $('nextSkin').disabled = skins.length < 2;
+      const key = JSON.stringify([skins, skinPreviewId, skinGallery?.selectedSkinId]);
+      if (skinOptions.dataset.key !== key) {
+        const focusedSkin = document.activeElement?.dataset?.skinId;
+        skinOptions.dataset.key = key;
+        skinOptions.replaceChildren(...skins.map(skin => {
+          const button = document.createElement('button'); button.type = 'button'; button.className = 'skin-option';
+          button.dataset.skinId = skin.id; button.setAttribute('aria-label', `Preview ${skin.name}`); button.setAttribute('aria-pressed', String(skin.id === skinPreviewId));
+          button.classList.toggle('client-selected', skin.id === skinGallery.selectedSkinId);
+          const image = new Image(); image.src = skin.thumbnailUrl || skin.imageUrl; image.alt = ''; image.loading = 'lazy';
+          const name = document.createElement('span'); name.textContent = skin.name; button.append(image, name);
+          button.onclick = () => { skinPreviewId = skin.id; renderSkinGallery(); }; return button;
+        }));
+        if (focusedSkin) skinOptions.querySelector(`[data-skin-id="${focusedSkin}"]`)?.focus({preventScroll:true});
+      }
+      const imageKey = `${valid ? skinGallery.championId : 0}:${preview?.id || 0}`;
+      if (skinStage.dataset.key === imageKey) return;
+      skinStage.dataset.key = imageKey;
+      const version = ++skinPaint;
+      if (!preview?.imageUrl) { skinStage.replaceChildren(); return; }
+      const image = new Image(); image.className = 'skin-art'; image.alt = preview.name;
+      image.onload = () => {
+        if (version !== skinPaint || activeModal !== skinModal) return;
+        const previous = skinStage.querySelector('.skin-art.visible');
+        for (const old of skinStage.querySelectorAll('.skin-art')) if (old !== previous) old.remove();
+        skinStage.append(image);
+        requestAnimationFrame(() => { image.classList.add('visible'); previous?.classList.remove('visible'); });
+        setTimeout(() => previous?.remove(), 320);
+      };
+      image.onerror = () => { if (version === skinPaint) { skinStage.replaceChildren(); skinStatus.textContent = 'Preview image is unavailable. Skin selection is still available.'; } };
+      image.src = preview.imageUrl;
+    }
+    function openSkins() {
+      if (activeModal || !state?.isInChampSelect) return;
+      if (skinContextValid()) skinPreviewId = skinGallery.selectedSkinId || skinGallery.skins?.[0]?.id || 0;
+      skinStage.dataset.key = ''; openModal(skinModal, $('closeSkinModal')); renderSkinGallery(); loadSkins(true);
+    }
+    function closeSkins() { if (!skinModal.hidden) { ++skinPaint; closeModal(skinModal); } }
+    function moveSkin(direction) {
+      const skins = skinContextValid() ? skinGallery.skins || [] : []; if (!skins.length) return;
+      const index = skins.findIndex(s => s.id === skinPreviewId); skinPreviewId = skins[(index + direction + skins.length) % skins.length].id;
+      renderSkinGallery();
+      const option = skinOptions.querySelector(`[data-skin-id="${skinPreviewId}"]`);
+      option?.focus({preventScroll:true});
+      option?.scrollIntoView({block:'nearest',inline:'nearest',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+    }
+    $('closeSkinModal').onclick = closeSkins;
+    $('previousSkin').onclick = () => moveSkin(-1); $('nextSkin').onclick = () => moveSkin(1);
+    skinModal.onclick = event => { if (event.target === skinModal && !actionPending) closeSkins(); };
+    skinApply.onclick = async () => {
+      if (!skinContextValid() || skinApply.disabled) return;
+      const {draftId,championId} = skinGallery, skinId = skinPreviewId;
+      await runAction('/api/skin', {draftId,championId,skinId}, 'Skin selected.');
+      await loadSkins(true); renderSkinGallery();
+    };
+    function swapTarget(swap) {
+      const slot = state?.allySlots?.find(s => s.cellId === swap.cellId);
+      const index = state?.allySlots?.indexOf(slot);
+      return slot?.playerName || slot?.assignedPosition || `Ally ${(index ?? -1) + 1}`;
+    }
+    function swapButton(swap, action, label) {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'swap-button'; button.textContent = label;
+      button.setAttribute('aria-label', `${label} · ${swap.kind === 'position' ? 'role' : 'pick order'} · ${swapTarget(swap)}`);
+      button.disabled = actionPending || !hasFullState;
+      const draftId = state?.draftId;
+      button.onclick = () => runAction('/api/swap', {draftId,kind:swap.kind,id:swap.id,cellId:swap.cellId,action}, 'Swap updated.');
+      return button;
+    }
+    function addSwapButtons(row, slot) {
+      if (slot.isLocalPlayer) return;
+      const swaps = (state.swaps || []).filter(s => s.cellId === slot.cellId && s.state === 'AVAILABLE');
+      if (!swaps.length) return;
+      const actions = document.createElement('div'); actions.className = 'swap-actions';
+      for (const swap of swaps) actions.append(swapButton(swap,'request',swap.kind === 'position' ? 'Swap role' : 'Swap pick order'));
+      row.append(actions);
+    }
+    function renderSwapAlerts() {
+      const panel = $('swapAlerts');
+      const offers = state?.isInChampSelect ? (state.swaps || []).filter(s => ['RECEIVED','SENT'].includes(s.state)) : [];
+      panel.hidden = !offers.length;
+      const key = JSON.stringify([offers,state?.allySlots,actionPending,hasFullState]);
+      if (key === swapAlertKey) return; swapAlertKey = key;
+      panel.replaceChildren(...offers.map(swap => {
+        const row = document.createElement('div'); row.className = 'swap-offer';
+        const copy = document.createElement('span'); copy.textContent = `${swap.kind === 'position' ? 'Role swap' : 'Pick order swap'} · ${swapTarget(swap)}${swap.state === 'SENT' ? ' · Sent' : ''}`;
+        row.append(copy);
+        if (swap.state === 'RECEIVED') row.append(swapButton(swap,'accept','Accept'),swapButton(swap,'decline','Decline'));
+        else row.append(swapButton(swap,'cancel','Cancel'));
+        return row;
+      }));
+    }
+    function updateSkinContext() {
+      if (!state?.isInChampSelect) {
+        skinGallery = null; skinPreviewId = 0;
+        if (activeModal === skinModal) closeSkins();
+      }
+      renderSkinSummary(); renderSkinGallery(); renderSwapAlerts();
+    }
+    document.addEventListener('keydown', event => {
+      if (activeModal !== skinModal) return;
+      if (event.key === 'Escape' && !actionPending) closeSkins();
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); moveSkin(event.key === 'ArrowLeft' ? -1 : 1); }
+    });
+
     loadState(); loadTimer();
     function pollDelay(full) {
       if (!state || state.phase === 'Closed' || state.phase === 'None') return full ? 12000 : 5000;

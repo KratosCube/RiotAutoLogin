@@ -56,7 +56,7 @@ public sealed partial class RemotePickServerService
         state.GameMode = RemoteLobbyData.Text(queue, "gameMode");
         if (state.MapId <= 0) state.MapId = RemoteLobbyData.Number(queue, "mapId");
         if (state.GameMode == "CHERRY") state.IsRandomChampionMode = false;
-        if (state.GameMode == "ARAM") state.IsRandomChampionMode = true;
+        if (RemoteLobbyData.IsAram(state.QueueId, state.GameMode)) state.IsRandomChampionMode = true;
         if (state.GameMode == "CHERRY") { state.QueueName = "Arena"; state.ChampSelectMode = "Arena"; }
         else if (RemoteLobbyData.Text(queue, "name") is { Length: > 0 } name) state.QueueName = name;
     }
@@ -66,6 +66,7 @@ public sealed partial class RemotePickServerService
         if (state.Phase is not ("Lobby" or "None" or "Matchmaking" or "ReadyCheck")) return;
         await EnsureQueueCatalogAsync();
         if (state.Phase == "None") state.CanChangeQueue = true;
+        ApplyKnownQueueMode(state);
         if (_queueCatalog is { } catalog) state.Queues = RemoteLobbyData.Queues(catalog.Json, state.PartySize);
         if (state.LobbyMembers.Count == 0) return;
         string region = GetProfileRegion();
@@ -93,7 +94,7 @@ public sealed partial class RemotePickServerService
             string phase = await LCUService.GetCurrentGamePhaseAsync();
             if (phase is not ("None" or "Lobby")) return Failure("Cancel matchmaking before changing queues.");
             int partySize = 1;
-            using var lobby = await ReadClientObjectAsync("lol-lobby/v2/lobby");
+            using var lobby = await ReadClientJsonAsync("lol-lobby/v2/lobby");
             if (phase == "Lobby")
             {
                 if (lobby == null || !RemoteLobbyData.CanChange(lobby.RootElement)) return Failure("The party leader can change queues in a normal lobby.");
